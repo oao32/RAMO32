@@ -14,6 +14,35 @@ export type Language = 'ar' | 'en';
 
 export type Theme = 'dark' | 'light';
 
+export interface ComprehensiveAnalysisData {
+  muscleAnalysis?: {
+    strengthsTitleAr?: string;
+    strengthsTitleEn?: string;
+    strengthsItems?: Array<{ labelAr: string; labelEn?: string; valueAr: string; valueEn?: string }>;
+    focusTitleAr?: string;
+    focusTitleEn?: string;
+    focusItems?: string[];
+  };
+  nutritionEngineering?: {
+    goalTitleAr?: string;
+    goalTitleEn?: string;
+    preWorkoutNotesAr?: string;
+    postWorkoutNotesAr?: string;
+  };
+  trainingProtocol?: {
+    splitNameAr?: string;
+    splitNameEn?: string;
+    overloadNotesAr?: string;
+    rpeNotesAr?: string;
+  };
+  recoveryFramework?: {
+    sleepNotesAr?: string;
+    sleepNotesEn?: string;
+    supplementItems?: string[];
+  };
+  customCoachNotes?: string;
+}
+
 export interface ClientProfile {
   id: string;
   name: string;
@@ -42,6 +71,10 @@ export interface ClientProfile {
   subscriptionEndDate?: string; // e.g. '2026-12-01'
   coachName: string;
   joinedDate: string;
+  assignedPassword?: string;
+  analysisData?: ComprehensiveAnalysisData;
+  streakData?: StreakData;
+  athleteRank?: AthleteRank;
 }
 
 export interface ExerciseSet {

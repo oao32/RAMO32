@@ -1139,15 +1139,75 @@ export const VIP_PLATINUM_DIET_CATEGORIES: MealCategory[] = [
 ];
 
 /**
- * دالة مساعدة لاستدعاء الخطة الغذائية بحسب نوع الباقة
+ * مفاتيح التخزين المحلي للأنظمة الغذائية المعدلة من لوحة التحكم
+ */
+export const DIET_STORAGE_KEYS = {
+  STANDARD: 'oao_diet_categories_standard',
+  VIP: 'oao_diet_categories_vip',
+};
+
+/**
+ * حفظ الخطة الغذائية المعدلة من قبل الكوتش محلياً
+ */
+export function saveDietCategories(tier: string, categories: MealCategory[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const isVip =
+      tier === 'VIP' ||
+      (typeof tier === 'string' && (tier.toLowerCase().includes('vip') || tier.includes('بلاتين')));
+    const storageKey = isVip ? DIET_STORAGE_KEYS.VIP : DIET_STORAGE_KEYS.STANDARD;
+    localStorage.setItem(storageKey, JSON.stringify(categories));
+    window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories } }));
+    window.dispatchEvent(new Event('storage'));
+  } catch (err) {
+    console.warn('Failed to save diet categories locally:', err);
+  }
+}
+
+/**
+ * استرجاع الخطة الغذائية الافتراضية
+ */
+export function resetDietCategories(tier: string): MealCategory[] {
+  const isVip =
+    tier === 'VIP' ||
+    (typeof tier === 'string' && (tier.toLowerCase().includes('vip') || tier.includes('بلاتين')));
+  const defaults = isVip ? VIP_PLATINUM_DIET_CATEGORIES : STANDARD_DIET_CATEGORIES;
+  if (typeof window !== 'undefined') {
+    const storageKey = isVip ? DIET_STORAGE_KEYS.VIP : DIET_STORAGE_KEYS.STANDARD;
+    localStorage.removeItem(storageKey);
+    window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories: defaults } }));
+    window.dispatchEvent(new Event('storage'));
+  }
+  return defaults;
+}
+
+/**
+ * دالة مساعدة لاستدعاء الخطة الغذائية بحسب نوع الباقة مع دعم التعديلات الحية من الكوتش
  */
 export function getDietPlanCategories(tier?: string | null): MealCategory[] {
   const isVip =
     tier === 'VIP' ||
     (typeof tier === 'string' && (tier.toLowerCase().includes('vip') || tier.includes('بلاتين')));
 
+  if (typeof window !== 'undefined') {
+    try {
+      const storageKey = isVip ? DIET_STORAGE_KEYS.VIP : DIET_STORAGE_KEYS.STANDARD;
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // fallback to initial
+    }
+  }
+
   return isVip ? VIP_PLATINUM_DIET_CATEGORIES : STANDARD_DIET_CATEGORIES;
 }
+
+export const getSavedDietCategories = getDietPlanCategories;
 
 // التصدير الافتراضي للتوافق الكامل مع الكود الموجود
 export const ALL_DIET_CATEGORIES = STANDARD_DIET_CATEGORIES;
