@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Own Aura Outcome — الهيدر الرسمي</title>
+  
+  <!-- الخطوط العربية والإنجليزية الرياضية الفاخرة -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;600;700;800;900&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    /* =========================================================
+       OWN AURA OUTCOME — MASTER STYLESHEET
+       ألوان وهوية العلامة الرياضية:
+       -- الفضي الميتاليك: #E2E8F0, #CBD5E1
+       -- البرتقالي المتوهج (Aura Orange): #FF5722, #FF7043
+       -- الكحلي الداكن الملوكي: #050B17, #0B132B, #1C2541
+       ========================================================= */
+
+    :root {
+      --color-bg-deep: #050B17;
+      --color-bg-card: rgba(11, 19, 43, 0.75);
+      --color-brand-orange: #FF5722;
+      --color-brand-orange-glow: rgba(255, 87, 34, 0.35);
+      --color-brand-orange-dark: #E64A19;
+      --color-brand-navy: #0B132B;
+      --color-brand-navy-light: #1C2541;
+      --color-silver-light: #F1F5F9;
+      --color-silver-mid: #CBD5E1;
+      --color-silver-dark: #64748B;
+      --border-metallic: rgba(255, 255, 255, 0.12);
+      --font-primary: 'Alexandria', 'Outfit', system-ui, -apple-system, sans-serif;
+    }
+
+    /* Reset & Base */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: var(--font-primary);
+      background-color: var(--color-bg-deep);
+      color: #FFFFFF;
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* خلفية رياضية فاخرة تبرز شفافية الشعار وألوانه الفضية والبرتقالية */
+    .hero-background-wrapper {
+      position: relative;
+      background: radial-gradient(circle at 50% 15%, rgba(255, 87, 34, 0.18) 0%, rgba(28, 37, 65, 0.35) 35%, #050B17 75%),
+                  linear-gradient(180deg, #070E1E 0%, #050B17 100%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    /* شبكة الكربون الرياضية الدقيقة في الخلفية */
+    .hero-background-wrapper::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      mask-image: radial-gradient(ellipse at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
+      -webkit-mask-image: radial-gradient(ellipse at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
+    }
+
+    /* توهج هالة الشعار الضوئي (Aura Glow Effect) */
+    .ambient-glow-sphere {
+      position: absolute;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: clamp(280px, 45vw, 600px);
+      height: clamp(280px, 45vw, 600px);
+      background: radial-gradient(circle, rgba(255, 87, 34, 0.22) 0%, rgba(255, 112, 67, 0.1) 40%, transparent 70%);
+      filter: blur(50px);
+      border-radius: 50%;
+      pointer-events: none;
+      animation: auraPulse 6s ease-in-out infinite alternate;
+    }
+
+    @keyframes auraPulse {
+      0% {
+        transform: translate(-50%, -50%) scale(0.92);
+        opacity: 0.7;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1.1);
+        opacity: 1;
+      }
+    }
+
+    /* =========================================================
+       1. شريط التنقل العلوي (TOP NAVIGATION BAR)
+       ========================================================= */
+    .site-navbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      background: rgba(5, 11, 23, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-metallic);
+      transition: all 0.3s ease;
+    }
+
+    .nav-brand-link {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      transition: transform 0.2s ease;
+    }
+
+    .nav-brand-link:hover {
+      transform: scale(1.02);
+    }
+
+    /* الشعار في النافبار */
+    .nav-brand-logo {
+      height: 48px;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 10px rgba(255, 87, 34, 0.3));
+      transition: filter 0.3s ease;
+    }
+
+    .nav-brand-link:hover .nav-brand-logo {
+      filter: drop-shadow(0 4px 18px rgba(255, 87, 34, 0.6));
+    }
+
+    .nav-menu-links {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    .nav-menu-links a {
+      color: var(--color-silver-mid);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: color 0.2s ease, text-shadow 0.2s ease;
+      position: relative;
+    }
+
+    .nav-menu-links a:hover,
+    .nav-menu-links a.active {
+      color: #FFFFFF;
+      text-shadow: 0 0 12px rgba(255, 87, 34, 0.5);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    /* الأزرار الاحترافية */
+    .btn-login {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-metallic);
+      color: var(--color-silver-light);
+      padding: 0.6rem 1.25rem;
+      border-radius: 9999px;
+      font-weight: 700;
+      font-size: 0.88rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.25s ease;
+      font-family: inherit;
+    }
+
+    .btn-login:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.25);
+      color: #FFFFFF;
+      transform: translateY(-1px);
+    }
+
+    .btn-join-primary {
+      background: linear-gradient(135deg, #FF7043 0%, #FF5722 50%, #E64A19 100%);
+      color: #FFFFFF;
+      padding: 0.65rem 1.6rem;
+      border-radius: 9999px;
+      font-weight: 800;
+      font-size: 0.92rem;
+      cursor: pointer;
+      text-decoration: none;
+      box-shadow: 0 4px 20px rgba(255, 87, 34, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      transition: all 0.25s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: inherit;
+    }
+
+    .btn-join-primary:hover {
+      box-shadow: 0 6px 28px rgba(255, 87, 34, 0.7);
+      transform: translateY(-2px);
+      filter: brightness(1.08);
+    }
+
+    /* زر القائمة للشاشات الصغيرة */
+    .mobile-menu-btn {
+      display: none;
+      background: transparent;
+      border: 1px solid var(--border-metallic);
+      color: #FFFFFF;
+      border-radius: 8px;
+      padding: 0.5rem;
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+
+    /* =========================================================
+       2. الهيدر الرئيسي الفاخر (HERO SHOWCASE SECTION)
+       ========================================================= */
+    .hero-container {
+      position: relative;
+      z-index: 10;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 3.5rem 1.5rem 5rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    /* شارة العلامة التجارية العلوية */
+    .brand-eyebrow-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0.4rem 1.1rem;
+      border-radius: 9999px;
+      background: rgba(255, 87, 34, 0.1);
+      border: 1px solid rgba(255, 87, 34, 0.35);
+      color: #FF8A65;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      margin-bottom: 2rem;
+      backdrop-filter: blur(8px);
+    }
+
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--color-brand-orange);
+      box-shadow: 0 0 10px var(--color-brand-orange);
+      animation: blinkDot 2s infinite ease-in-out;
+    }
+
+    @keyframes blinkDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    /* =========================================================
+       إبراز الشعار المستهدف (THE LOGO PRESENTATION)
+       استخدام عنصر <img> مع مسار logo.png تماماً كما طُلب
+       ========================================================= */
+    .logo-hero-wrapper {
+      position: relative;
+      margin-bottom: 2.25rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* حلقة هالة معدنية حول الشعار تبرز درجات الفضي والبرتقالي */
+    .logo-glow-pedestal {
+      position: absolute;
+      width: 115%;
+      height: 115%;
+      background: radial-gradient(circle, rgba(255, 87, 34, 0.16) 0%, rgba(203, 213, 225, 0.08) 50%, transparent 70%);
+      filter: blur(28px);
+      border-radius: 50%;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* عنصر الصورة الرسمي للشعار */
+    .brand-main-logo {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 380px;
+      height: auto;
+      display: block;
+      object-fit: contain;
+      /* ترقية عمق الشعار وظلاله ليتناسب مع الخلفية الشفافة والفخمة */
+      filter: drop-shadow(0 15px 35px rgba(0, 0, 0, 0.75))
+              drop-shadow(0 0 25px rgba(255, 87, 34, 0.3));
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s ease;
+    }
+
+    .brand-main-logo:hover {
+      transform: scale(1.03) translateY(-4px);
+      filter: drop-shadow(0 20px 45px rgba(0, 0, 0, 0.85))
+              drop-shadow(0 0 35px rgba(255, 87, 34, 0.5));
+    }
+
+    /* نصوص الهيدر والعناوين */
+    .hero-title {
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+      font-weight: 900;
+      line-height: 1.2;
+      margin-bottom: 1.25rem;
+      max-width: 900px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero-title .text-orange-gradient {
+      background: linear-gradient(135deg, #FF8A65 0%, #FF5722 50%, #FF3D00 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: inline-block;
+      text-shadow: 0 0 30px rgba(255, 87, 34, 0.25);
+    }
+
+    .hero-title .text-silver {
+      color: var(--color-silver-light);
+    }
+
+    .hero-description {
+      font-size: clamp(1rem, 2vw, 1.2rem);
+      color: var(--color-silver-mid);
+      max-width: 680px;
+      margin-bottom: 2.5rem;
+      font-weight: 400;
+      line-height: 1.7;
+    }
+
+    /* أزرار الإجراء في الهيدر الرئيسي */
+    .hero-cta-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      margin-bottom: 3.5rem;
+    }
+
+    .btn-hero-primary {
+      background: linear-gradient(135deg, #FF7043 0%, #FF5722 50%, #E64A19 100%);
+      color: #FFFFFF;
+      padding: 1rem 2.5rem;
+      border-radius: 9999px;
+      font-size: 1.1rem;
+      font-weight: 800;
+      text-decoration: none;
+      box-shadow: 0 8px 30px rgba(255, 87, 34, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: inherit;
+    }
+
+    .btn-hero-primary:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 12px 40px rgba(255, 87, 34, 0.7);
+      filter: brightness(1.1);
+    }
+
+    .btn-hero-secondary {
+      background: rgba(11, 19, 43, 0.6);
+      border: 1px solid var(--border-metallic);
+      color: var(--color-silver-light);
+      padding: 1rem 2.2rem;
+      border-radius: 9999px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      text-decoration: none;
+      backdrop-filter: blur(10px);
+      transition: all 0.25s ease;
+      font-family: inherit;
+    }
+
+    .btn-hero-secondary:hover {
+      background: rgba(28, 37, 65, 0.8);
+      border-color: rgba(255, 255, 255, 0.3);
+      color: #FFFFFF;
+      transform: translateY(-2px);
+    }
+
+    /* بطاقات إحصائيات سريعة أسفل الهيدر تعكس القوة الرياضية */
+    .hero-stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      max-width: 900px;
+      width: 100%;
+    }
+
+    .stat-card {
+      background: rgba(11, 19, 43, 0.45);
+      border: 1px solid var(--border-metallic);
+      padding: 1.25rem 1rem;
+      border-radius: 18px;
+      backdrop-filter: blur(8px);
+      text-align: center;
+      transition: transform 0.25s ease, border-color 0.25s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(255, 87, 34, 0.4);
+    }
+
+    .stat-number {
+      font-size: 1.75rem;
+      font-weight: 900;
+      color: #FFFFFF;
+      display: block;
+      margin-bottom: 0.25rem;
+      font-family: 'Outfit', 'Alexandria', sans-serif;
+    }
+
+    .stat-number span {
+      color: var(--color-brand-orange);
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--color-silver-mid);
+      font-weight: 600;
+    }
+
+    /* =========================================================
+       التجاوب الكامل مع الهواتف والشاشات الصغيرة (RESPONSIVENESS)
+       ========================================================= */
+    @media (max-width: 900px) {
+      .nav-menu-links {
+        display: none;
+      }
+      .mobile-menu-btn {
+        display: block;
+      }
+      .hero-stats-row {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        max-width: 360px;
+      }
+      .brand-main-logo {
+        max-width: 300px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .site-navbar {
+        padding: 0.85rem 1.25rem;
+      }
+      .nav-brand-logo {
+        height: 38px;
+      }
+      .hero-container {
+        padding: 2.5rem 1rem 3.5rem 1rem;
+      }
+      .brand-main-logo {
+        max-width: 250px;
+      }
+      .btn-hero-primary, .btn-hero-secondary {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- الحاوية الرئيسية للهيدر مع الخلفية الفاخرة المخصصة للشعار -->
+  <header class="hero-background-wrapper">
+    
+    <!-- كرة التوهج البرتقالية المحيطية خلف الشعار -->
+    <div class="ambient-glow-sphere" aria-hidden="true"></div>
+
+    <!-- 1. شريط التنقل العلوي المتجاوب (Navbar) -->
+    <nav class="site-navbar" aria-label="التنقل الرئيسي">
+      
+      <!-- شعار الموقع في النافبار باستخدام عنصر <img> ومسار logo.png -->
+      <a href="/" class="nav-brand-link" title="الرئيسية | Own Aura Outcome">
+        <img 
+          src="logo.png" 
+          alt="Own Aura Outcome Logo" 
+          class="nav-brand-logo" 
+        />
+      </a>
+
+      <!-- روابط التنقل -->
+      <ul class="nav-menu-links">
+        <li><a href="#home" class="active">الرئيسية</a></li>
+        <li><a href="#plans">باقات الاشتراك</a></li>
+        <li><a href="#transformations">قصص التحول</a></li>
+        <li><a href="#coach">عن الكوتش</a></li>
+        <li><a href="#contact">تواصل معنا</a></li>
+      </ul>
+
+      <!-- أزرار الإجراء السريع -->
+      <div class="nav-actions">
+        <a href="#login" class="btn-login">تسجيل الدخول</a>
+        <a href="#plans" class="btn-join-primary">انضم للثورة</a>
+        <button class="mobile-menu-btn" aria-label="فتح القائمة">☰</button>
+      </div>
+    </nav>
+
+    <!-- 2. قسم الهيدر الرئيسي مع الشعار المركزي (Hero Section) -->
+    <section class="hero-container">
+      
+      <!-- شارة علوية -->
+      <div class="brand-eyebrow-badge">
+        <span class="badge-dot"></span>
+        <span>المنظومة التدريبية الاحترافية — OWN AURA OUTCOME</span>
+      </div>
+
+      <!-- عرض الشعار المركزي باستخدام <img> ومسار logo.png حصرياً -->
+      <div class="logo-hero-wrapper">
+        <div class="logo-glow-pedestal" aria-hidden="true"></div>
+        <img 
+          src="logo.png" 
+          alt="Own Aura Outcome - شعار العلامة التجارية" 
+          class="brand-main-logo"
+        />
+      </div>
+
+      <!-- نصوص الهيدر الرياضية الفاخرة -->
+      <h1 class="hero-title">
+        <span class="text-silver">اصنع هيبتك الرياضية،</span><br />
+        وحقق <span class="text-orange-gradient">نتيجتك النهائية</span>
+      </h1>
+
+      <p class="hero-description">
+        برامج تدريب وتغذية علمية متقدمة مصممة خصيصاً لتفجير طاقاتك البدنية وصناعة فورمة أحلامك بإشراف ومتابعة تدريبية دقيقة خطوة بخطوة.
+      </p>
+
+      <!-- أزرار الدعوة للإجراء (CTA) -->
+      <div class="hero-cta-group">
+        <a href="#plans" class="btn-hero-primary">
+          <span>انضم للثورة الآن</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </a>
+        <a href="#portal" class="btn-hero-secondary">
+          بوابة المشتركين الرياضية
+        </a>
+      </div>
+
+      <!-- إحصائيات سريعة للموثوقية -->
+      <div class="hero-stats-row">
+        <div class="stat-card">
+          <span class="stat-number">+<span>280</span></span>
+          <span class="stat-label">بطل تم تحويل فورمتهم</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number"><span>98.4</span>%</span>
+          <span class="stat-label">نسبة الالتزام والنتائج</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">100%</span>
+          <span class="stat-label">متابعة علمية مخصصة</span>
+        </div>
+      </div>
+
+    </section>
+  </header>
+
+</body>
+</html>

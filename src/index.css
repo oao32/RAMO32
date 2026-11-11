@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --brand-navy-950: #030712;
+    --brand-navy-900: #070a14;
+    --brand-navy-800: #0b132b;
+    --brand-navy-700: #1c2541;
+    --brand-navy-600: #3a506b;
+    --brand-orange-500: #f97316;
+    --brand-orange-600: #ea580c;
+    --brand-orange-700: #c2410c;
+
+    /* Eye-Comfort Light Mode Palette */
+    --light-bg-body: #EEF2F6;
+    --light-card-surface: #F8FAFC;
+    --light-card-muted: #EDF2F7;
+    --light-border: #CBD5E1;
+  }
+
+  body {
+    font-family: 'Alexandria', 'Outfit', sans-serif, system-ui;
+  }
+}
+
+@keyframes tickerMove {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes tickerMoveRTL {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(50%); }
+}
+
+.animate-ticker-ltr {
+  display: flex;
+  width: max-content;
+  animation: tickerMove 35s linear infinite;
+}
+
+.animate-ticker-rtl {
+  display: flex;
+  width: max-content;
+  animation: tickerMoveRTL 35s linear infinite;
+}
+
+.animate-ticker-ltr:hover,
+.animate-ticker-rtl:hover {
+  animation-play-state: paused;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(249, 115, 22, 0.3), inset 0 0 15px rgba(249, 115, 22, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(249, 115, 22, 0.65), inset 0 0 25px rgba(249, 115, 22, 0.25);
+  }
+}
+
+.glow-orange {
+  animation: pulseGlow 3s infinite ease-in-out;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(3, 7, 18, 0.8);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(249, 115, 22, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(249, 115, 22, 0.8);
+}

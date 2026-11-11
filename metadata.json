@@ -1,0 +1,6 @@
+{
+  "name": "OAO - OWN AURA OUTCOME Training Portal",
+  "description": "نظام التدريب الرياضي المتكامل الفاخر - بوابة المشتركين ولوحة تحكم المدرب",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

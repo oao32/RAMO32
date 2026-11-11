@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>OWN AURA OUTCOME | Official Training Portal</title>
+  
+  <!-- Google Fonts: Alexandria & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              navyDark: '#0B132B',
+              navyMedium: '#1C2541',
+              orangeNeon: '#FF5722',
+              orangeWarm: '#FF7043',
+            }
+          },
+          fontFamily: {
+            alexandria: ['Alexandria', 'sans-serif'],
+            outfit: ['Outfit', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Alexandria', 'Outfit', sans-serif;
+      background-color: #030712;
+      color: #ffffff;
+      overflow-x: hidden;
+    }
+
+    /* Radiant Orange Glow Animation */
+    @keyframes pulseGlow {
+      0%, 100% {
+        box-shadow: 0 0 20px rgba(255, 87, 34, 0.4), inset 0 0 15px rgba(255, 87, 34, 0.2);
+      }
+      50% {
+        box-shadow: 0 0 35px rgba(255, 87, 34, 0.8), inset 0 0 25px rgba(255, 87, 34, 0.4);
+      }
+    }
+
+    .glow-orange {
+      animation: pulseGlow 2.5s infinite ease-in-out;
+    }
+
+    /* Ambient Spark Particle Effect */
+    @keyframes floatUp {
+      0% { transform: translateY(0) scale(1); opacity: 0.8; }
+      100% { transform: translateY(-100vh) scale(0.3); opacity: 0; }
+    }
+
+    .spark {
+      position: absolute;
+      bottom: -10px;
+      width: 4px;
+      height: 4px;
+      background-color: #FF7043;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #FF5722;
+      pointer-events-none;
+      animation: floatUp 8s linear infinite;
+    }
+  </style>
+</head>
+<body class="bg-[#030712] text-white antialiased min-h-screen relative selection:bg-[#FF5722] selection:text-white">
+
+  <!-- ================= HERO SECTION ================= -->
+  <section class="relative w-full h-screen min-h-[680px] flex flex-col justify-between overflow-hidden bg-[#030712] select-none">
+    
+    <!-- 1. FULL BACKGROUND IMAGE: 3D HERO GYM -->
+    <div class="absolute inset-0 z-0 overflow-hidden">
+      <!-- 3D Gym Background Image with Centered Metallic Arm & Glowing Flames -->
+      <img
+        src="/src/assets/images/oao_wide_hero_gym_1791201840663.jpg"
+        alt="OWN AURA OUTCOME 3D Background"
+        class="w-full h-full object-cover object-center transform scale-100 transition-transform duration-1000"
+      />
+
+      <!-- 2. DARK GLASSMORPHISM OVERLAY FOR CONTRAST & LUXURY -->
+      <div class="absolute inset-0 bg-[#070B19]/45 backdrop-blur-[0.5px]"></div>
+      
+      <!-- Atmospheric Vignettes & Gradients -->
+      <div class="absolute inset-0 bg-gradient-to-b from-[#030712]/80 via-transparent to-[#030712]/90 pointer-events-none"></div>
+      <div class="absolute inset-0 bg-gradient-to-r from-[#030712]/50 via-transparent to-[#030712]/50 pointer-events-none"></div>
+      <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_30%,rgba(3,7,18,0.7)_100%)] pointer-events-none"></div>
+    </div>
+
+    <!-- Floating Ember Sparks Animation -->
+    <div class="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+      <div class="spark" style="left: 15%; animation-duration: 7s; animation-delay: 0s;"></div>
+      <div class="spark" style="left: 35%; animation-duration: 9s; animation-delay: 2s; width: 6px; height: 6px;"></div>
+      <div class="spark" style="left: 55%; animation-duration: 6s; animation-delay: 1s;"></div>
+      <div class="spark" style="left: 75%; animation-duration: 10s; animation-delay: 3s; width: 5px; height: 5px;"></div>
+      <div class="spark" style="left: 88%; animation-duration: 8s; animation-delay: 4s;"></div>
+    </div>
+
+    <!-- ================= 3. FIXED TRANSPARENT NAVBAR ================= -->
+    <header class="absolute top-0 left-0 right-0 z-50 w-full px-4 sm:px-8 pt-5">
+      <div class="max-w-7xl mx-auto backdrop-blur-xl bg-black/40 border border-white/15 rounded-2xl px-5 sm:px-8 py-3.5 flex items-center justify-between shadow-[0_15px_35px_rgba(0,0,0,0.7)]">
+        
+        <!-- Brand Logo in Corner -->
+        <a href="#" class="flex items-center gap-3 group">
+          <div class="w-10 h-10 rounded-xl p-1 bg-black/40 border border-[#FF5722]/50 shadow-[0_0_15px_rgba(255,87,34,0.6)] group-hover:scale-105 transition-transform flex items-center justify-center">
+            <img src="/logo.png" alt="Logo" class="w-full h-full object-contain">
+          </div>
+          <div class="flex items-center gap-1.5 font-black text-sm sm:text-base md:text-lg tracking-wider select-none">
+            <span class="text-white drop-shadow-md">Own</span>
+            <span class="px-2 py-0.5 rounded-md text-xs sm:text-sm font-black tracking-widest uppercase bg-gradient-to-r from-slate-100 via-white to-slate-200 text-[#07182E] shadow-md border border-slate-300">
+              Aura
+            </span>
+            <span class="text-[#EA580C] drop-shadow-md group-hover:text-[#FF7043] transition-colors">Outcome</span>
+          </div>
+        </a>
+
+        <!-- Desktop Navigation Links -->
+        <nav class="hidden md:flex items-center gap-7 lg:gap-9 text-xs sm:text-sm font-bold tracking-wider">
+          <a href="#" class="relative py-1 text-[#FF7043] font-black transition-colors hover:text-white">
+            الرئيسية
+            <span class="absolute -bottom-1 left-0 right-0 h-[2.5px] bg-gradient-to-r from-[#FF5722] via-[#FF7043] to-amber-400 rounded-full shadow-[0_0_12px_#FF5722]"></span>
+          </a>
+          <a href="#programs" class="text-slate-300 font-bold hover:text-white transition-colors">التمارين</a>
+          <a href="#plans" class="text-slate-300 font-bold hover:text-white transition-colors">الاشتراك</a>
+          <a href="#contact" class="text-slate-300 font-bold hover:text-white transition-colors">تواصل معنا</a>
+        </nav>
+
+        <!-- Right Action Buttons -->
+        <div class="hidden sm:flex items-center gap-3">
+          <a href="#login" class="text-xs sm:text-sm font-bold text-slate-300 hover:text-white transition-colors px-3 py-1.5">
+            تسجيل دخول المشترك
+          </a>
+          <a href="#join" class="px-5 sm:px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#FF5722] via-[#FF7043] to-amber-500 hover:from-[#FF7043] hover:to-amber-400 text-white font-black text-xs sm:text-sm tracking-wider uppercase shadow-[0_0_25px_rgba(255,87,34,0.7)] transition-all hover:scale-105 active:scale-95 border border-orange-300/50 glow-orange">
+            انضم للثورة ⚡
+          </a>
+        </div>
+
+        <!-- Mobile Menu Hamburger Button -->
+        <button id="mobileMenuBtn" class="md:hidden text-slate-300 hover:text-white p-2 rounded-xl bg-white/5 focus:outline-none">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Mobile Dropdown Menu -->
+      <div id="mobileMenu" class="hidden md:hidden mt-2 p-4 rounded-2xl bg-black/95 border border-white/10 backdrop-blur-2xl space-y-3">
+        <a href="#" class="block py-2 px-3 rounded-xl font-bold text-sm text-[#FF7043] bg-white/5">الرئيسية</a>
+        <a href="#programs" class="block py-2 px-3 rounded-xl font-bold text-sm text-slate-200 hover:bg-white/10 hover:text-[#FF7043]">التمارين</a>
+        <a href="#plans" class="block py-2 px-3 rounded-xl font-bold text-sm text-slate-200 hover:bg-white/10 hover:text-[#FF7043]">الاشتراك</a>
+        <a href="#contact" class="block py-2 px-3 rounded-xl font-bold text-sm text-slate-200 hover:bg-white/10 hover:text-[#FF7043]">تواصل معنا</a>
+        <div class="pt-2 border-t border-white/10 flex flex-col gap-2">
+          <a href="#login" class="text-center py-2.5 rounded-xl bg-white/10 text-white font-bold text-xs">تسجيل دخول المشترك</a>
+          <a href="#join" class="text-center py-2.5 rounded-xl bg-gradient-to-r from-[#FF5722] to-[#FF7043] text-white font-black text-xs">انضم للثورة ⚡</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- ================= 4. CENTER OPEN FOCUS ================= -->
+    <div class="relative z-10 flex-1 flex flex-col items-center justify-center pointer-events-none">
+      <!-- Glow backlight in center -->
+      <div class="w-80 h-80 bg-orange-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+    </div>
+
+    <!-- ================= 5. HERO CONTENT & INTERACTIVE BUTTONS ================= -->
+    <div class="relative z-20 pb-8 sm:pb-12 px-4 sm:px-8 max-w-6xl mx-auto w-full text-center">
+      <!-- Interactive Glassmorphic Buttons (Navy & Neon Orange) -->
+      <div class="flex flex-wrap items-center justify-center gap-3 sm:gap-4 max-w-4xl mx-auto">
+        <!-- 1. PROGRAMS -->
+        <a href="#programs" class="px-6 sm:px-8 py-3 rounded-2xl backdrop-blur-md bg-[#0B132B]/60 hover:bg-[#1C2541]/80 border border-white/20 hover:border-[#FF5722] hover:shadow-[0_0_20px_rgba(255,87,34,0.5)] text-white font-bold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2 group">
+          <span class="text-[#FF7043] text-base group-hover:scale-110 transition-transform">🏋️</span>
+          <span>التمارين (PROGRAMS)</span>
+        </a>
+
+        <!-- 2. PLANS -->
+        <a href="#plans" class="px-6 sm:px-8 py-3 rounded-2xl backdrop-blur-md bg-[#0B132B]/60 hover:bg-[#1C2541]/80 border border-white/20 hover:border-[#FF5722] hover:shadow-[0_0_20px_rgba(255,87,34,0.5)] text-white font-bold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2 group">
+          <span class="text-[#FF7043] text-base group-hover:scale-110 transition-transform">⚡</span>
+          <span>الاشتراكات (PLANS)</span>
+        </a>
+
+        <!-- 3. JOIN NOW (Glowing Neon Orange) -->
+        <a href="#join" class="px-7 sm:px-10 py-3.5 rounded-2xl bg-gradient-to-r from-[#FF5722] via-[#FF7043] to-amber-500 hover:from-[#FF7043] hover:to-amber-400 text-white font-black text-xs sm:text-sm tracking-widest uppercase transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_0_35px_rgba(255,87,34,0.95)] border-2 border-orange-300/80 flex items-center gap-2.5 glow-orange">
+          <span>✨</span>
+          <span>انضم الآن 🔥</span>
+        </a>
+      </div>
+
+      <!-- Downward Scroll Indicator -->
+      <div class="mt-6">
+        <a href="#details" class="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-300 hover:text-orange-400 transition-colors animate-bounce drop-shadow-md">
+          <span>انزل لأسفل لتصفح مميزات وبوابة النادي</span>
+          <span>↓</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Mobile Menu Toggle Script -->
+  <script>
+    const btn = document.getElementById('mobileMenuBtn');
+    const menu = document.getElementById('mobileMenu');
+    if (btn && menu) {
+      btn.addEventListener('click', () => {
+        menu.classList.toggle('hidden');
+      });
+    }
+  </script>
+</body>
+</html>
