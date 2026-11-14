@@ -5,6 +5,7 @@ import {
   ClientNote,
   ClientProfile,
   GeneratedAIPlanResponse,
+  SubscriptionAgreement,
   SubscriptionPlanTier,
   WorkoutDay,
 } from '../types';
@@ -928,20 +929,238 @@ export async function syncProfileToSupabase(profile: ClientProfile): Promise<boo
   }
 }
 
-// Ready-to-copy SQL Schema for Coach/Admin including `clients.subscription_plan`, `subscription_start_date`, `subscription_end_date` & RLS policies
-export const SUPABASE_SQL_SCHEMA = `-- OAO - OWN AURA OUTCOME TRAINING PORTAL DATABASE SCHEMA
--- شغّل هذا الكود في Supabase SQL Editor لضبط حقول الخطة وفترة الاشتراك وتفعيل الصلاحيات:
+/**
+ * Persist completed subscription agreement directly into Supabase `public.declarations`
+ * and local storage `oao_client_declarations`.
+ */
+export async function saveDeclarationToSupabase(
+  agreement: SubscriptionAgreement
+): Promise<{ synced: boolean; error?: string }> {
+  // Always persist locally first
+  if (typeof window !== 'undefined') {
+    try {
+      const existing: SubscriptionAgreement[] = JSON.parse(
+        localStorage.getItem('oao_client_declarations') || '[]'
+      );
+      const filtered = existing.filter((d) => d.id !== agreement.id);
+      filtered.unshift(agreement);
+      localStorage.setItem('oao_client_declarations', JSON.stringify(filtered));
+      localStorage.setItem('oao_active_contract', JSON.stringify(agreement));
+      window.dispatchEvent(new CustomEvent('oao_declarations_updated', { detail: filtered }));
+      window.dispatchEvent(new Event('storage'));
+    } catch {
+      // ignore storage error
+    }
+  }
 
--- 1. جدول المشتركين (clients) + حقول خطة الاشتراك وفترة الاشتراك (من ... إلى ...)
+  const client = getSupabaseClient();
+  if (!client) {
+    return { synced: false, error: 'Supabase client unavailable' };
+  }
+
+  try {
+    const payload = {
+      id: agreement.id,
+      plan_id: agreement.planId,
+      subscription_plan: agreement.subscription_plan || (agreement.planId === 'platinum' ? 'VIP' : 'standard'),
+      plan_name_ar: agreement.planNameAr,
+      plan_price: agreement.planPrice,
+      billing_cycle: agreement.billingCycle,
+      duration_label_ar: agreement.durationLabelAr || '',
+      duration_days: agreement.durationDays || 90,
+      payment_installments: agreement.paymentInstallments || 'full',
+      installment_amount: agreement.installmentAmount || agreement.planPrice,
+      visual_goal: agreement.visualGoal || '',
+      full_name: agreement.fullName,
+      phone_whatsapp: agreement.phoneWhatsapp,
+      email: agreement.email.trim().toLowerCase(),
+      age: agreement.age || null,
+      blood_type: agreement.bloodType || null,
+      inbody_file_url: agreement.inBodyFileUrl || null,
+      inbody_filename: agreement.inBodyFileName || null,
+      inbody_filesize: agreement.inBodyFileSize || null,
+      has_health_issues: agreement.hasHealthIssues,
+      health_issues_details: agreement.healthIssuesDetails || null,
+      agreed_health_and_remote_training: agreement.agreedHealthAndRemoteTraining,
+      agreed_diet_and_supplements: agreement.agreedDietAndSupplements,
+      agreed_intellectual_property: agreement.agreedIntellectualProperty,
+      agreed_payment_and_refund_policy: agreement.agreedPaymentAndRefundPolicy,
+      digital_signature: agreement.digitalSignature,
+      signed_timestamp: agreement.signedTimestamp,
+      status: agreement.status || 'completed_and_active',
+      completed_timestamp: agreement.completedTimestamp || new Date().toISOString(),
+    };
+
+    const { error } = await client
+      .from('declarations')
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      return { synced: false, error: error.message };
+    }
+    return { synced: true };
+  } catch (err) {
+    return { synced: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
+/**
+ * Fetch agreements from Supabase `public.declarations` merged with local storage.
+ */
+export async function fetchDeclarationsFromSupabase(): Promise<SubscriptionAgreement[]> {
+  let localDecls: SubscriptionAgreement[] = [];
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('oao_client_declarations');
+      localDecls = raw ? (JSON.parse(raw) as SubscriptionAgreement[]) : [];
+    } catch {
+      localDecls = [];
+    }
+  }
+
+  const client = getSupabaseClient();
+  if (!client) return localDecls;
+
+  try {
+    const { data, error } = await client
+      .from('declarations')
+      .select('*')
+      .order('completed_timestamp', { ascending: false });
+
+    if (error || !data) return localDecls;
+
+    const remoteDecls: SubscriptionAgreement[] = data.map((row: Record<string, unknown>) => ({
+      id: String(row.id),
+      planId: (row.plan_id === 'platinum' ? 'platinum' : 'standard') as 'standard' | 'platinum',
+      subscription_plan: normalizeSubscriptionPlan(row.subscription_plan as string),
+      planNameAr: String(row.plan_name_ar || ''),
+      planPrice: Number(row.plan_price || 0),
+      billingCycle: String(row.billing_cycle || '3_months') as SubscriptionAgreement['billingCycle'],
+      durationLabelAr: row.duration_label_ar ? String(row.duration_label_ar) : undefined,
+      durationDays: row.duration_days ? Number(row.duration_days) : undefined,
+      paymentInstallments: (row.payment_installments as SubscriptionAgreement['paymentInstallments']) || 'full',
+      installmentAmount: row.installment_amount ? Number(row.installment_amount) : undefined,
+      visualGoal: row.visual_goal ? String(row.visual_goal) : undefined,
+      fullName: String(row.full_name || ''),
+      phoneWhatsapp: String(row.phone_whatsapp || ''),
+      email: String(row.email || ''),
+      age: row.age ? Number(row.age) : undefined,
+      bloodType: row.blood_type ? String(row.blood_type) : undefined,
+      inBodyFileUrl: row.inbody_file_url ? String(row.inbody_file_url) : undefined,
+      inBodyFileName: row.inbody_filename ? String(row.inbody_filename) : undefined,
+      inBodyFileSize: row.inbody_filesize ? String(row.inbody_filesize) : undefined,
+      hasHealthIssues: Boolean(row.has_health_issues),
+      healthIssuesDetails: row.health_issues_details ? String(row.health_issues_details) : undefined,
+      agreedHealthAndRemoteTraining: Boolean(row.agreed_health_and_remote_training),
+      agreedDietAndSupplements: Boolean(row.agreed_diet_and_supplements),
+      agreedIntellectualProperty: Boolean(row.agreed_intellectual_property),
+      agreedPaymentAndRefundPolicy: Boolean(row.agreed_payment_and_refund_policy),
+      digitalSignature: String(row.digital_signature || ''),
+      signedTimestamp: String(row.signed_timestamp || ''),
+      status: 'completed_and_active',
+      completedTimestamp: row.completed_timestamp ? String(row.completed_timestamp) : undefined,
+    }));
+
+    const remoteIds = new Set(remoteDecls.map((r) => r.id));
+    const merged = [
+      ...remoteDecls,
+      ...localDecls.filter((l) => !remoteIds.has(l.id)),
+    ];
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('oao_client_declarations', JSON.stringify(merged));
+    }
+    return merged;
+  } catch {
+    return localDecls;
+  }
+}
+
+/**
+ * Delete declaration from Supabase & local storage
+ */
+export async function deleteDeclarationFromSupabase(id: string): Promise<boolean> {
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('oao_client_declarations');
+      const existing: SubscriptionAgreement[] = raw ? JSON.parse(raw) : [];
+      const updated = existing.filter((d) => d.id !== id);
+      localStorage.setItem('oao_client_declarations', JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('oao_declarations_updated', { detail: updated }));
+      window.dispatchEvent(new Event('storage'));
+    } catch {
+      // ignore
+    }
+  }
+
+  const client = getSupabaseClient();
+  if (!client) return true;
+  try {
+    await client.from('declarations').delete().eq('id', id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Delete inquiry/note from Supabase & local storage
+ */
+export async function deleteNoteFromSupabase(noteId: string): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) return true;
+  try {
+    await client.from('notes').delete().eq('id', noteId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Sync workout days to Supabase `workouts` table
+ */
+export async function syncWorkoutDaysToSupabase(
+  clientId: string,
+  days: WorkoutDay[]
+): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) return false;
+  try {
+    const payload = {
+      id: `workouts_${clientId || 'global'}`,
+      client_id: clientId || 'global',
+      day_key: 'all_days',
+      workout_data: days,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await client.from('workouts').upsert(payload, { onConflict: 'id' });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// Ready-to-copy SQL Schema for Coach/Admin including `clients.subscription_plan`, `declarations`, `workouts`, `notes` & RLS policies
+export const SUPABASE_SQL_SCHEMA = `-- OAO - OWN AURA OUTCOME TRAINING PORTAL DATABASE SCHEMA
+-- شغّل هذا الكود في Supabase SQL Editor لضبط الجداول وتفعيل الصلاحيات الكاملة:
+
+-- 1. جدول المشتركين (clients)
 CREATE TABLE IF NOT EXISTS public.clients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
   client_code TEXT,
   name_ar TEXT NOT NULL,
   name_en TEXT,
-  email TEXT,
+  email TEXT UNIQUE,
   phone TEXT,
+  assigned_password TEXT,
   age INTEGER,
+  blood_type TEXT,
+  visual_goal TEXT,
+  nutrition_plan_locked BOOLEAN DEFAULT false,
+  inbody_filename TEXT,
+  inbody_file_url TEXT,
   gender TEXT,
   height_cm NUMERIC DEFAULT 175,
   target_weight_kg NUMERIC DEFAULT 70,
@@ -954,17 +1173,17 @@ CREATE TABLE IF NOT EXISTS public.clients (
   coach_id UUID
 );
 
--- إضافة الحقول تلقائياً إذا كان جدول clients موجوداً مسبقاً
-ALTER TABLE public.clients
-  ADD COLUMN IF NOT EXISTS subscription_plan TEXT NOT NULL DEFAULT 'standard';
-ALTER TABLE public.clients
-  ADD COLUMN IF NOT EXISTS subscription_start_date DATE;
-ALTER TABLE public.clients
-  ADD COLUMN IF NOT EXISTS subscription_end_date DATE;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS assigned_password TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS blood_type TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS visual_goal TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS nutrition_plan_locked BOOLEAN DEFAULT false;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS inbody_filename TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS inbody_file_url TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_plan TEXT NOT NULL DEFAULT 'standard';
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_start_date DATE;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_end_date DATE;
 
--- قيد التحقق لضمان أن الخطة دائماً 'standard' أو 'VIP' فقط
-ALTER TABLE public.clients
-  DROP CONSTRAINT IF EXISTS clients_subscription_plan_check;
+ALTER TABLE public.clients DROP CONSTRAINT IF EXISTS clients_subscription_plan_check;
 ALTER TABLE public.clients
   ADD CONSTRAINT clients_subscription_plan_check
   CHECK (subscription_plan IN ('standard', 'VIP'));
@@ -974,7 +1193,46 @@ DROP POLICY IF EXISTS "Allow public access to clients" ON public.clients;
 CREATE POLICY "Allow public access to clients"
   ON public.clients FOR ALL USING (true) WITH CHECK (true);
 
--- 2. جدول سجلات الذكاء الاصطناعي (ai_generation_logs)
+-- 2. جدول الإقرارات والعقود الرقمية (declarations)
+CREATE TABLE IF NOT EXISTS public.declarations (
+  id TEXT PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+  plan_id TEXT,
+  subscription_plan TEXT DEFAULT 'standard',
+  plan_name_ar TEXT,
+  plan_price NUMERIC DEFAULT 0,
+  billing_cycle TEXT,
+  duration_label_ar TEXT,
+  duration_days INTEGER DEFAULT 90,
+  payment_installments TEXT DEFAULT 'full',
+  installment_amount NUMERIC DEFAULT 0,
+  visual_goal TEXT,
+  full_name TEXT NOT NULL,
+  phone_whatsapp TEXT,
+  email TEXT,
+  age INTEGER,
+  blood_type TEXT,
+  inbody_file_url TEXT,
+  inbody_filename TEXT,
+  inbody_filesize TEXT,
+  has_health_issues BOOLEAN DEFAULT false,
+  health_issues_details TEXT,
+  agreed_health_and_remote_training BOOLEAN DEFAULT true,
+  agreed_diet_and_supplements BOOLEAN DEFAULT true,
+  agreed_intellectual_property BOOLEAN DEFAULT true,
+  agreed_payment_and_refund_policy BOOLEAN DEFAULT true,
+  digital_signature TEXT,
+  signed_timestamp TEXT,
+  status TEXT DEFAULT 'completed_and_active',
+  completed_timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.declarations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public access to declarations" ON public.declarations;
+CREATE POLICY "Allow public access to declarations"
+  ON public.declarations FOR ALL USING (true) WITH CHECK (true);
+
+-- 3. جدول سجلات الذكاء الاصطناعي (ai_generation_logs)
 CREATE TABLE IF NOT EXISTS public.ai_generation_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
@@ -997,7 +1255,7 @@ DROP POLICY IF EXISTS "Allow public access to ai_generation_logs" ON public.ai_g
 CREATE POLICY "Allow public access to ai_generation_logs"
   ON public.ai_generation_logs FOR ALL USING (true) WITH CHECK (true);
 
--- 3. جدول الملفات الحيوية الإضافي (profiles) مع حقل subscription_plan
+-- 4. جدول الملفات الحيوية الإضافي (profiles)
 CREATE TABLE IF NOT EXISTS public.profiles (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -1012,14 +1270,10 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
-ALTER TABLE public.profiles
-  ADD COLUMN IF NOT EXISTS subscription_plan TEXT NOT NULL DEFAULT 'standard'
-  CHECK (subscription_plan IN ('standard', 'VIP'));
-
--- 4. جدول التمارين (workouts) والملاحظات المباشرة (notes)
+-- 5. جدول التمارين (workouts) والملاحظات المباشرة (notes)
 CREATE TABLE IF NOT EXISTS public.workouts (
   id TEXT PRIMARY KEY,
-  client_id TEXT REFERENCES public.profiles(id),
+  client_id TEXT,
   day_key TEXT NOT NULL,
   workout_data JSONB NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
@@ -1051,3 +1305,4 @@ CREATE POLICY "Allow public read-write for workouts" ON public.workouts FOR ALL 
 DROP POLICY IF EXISTS "Allow public read-write for notes" ON public.notes;
 CREATE POLICY "Allow public read-write for notes" ON public.notes FOR ALL USING (true) WITH CHECK (true);
 `;
+

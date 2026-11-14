@@ -25,7 +25,6 @@ import {
   Check,
   Download,
   Crown,
-  MessageCircle,
   Home,
   Sparkles,
   Sun,
@@ -35,9 +34,19 @@ import {
   Flame,
   FileCheck,
   Lock,
+  CreditCard,
+  FileText,
+  Upload,
+  Paperclip,
+  Trash2,
+  LogIn,
+  Eye,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { assignSubscriberPassword } from '../lib/authStore';
+import { saveDeclarationToSupabase, syncProfileToSupabase } from '../lib/supabase';
+import { INITIAL_CLIENT_PROFILE } from '../data/initialData';
 
 export const StandaloneSubscribePage: React.FC = () => {
   const navigate = useNavigate();
@@ -69,12 +78,36 @@ export const StandaloneSubscribePage: React.FC = () => {
   const [activePlanId, setActivePlanId] = useState<'standard' | 'platinum'>('platinum');
   const [selectedDurationKey, setSelectedDurationKey] = useState<SubscriptionDurationKey>('6_months');
 
+  // Payment Installments: 3 options
+  const [paymentInstallments, setPaymentInstallments] = useState<'full' | '2_installments' | '3_installments'>('full');
+
+  // Visual Goal: 4 exact standardized options
+  const [visualGoal, setVisualGoal] = useState<string>('تضخيم وبناء عضلي (Bulking)');
+
   // Form State - Part 1: Personal & Health Info
   const [fullName, setFullName] = useState('');
   const [phoneWhatsapp, setPhoneWhatsapp] = useState('');
   const [email, setEmail] = useState('');
+  const [age, setAge] = useState<number | ''>(24);
+  const [bloodType, setBloodType] = useState<string>('O+');
+  const [inBodyFileUrl, setInBodyFileUrl] = useState<string>('');
+  const [inBodyFileName, setInBodyFileName] = useState<string>('');
+  const [inBodyFileSize, setInBodyFileSize] = useState<string>('');
+  const inBodyInputRef = useRef<HTMLInputElement | null>(null);
+
   const [healthStatus, setHealthStatus] = useState<'healthy' | 'has_issues'>('healthy');
   const [healthIssuesDetails, setHealthIssuesDetails] = useState('');
+
+  // Installments Logic:
+  // VIP: All 3 options available across all durations
+  // Standard: ONLY available when 12_months (Full Year) is selected
+  const isInstallmentsAllowed = activePlanId === 'platinum' || selectedDurationKey === '12_months';
+
+  useEffect(() => {
+    if (!isInstallmentsAllowed && paymentInstallments !== 'full') {
+      setPaymentInstallments('full');
+    }
+  }, [activePlanId, selectedDurationKey, isInstallmentsAllowed, paymentInstallments]);
 
   // Form State - Part 2: Mandatory Terms (Images 1 & 2)
   const [agreedHealth, setAgreedHealth] = useState(false);
@@ -235,6 +268,20 @@ export const StandaloneSubscribePage: React.FC = () => {
           : 'Valid email address'
       );
     }
+    if (!age || Number(age) < 14 || Number(age) > 90) {
+      errors.push(
+        language === 'ar'
+          ? 'العمر بالسنوات (حقل إجباري بين 14 و 90 سنة)'
+          : 'Valid age (between 14 and 90)'
+      );
+    }
+    if (!bloodType) {
+      errors.push(
+        language === 'ar'
+          ? 'فصيلة الدم (حقل إجباري)'
+          : 'Blood type is required'
+      );
+    }
     if (healthStatus === 'has_issues' && !healthIssuesDetails.trim()) {
       errors.push(
         language === 'ar'
@@ -360,6 +407,13 @@ export const StandaloneSubscribePage: React.FC = () => {
     setErrorMessage(null);
     setMissingFields([]);
 
+    const installmentAmount =
+      paymentInstallments === '3_installments'
+        ? Math.round(currentDurationInfo.price / 3)
+        : paymentInstallments === '2_installments'
+        ? Math.round(currentDurationInfo.price / 2)
+        : currentDurationInfo.price;
+
     // Create standalone agreement record
     const agreementRecord: SubscriptionAgreement = {
       id: contractId,
@@ -370,9 +424,17 @@ export const StandaloneSubscribePage: React.FC = () => {
       billingCycle: selectedDurationKey,
       durationLabelAr: currentDurationInfo.labelAr,
       durationDays: currentDurationInfo.days,
+      paymentInstallments,
+      installmentAmount,
+      visualGoal,
       fullName: cleanFullName,
       phoneWhatsapp: phoneWhatsapp.trim(),
       email: email.trim(),
+      age: Number(age) || undefined,
+      bloodType,
+      inBodyFileUrl: inBodyFileUrl || undefined,
+      inBodyFileName: inBodyFileName || undefined,
+      inBodyFileSize: inBodyFileSize || undefined,
       hasHealthIssues: healthStatus === 'has_issues',
       healthIssuesDetails: healthStatus === 'has_issues' ? healthIssuesDetails.trim() : undefined,
       agreedHealthAndRemoteTraining: agreedHealth,
@@ -387,48 +449,66 @@ export const StandaloneSubscribePage: React.FC = () => {
 
     setCompletedAgreement(agreementRecord);
 
-    // Save locally for offline preservation (No database or Auth calls)
+    // Save directly to database (Supabase public.declarations + local storage)
     try {
-      const existing = JSON.parse(localStorage.getItem('oao_client_declarations') || '[]');
-      existing.push(agreementRecord);
-      localStorage.setItem('oao_client_declarations', JSON.stringify(existing));
-      localStorage.setItem('oao_active_contract', JSON.stringify(agreementRecord));
+      await saveDeclarationToSupabase(agreementRecord);
     } catch (e) {
-      console.warn('Offline storage cache error:', e);
+      console.warn('Declaration storage error:', e);
     }
 
-    // Step 3: Trigger automatic PDF generation and download!
+    // Auto-provision athlete credentials & update athlete profile
+    const cleanEmail = email.trim().toLowerCase();
+    try {
+      const generatedCode = `OAO-${resolvedPlanTier === 'VIP' ? 'VIP' : 'STD'}-${Math.floor(100 + Math.random() * 900)}`;
+      const generatedPass = `OAO-${resolvedPlanTier === 'VIP' ? 'VIP' : 'STD'}-${Math.floor(1000 + Math.random() * 9000)}`;
+      await assignSubscriberPassword({
+        email: cleanEmail,
+        password: generatedPass,
+        clientName: cleanFullName,
+        clientCode: generatedCode,
+        plan: resolvedPlanTier,
+        phone: phoneWhatsapp.trim(),
+        age: Number(age) || undefined,
+        bloodType,
+        visualGoal,
+        inBodyFileName: inBodyFileName || undefined,
+        inBodyFileUrl: inBodyFileUrl || undefined,
+        status: 'active',
+      });
+
+      const existingProfileRaw = localStorage.getItem('oao_client_profile');
+      const baseProfile = existingProfileRaw
+        ? { ...INITIAL_CLIENT_PROFILE, ...JSON.parse(existingProfileRaw) }
+        : INITIAL_CLIENT_PROFILE;
+      const updatedProfile = {
+        ...baseProfile,
+        name: cleanFullName,
+        nameEn: cleanFullName,
+        email: cleanEmail,
+        phone: phoneWhatsapp.trim(),
+        age: Number(age) || undefined,
+        bloodType,
+        visualGoal,
+        inBodyFileName: inBodyFileName || undefined,
+        inBodyFileUrl: inBodyFileUrl || undefined,
+        subscription_plan: resolvedPlanTier,
+        subscriptionStatus: 'active' as const,
+        subscriptionDaysLeft: currentDurationInfo.days,
+      };
+      localStorage.setItem('oao_client_profile', JSON.stringify(updatedProfile));
+      window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
+      await syncProfileToSupabase(updatedProfile);
+    } catch (authErr) {
+      console.warn('Auto-provisioning subscriber credentials notice:', authErr);
+    }
+
+    // Trigger automatic PDF generation and download!
     await generateAndDownloadPDF();
 
-    // Transition to Step 3
+    // Transition to Step 3 (Direct database storage confirmed, no WhatsApp redirect)
     setCurrentStep(3);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  // WhatsApp Message Preparation
-  const coachPhoneNumber = '966500000000'; // Official Coach Omar Adnan WhatsApp
-  const whatsappPreFilledText = encodeURIComponent(
-    language === 'ar'
-      ? `السلام عليكم ورحمة الله وبركاته يا كوتش عمر عدنان 🫡\n` +
-          `أنا المتدرب: ${cleanFullName}\n` +
-          `لقد أتممت تعبئة وتوقيع نموذج الإقرار والتعهد الرسمي لمنصة OAO (Own Aura Outcome).\n\n` +
-          `📋 بيانات اشتراكي:\n` +
-          `• رقم توثيق العقد: ${contractId}\n` +
-          `• الباقة المختارة: ${currentPlanNameAr}\n` +
-          `• مدة الاشتراك: ${currentDurationInfo.labelAr} (${currentDurationInfo.price} ريال)\n` +
-          `• رقم الجوال: ${phoneWhatsapp.trim()}\n` +
-          `• البريد: ${email.trim()}\n` +
-          `• الإفصاح الصحي: ${healthStatus === 'healthy' ? 'سليم ولائق 100%' : healthIssuesDetails.trim()}\n\n` +
-          `📄 مرفق لك ملف وثيقة الإقرار (PDF) الموقعة إلكترونياً لاعتمادها والختم المائي وبدء الخطة التدريبية. شكرًا لك!`
-      : `Hello Coach Omar Adnan 🫡\n` +
-          `I am athlete: ${cleanFullName}\n` +
-          `I have completed and digitally signed the official OAO Declaration & Agreement.\n\n` +
-          `Contract ID: ${contractId}\n` +
-          `Plan: ${currentPlanNameEn} (${currentDurationInfo.labelEn} - ${currentDurationInfo.price} SAR)\n` +
-          `Attached is the downloaded PDF contract for activation. Thank you!`
-  );
-
-  const whatsappDirectUrl = `https://wa.me/${coachPhoneNumber}?text=${whatsappPreFilledText}`;
 
   return (
     <div
@@ -606,7 +686,7 @@ export const StandaloneSubscribePage: React.FC = () => {
               3
             </span>
             <span className="text-xs sm:text-sm">
-              {language === 'ar' ? '3. التحميل والواتساب' : '3. PDF & WhatsApp'}
+              {language === 'ar' ? '3. حفظ العقد و PDF' : '3. Contract & PDF'}
             </span>
           </div>
         </div>
@@ -1095,6 +1175,299 @@ export const StandaloneSubscribePage: React.FC = () => {
                         : 'bg-slate-50 border-slate-300 focus:border-orange-500 text-[#0F172A] placeholder:text-slate-400'
                     }`}
                   />
+                </div>
+              </div>
+
+              {/* SECOND ROW: AGE, BLOOD TYPE & VISUAL GOAL */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                {/* Age Input */}
+                <div>
+                  <label
+                    className={`block text-xs font-black mb-1.5 ${
+                      theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+                    }`}
+                  >
+                    <span>{language === 'ar' ? 'العمر (Age):' : 'Age:'}</span>
+                    <span className="text-red-400 ms-1">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={14}
+                    max={90}
+                    value={age}
+                    onChange={(e) => setAge(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="24"
+                    className={`w-full px-4 py-3 rounded-2xl border text-sm font-mono font-bold outline-none transition-all ${
+                      theme === 'dark'
+                        ? 'bg-black/50 border-white/15 focus:border-orange-500 text-white placeholder:text-slate-600'
+                        : 'bg-slate-50 border-slate-300 focus:border-orange-500 text-[#0F172A] placeholder:text-slate-400'
+                    }`}
+                  />
+                </div>
+
+                {/* Blood Type Dropdown */}
+                <div>
+                  <label
+                    className={`block text-xs font-black mb-1.5 ${
+                      theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+                    }`}
+                  >
+                    <span>{language === 'ar' ? 'فصيلة الدم (Blood Type):' : 'Blood Type:'}</span>
+                    <span className="text-red-400 ms-1">*</span>
+                  </label>
+                  <select
+                    value={bloodType}
+                    onChange={(e) => setBloodType(e.target.value)}
+                    className={`w-full px-4 py-3 rounded-2xl border text-sm font-black outline-none transition-all cursor-pointer ${
+                      theme === 'dark'
+                        ? 'bg-black/50 border-white/15 focus:border-orange-500 text-white'
+                        : 'bg-slate-50 border-slate-300 focus:border-orange-500 text-[#0F172A]'
+                    }`}
+                  >
+                    {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map((bt) => (
+                      <option key={bt} value={bt} className="bg-[#0B132B] text-white">
+                        {bt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Visual Goal Dropdown (Exact 4 options) */}
+                <div>
+                  <label
+                    className={`block text-xs font-black mb-1.5 ${
+                      theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+                    }`}
+                  >
+                    <span>{language === 'ar' ? 'الهدف التصوري (Visual Goal):' : 'Visual Goal:'}</span>
+                    <span className="text-red-400 ms-1">*</span>
+                  </label>
+                  <select
+                    value={visualGoal}
+                    onChange={(e) => setVisualGoal(e.target.value)}
+                    className={`w-full px-4 py-3 rounded-2xl border text-xs sm:text-sm font-black outline-none transition-all cursor-pointer ${
+                      theme === 'dark'
+                        ? 'bg-black/50 border-white/15 focus:border-orange-500 text-orange-400'
+                        : 'bg-slate-50 border-slate-300 focus:border-orange-500 text-orange-600'
+                    }`}
+                  >
+                    <option value="تضخيم وبناء عضلي (Bulking)" className="bg-[#0B132B] text-white">
+                      تضخيم وبناء عضلي (Bulking)
+                    </option>
+                    <option value="تنشيف وحرق دهون (Cut)" className="bg-[#0B132B] text-white">
+                      تنشيف وحرق دهون (Cut)
+                    </option>
+                    <option value="ثبات وإعادة تشكيل (Maintenance)" className="bg-[#0B132B] text-white">
+                      ثبات وإعادة تشكيل (Maintenance)
+                    </option>
+                    <option value="كيتو لو كارب (Keto)" className="bg-[#0B132B] text-white">
+                      كيتو لو كارب (Keto)
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              {/* THIRD ROW: PAYMENT INSTALLMENTS SELECTOR & INBODY ATTACHMENT */}
+              <div className="pt-3 border-t border-white/10 space-y-4">
+                {/* Payment Installments Selector */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label
+                      className={`text-xs font-black flex items-center gap-1.5 ${
+                        theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+                      }`}
+                    >
+                      <CreditCard className="w-3.5 h-3.5 text-orange-400" />
+                      <span>{language === 'ar' ? 'خطة سداد الرسوم والأقساط:' : 'Payment Plan / Installments:'}</span>
+                    </label>
+
+                    {!isInstallmentsAllowed && (
+                      <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                        {language === 'ar'
+                          ? 'الأقساط متاحة لاشتراك السنة في الباقة القياسية، ولجميع المدد في VIP'
+                          : 'Installments available for 1-Year Standard & all VIP'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {/* Option 1: Full Payment */}
+                    <button
+                      type="button"
+                      onClick={() => setPaymentInstallments('full')}
+                      className={`p-3 rounded-2xl border text-start transition-all cursor-pointer ${
+                        paymentInstallments === 'full'
+                          ? 'bg-orange-500/15 border-orange-500 text-white shadow-md'
+                          : theme === 'dark'
+                          ? 'bg-black/40 border-white/10 text-slate-400 hover:border-white/20'
+                          : 'bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-black">
+                          {language === 'ar' ? 'دفعة كاملة (Full)' : 'Full Payment'}
+                        </span>
+                        <span className="w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold">
+                          {paymentInstallments === 'full' ? '✓' : ''}
+                        </span>
+                      </div>
+                      <span className="text-sm font-mono font-black text-amber-400 block">
+                        {currentDurationInfo.price} ريال
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {language === 'ar' ? 'سداد المبلغ كاملاً لمرة واحدة' : 'One-time full payment'}
+                      </span>
+                    </button>
+
+                    {/* Option 2: 2 Installments */}
+                    <button
+                      type="button"
+                      disabled={!isInstallmentsAllowed}
+                      onClick={() => isInstallmentsAllowed && setPaymentInstallments('2_installments')}
+                      className={`p-3 rounded-2xl border text-start transition-all ${
+                        !isInstallmentsAllowed
+                          ? 'opacity-40 cursor-not-allowed border-white/5 bg-black/20'
+                          : paymentInstallments === '2_installments'
+                          ? 'bg-orange-500/15 border-orange-500 text-white shadow-md cursor-pointer'
+                          : theme === 'dark'
+                          ? 'bg-black/40 border-white/10 text-slate-400 hover:border-white/20 cursor-pointer'
+                          : 'bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400 cursor-pointer'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-black">
+                          {language === 'ar' ? 'دفعتين (2 Installments)' : '2 Installments'}
+                        </span>
+                        <span className="w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold">
+                          {paymentInstallments === '2_installments' ? '✓' : ''}
+                        </span>
+                      </div>
+                      <span className="text-sm font-mono font-black text-amber-400 block">
+                        {Math.round(currentDurationInfo.price / 2)} ريال / دفعة
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {language === 'ar' ? 'مقسمة على دفعتين متساويتين' : 'Split into 2 equal payments'}
+                      </span>
+                    </button>
+
+                    {/* Option 3: 3 Installments */}
+                    <button
+                      type="button"
+                      disabled={!isInstallmentsAllowed}
+                      onClick={() => isInstallmentsAllowed && setPaymentInstallments('3_installments')}
+                      className={`p-3 rounded-2xl border text-start transition-all ${
+                        !isInstallmentsAllowed
+                          ? 'opacity-40 cursor-not-allowed border-white/5 bg-black/20'
+                          : paymentInstallments === '3_installments'
+                          ? 'bg-orange-500/15 border-orange-500 text-white shadow-md cursor-pointer'
+                          : theme === 'dark'
+                          ? 'bg-black/40 border-white/10 text-slate-400 hover:border-white/20 cursor-pointer'
+                          : 'bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400 cursor-pointer'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-black">
+                          {language === 'ar' ? 'ثلاث دفعات (3 Installments)' : '3 Installments'}
+                        </span>
+                        <span className="w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold">
+                          {paymentInstallments === '3_installments' ? '✓' : ''}
+                        </span>
+                      </div>
+                      <span className="text-sm font-mono font-black text-amber-400 block">
+                        {Math.round(currentDurationInfo.price / 3)} ريال / دفعة
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {language === 'ar' ? 'مقسمة على 3 دفعات ميسرة' : 'Split into 3 equal payments'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* InBody File Upload (.pdf, image/*) */}
+                <div>
+                  <label
+                    className={`block text-xs font-black mb-1.5 ${
+                      theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Paperclip className="w-3.5 h-3.5 text-orange-400" />
+                      <span>
+                        {language === 'ar'
+                          ? 'إرفاق فحص InBody أو تحليل مكونات الجسم (اختياري / موصى به):'
+                          : 'Attach InBody Scan or Body Composition (.pdf or image):'}
+                      </span>
+                    </span>
+                  </label>
+
+                  <input
+                    ref={inBodyInputRef}
+                    type="file"
+                    accept=".pdf,image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 8 * 1024 * 1024) {
+                        setErrorMessage(
+                          language === 'ar'
+                            ? 'حجم الملف يجب ألا يتجاوز 8 ميغابايت'
+                            : 'File size must be under 8MB'
+                        );
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        if (typeof reader.result === 'string') {
+                          setInBodyFileUrl(reader.result);
+                          setInBodyFileName(file.name);
+                          setInBodyFileSize((file.size / 1024).toFixed(1) + ' KB');
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                    className="hidden"
+                    id="inbody-upload-file"
+                  />
+
+                  {inBodyFileName ? (
+                    <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <FileCheck className="w-4 h-4 text-emerald-400" />
+                        <span className="font-bold text-emerald-300">{inBodyFileName}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">({inBodyFileSize})</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInBodyFileUrl('');
+                          setInBodyFileName('');
+                          setInBodyFileSize('');
+                          if (inBodyInputRef.current) inBodyInputRef.current.value = '';
+                        }}
+                        className="text-red-400 hover:text-red-300 p-1 rounded-lg bg-white/5 cursor-pointer"
+                        title="إلغاء المرفق"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="inbody-upload-file"
+                      className={`p-3.5 rounded-2xl border-2 border-dashed flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                        theme === 'dark'
+                          ? 'border-white/15 bg-black/30 hover:border-orange-500/50 text-slate-300'
+                          : 'border-slate-300 bg-slate-50 hover:border-orange-500 text-slate-700'
+                      }`}
+                    >
+                      <Upload className="w-4 h-4 text-orange-400" />
+                      <span className="text-xs font-bold">
+                        {language === 'ar'
+                          ? 'اضغط هنا لرفع ملف فحص InBody بصيغة PDF أو صورة'
+                          : 'Click to upload InBody scan (PDF or Image)'}
+                      </span>
+                    </label>
+                  )}
                 </div>
               </div>
 
@@ -1721,7 +2094,7 @@ export const StandaloneSubscribePage: React.FC = () => {
         )}
 
         {/* =========================================================================
-            STEP 3: COMPLETED - WHATSAPP CONFIRMATION & DOWNLOAD
+            STEP 3: COMPLETED - DIRECT DATABASE REGISTRATION & DOWNLOAD
             ========================================================================= */}
         {currentStep === 3 && completedAgreement && (
           <div className="text-center space-y-6 py-6 animate-in fade-in duration-300">
@@ -1731,7 +2104,7 @@ export const StandaloneSubscribePage: React.FC = () => {
 
             <div>
               <span className="text-xs font-black tracking-widest text-emerald-400 uppercase block mb-1">
-                {language === 'ar' ? 'تم اعتماد وتنزيل وثيقة الإقرار بنجاح' : 'Declaration Signed & Downloaded'}
+                {language === 'ar' ? 'تم توثيق اشتراكك وحفظ العقد بنجاح في قاعدة البيانات ✅' : 'Subscription & Contract Saved Directly to Database ✅'}
               </span>
               <h2
                 className={`text-2xl sm:text-4xl font-black ${
@@ -1746,8 +2119,8 @@ export const StandaloneSubscribePage: React.FC = () => {
                 }`}
               >
                 {language === 'ar'
-                  ? 'تم حفظ وتنزيل وثيقة الإقرار بصيغة PDF على جهازك بنجاح. الخطوة التالية والأخيرة هي الضغط على الزر الأخضر بالأسفل لإرسال الإقرار عبر الواتساب للمدرب لاعتماده والختم المائي وبدء جدولك.'
-                  : 'Your declaration document has been saved and downloaded as a PDF. Now click the green WhatsApp button below to send your confirmation to Coach Omar.'}
+                  ? 'تم حفظ وتوثيق إقرارك وعقدك الرياضي مباشرة في قاعدة بيانات المنصة الرسمية، وتنزيل نسخة PDF المعتمدة على جهازك. حسابك جاهز الآن للدخول الفوري.'
+                  : 'Your subscription agreement has been recorded directly in the official platform database and downloaded as PDF. Your account is active now.'}
               </p>
             </div>
 
@@ -1775,28 +2148,52 @@ export const StandaloneSubscribePage: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">
-                    {language === 'ar' ? 'الرسوم:' : 'Fees:'}
+                    {language === 'ar' ? 'خطة الرسوم والسداد:' : 'Payment Plan:'}
                   </span>
-                  <strong className="text-amber-400 font-mono">{completedAgreement.planPrice} ريال</strong>
+                  <strong className="text-amber-400 font-mono">
+                    {completedAgreement.paymentInstallments === '3_installments'
+                      ? `ثلاث دفعات (${completedAgreement.installmentAmount} ريال/دفعة)`
+                      : completedAgreement.paymentInstallments === '2_installments'
+                      ? `دفعتين (${completedAgreement.installmentAmount} ريال/دفعة)`
+                      : `دفعة كاملة (${completedAgreement.planPrice} ريال)`}
+                  </strong>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">
-                    {language === 'ar' ? 'التوقيع الرقمي:' : 'Digital Signature:'}
+                    {language === 'ar' ? 'الهدف التصوري:' : 'Visual Goal:'}
+                  </span>
+                  <strong className="text-slate-200">
+                    {completedAgreement.visualGoal || visualGoal}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">
+                    {language === 'ar' ? 'العمر وفصيلة الدم:' : 'Age & Blood Type:'}
+                  </span>
+                  <strong className="text-slate-200">
+                    {completedAgreement.age ? `${completedAgreement.age} سنة` : '—'} • {completedAgreement.bloodType || '—'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">
+                    {language === 'ar' ? 'فحص InBody المرفق:' : 'InBody Attachment:'}
+                  </span>
+                  <strong className={completedAgreement.inBodyFileName ? 'text-emerald-400' : 'text-slate-400'}>
+                    {completedAgreement.inBodyFileName ? `✓ ${completedAgreement.inBodyFileName}` : 'غير مرفق'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">
+                    {language === 'ar' ? 'التوقيع الرقمي المعتمد:' : 'Signature:'}
                   </span>
                   <strong className="font-mono text-emerald-400">{completedAgreement.digitalSignature}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">
-                    {language === 'ar' ? 'تاريخ الاعتماد:' : 'Date:'}
-                  </span>
-                  <strong className="text-slate-300">{completedAgreement.signedTimestamp}</strong>
                 </div>
               </div>
 
               <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs">
                 <span className="text-emerald-400 font-bold flex items-center gap-1.5">
                   <Check className="w-4 h-4 stroke-[3]" />
-                  <span>{language === 'ar' ? 'تم تنزيل ملف PDF في جهازك' : 'PDF Saved to your device'}</span>
+                  <span>{language === 'ar' ? 'تم تنزيل ملف PDF وحفظ العقد في قاعدة البيانات' : 'PDF Saved & Synced to Database'}</span>
                 </span>
                 <button
                   type="button"
@@ -1809,29 +2206,57 @@ export const StandaloneSubscribePage: React.FC = () => {
               </div>
             </div>
 
-            {/* Prominent WhatsApp Confirmation Button */}
+            {/* Direct Portal Access Action Buttons (Direct Database Storage - No WhatsApp Redirect) */}
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <a
-                href={whatsappDirectUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto px-10 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-green-500 to-emerald-600 hover:from-emerald-500 hover:to-green-400 text-white font-black text-sm sm:text-base tracking-wide flex items-center justify-center gap-3 shadow-[0_0_40px_rgba(16,185,129,0.7)] border-2 border-emerald-300/40 transition-transform hover:scale-105 cursor-pointer"
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.setItem('oao_session', 'client');
+                  localStorage.setItem(
+                    'oao_current_user',
+                    JSON.stringify({
+                      email: email.trim().toLowerCase(),
+                      name: cleanFullName,
+                      plan: resolvedPlanTier,
+                      role: 'client',
+                    })
+                  );
+                  if (resolvedPlanTier === 'VIP') {
+                    navigate('/vip');
+                  } else {
+                    navigate('/standard');
+                  }
+                }}
+                className="w-full sm:w-auto px-10 py-4 rounded-2xl bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-sm sm:text-base tracking-wide flex items-center justify-center gap-3 shadow-[0_0_40px_rgba(234,88,12,0.7)] border-2 border-orange-300/40 transition-transform hover:scale-105 cursor-pointer"
               >
-                <MessageCircle className="w-6 h-6 fill-white text-emerald-600" />
-                <span>{language === 'ar' ? 'إرسال الإقرار عبر الواتساب لتأكيد الاشتراك' : 'Send Declaration via WhatsApp'}</span>
+                <LogIn className="w-5 h-5 text-white" />
+                <span>{language === 'ar' ? 'الدخول إلى حسابك الرياضي مباشرة 🚀' : 'Enter Athlete Portal Now 🚀'}</span>
                 <ArrowRight className="w-5 h-5 rtl:rotate-180" />
-              </a>
+              </button>
+
+              <button
+                type="button"
+                onClick={generateAndDownloadPDF}
+                className={`w-full sm:w-auto px-6 py-4 rounded-2xl border text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-white/10 hover:bg-white/15 border-white/10 text-slate-300'
+                    : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
+                }`}
+              >
+                <Download className="w-4 h-4 text-orange-400" />
+                <span>{language === 'ar' ? 'تحميل وثيقة PDF' : 'Download Contract PDF'}</span>
+              </button>
 
               <button
                 type="button"
                 onClick={() => navigate('/')}
                 className={`w-full sm:w-auto px-6 py-4 rounded-2xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                   theme === 'dark'
-                    ? 'bg-white/10 hover:bg-white/15 border-white/10 text-slate-300'
-                    : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
+                    ? 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-400'
+                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
                 }`}
               >
-                {language === 'ar' ? 'العودة إلى الصفحة الرئيسية' : 'Return to Home'}
+                {language === 'ar' ? 'الرئيسية' : 'Home'}
               </button>
             </div>
           </div>
@@ -1910,9 +2335,21 @@ export const StandaloneSubscribePage: React.FC = () => {
               <div><strong>اسم المتدرب: </strong>{cleanFullName}</div>
               <div><strong>رقم الجوال / الواتساب: </strong>{phoneWhatsapp}</div>
               <div><strong>البريد الإلكتروني: </strong>{email}</div>
+              <div><strong>العمر وفصيلة الدم: </strong>{age || '—'} سنة • {bloodType || '—'}</div>
               <div><strong>الباقة التدريبية: </strong>{currentPlanNameAr}</div>
-              <div><strong>المدة والرسوم: </strong>{currentDurationInfo.labelAr} ({currentDurationInfo.price} ريال)</div>
               <div>
+                <strong>المدة والرسوم: </strong>
+                {currentDurationInfo.labelAr} ({currentDurationInfo.price} ريال) - {paymentInstallments === 'full' ? 'دفعة كاملة' : paymentInstallments === '2_installments' ? 'دفعتين' : '3 دفعات'}
+              </div>
+              <div>
+                <strong>الهدف التصوري: </strong>
+                {visualGoal}
+              </div>
+              <div>
+                <strong>فحص InBody: </strong>
+                {inBodyFileName ? `مرفق (${inBodyFileName})` : 'غير مرفق'}
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
                 <strong>الإفصاح الصحي: </strong>
                 {healthStatus === 'healthy' ? 'سليم ولائق 100%' : healthIssuesDetails}
               </div>

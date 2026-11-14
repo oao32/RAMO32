@@ -15,6 +15,12 @@ import {
   MealPlanTemplate,
 } from '../../lib/templateStore';
 import {
+  getAllSubscribersWithCredentials,
+  fetchSubscribersFromSupabase,
+  toggleSubscriberNutritionLock,
+  UserCredentialRecord,
+} from '../../lib/authStore';
+import {
   Utensils,
   Plus,
   Trash2,
@@ -29,6 +35,9 @@ import {
   X,
   Scale,
   Activity,
+  Lock,
+  Unlock,
+  Users,
 } from 'lucide-react';
 
 interface AdminDietEditorProps {
@@ -43,6 +52,61 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
   const [activeCategoryKey, setActiveCategoryKey] = useState<
     'breakfast' | 'lunch' | 'dinner' | 'snacks'
   >('breakfast');
+
+  // Subscribers list for per-subscriber nutrition lock
+  const [subscribers, setSubscribers] = useState<UserCredentialRecord[]>(() =>
+    getAllSubscribersWithCredentials()
+  );
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  // Interactive Global Nutrition Plan Lock / Hide Toggle
+  const [isNutritionLocked, setIsNutritionLocked] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('oao_nutrition_locked') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    fetchSubscribersFromSupabase().then(setSubscribers);
+    const syncSubs = () => setSubscribers(getAllSubscribersWithCredentials());
+    window.addEventListener('oao_credentials_updated', syncSubs);
+    window.addEventListener('oao_nutrition_lock_updated', syncSubs);
+    return () => {
+      window.removeEventListener('oao_credentials_updated', syncSubs);
+      window.removeEventListener('oao_nutrition_lock_updated', syncSubs);
+    };
+  }, []);
+
+  const handleToggleNutritionLock = () => {
+    const nextVal = !isNutritionLocked;
+    setIsNutritionLocked(nextVal);
+    try {
+      localStorage.setItem('oao_nutrition_locked', String(nextVal));
+      window.dispatchEvent(new CustomEvent('oao_nutrition_lock_updated', { detail: { global: nextVal } }));
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {
+      console.error(e);
+    }
+    setSaveMessage(
+      nextVal
+        ? '🔒 تم تعليق وإخفاء الخطة الغذائية عن جميع المتدربين'
+        : '🔓 تم إتاحة وعرض الخطة الغذائية لجميع المتدربين'
+    );
+    setTimeout(() => setSaveMessage(null), 3000);
+  };
+
+  const handleTogglePerSubscriberLock = (user: UserCredentialRecord) => {
+    const nextLocked = toggleSubscriberNutritionLock(user.email, !user.nutritionPlanLocked);
+    setSubscribers(getAllSubscribersWithCredentials());
+    setSaveMessage(
+      nextLocked
+        ? `🔒 تم إخفاء وقفل النظام الغذائي للمشترك (${user.clientName})`
+        : `🔓 تم إتاحة النظام الغذائي للمشترك (${user.clientName})`
+    );
+    setTimeout(() => setSaveMessage(null), 3000);
+  };
 
   // Meal Edit/Add Modal State
   const [isMealModalOpen, setIsMealModalOpen] = useState(false);
@@ -195,14 +259,18 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
     setTimeout(() => setSaveMessage(null), 2500);
   };
 
-  // Reset to default
+  // Reset to default (with inline UI confirmation)
   const handleResetToDefaults = () => {
-    if (confirm('هل أنت متأكد من استعادة الوجبات الافتراضية للباقة؟')) {
-      const defaults = resetDietCategories(tier);
-      setCategories(defaults);
-      setSaveMessage('تم استرجاع قائمة الوجبات الافتراضية بنجاح.');
-      setTimeout(() => setSaveMessage(null), 2500);
+    if (!confirmReset) {
+      setConfirmReset(true);
+      setTimeout(() => setConfirmReset(false), 4000);
+      return;
     }
+    const defaults = resetDietCategories(tier);
+    setCategories(defaults);
+    setConfirmReset(false);
+    setSaveMessage('تم استرجاع قائمة الوجبات الافتراضية بنجاح.');
+    setTimeout(() => setSaveMessage(null), 2500);
   };
 
   // Save current plan as reusable template
@@ -260,6 +328,30 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Interactive Nutrition Plan Lock / Hide Switch */}
+          <button
+            type="button"
+            onClick={handleToggleNutritionLock}
+            className={`px-4 py-2 rounded-2xl border text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+              isNutritionLocked
+                ? 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/50 text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
+                : 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-400'
+            }`}
+            title="التحكم في إتاحة أو حجب جدول الوجبات في لوحة المتدربين"
+          >
+            {isNutritionLocked ? (
+              <>
+                <Lock className="w-4 h-4 text-amber-400" />
+                <span>النظام الغذائي: مقفل ومخفي</span>
+              </>
+            ) : (
+              <>
+                <Unlock className="w-4 h-4 text-emerald-400" />
+                <span>النظام الغذائي: متاح ومعروض</span>
+              </>
+            )}
+          </button>
+
           {/* Tier switcher */}
           <div className="flex items-center gap-1.5 p-1 bg-black/50 border border-white/10 rounded-2xl">
             <button
@@ -284,15 +376,94 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
             </button>
           </div>
 
-          {/* Reset to defaults */}
+          {/* Reset to defaults (inline 2-step confirmation) */}
           <button
             onClick={handleResetToDefaults}
-            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer"
+            className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              confirmReset
+                ? 'bg-rose-500/20 border-rose-500/60 text-rose-300 animate-pulse'
+                : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
+            }`}
             title="استرجاع الوجبات الافتراضية"
           >
             <RotateCcw className="w-4 h-4" />
+            {confirmReset && <span>تأكيد الاستعادة؟</span>}
           </button>
         </div>
+      </div>
+
+      {/* Per-Subscriber Nutrition Access Lock Controls */}
+      <div className="bg-[#0B132B]/80 p-5 rounded-3xl border border-white/10 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-orange-400" />
+            <h3 className="text-sm font-black text-white">
+              إخفاء / قفل النظام الغذائي عن المشترك (تحكم فردي)
+            </h3>
+          </div>
+          <span className="text-[11px] text-slate-400">
+            قفل أو إتاحة عرض جدول الوجبات في بوابة كل مشترك بشكل مستقل
+          </span>
+        </div>
+
+        {subscribers.length === 0 ? (
+          <p className="text-xs text-slate-400 py-2">
+            لا يوجد مشتركون مسجلون حالياً. يمكنك استخدام زر القفل العام أعلاه أو إضافة مشترك من قسم إدارة المشتركين.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {subscribers.map((sub) => (
+              <div
+                key={sub.email}
+                className={`p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                  sub.nutritionPlanLocked
+                    ? 'bg-amber-500/10 border-amber-500/40'
+                    : 'bg-black/40 border-white/10'
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-black text-white truncate">{sub.clientName}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                        sub.plan === 'VIP'
+                          ? 'bg-amber-500/20 text-amber-300'
+                          : 'bg-slate-700 text-slate-300'
+                      }`}
+                    >
+                      {sub.plan === 'VIP' ? 'VIP' : 'Std'}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono truncate block">
+                    {sub.email}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleTogglePerSubscriberLock(sub)}
+                  className={`px-3 py-1.5 rounded-xl border text-[11px] font-black flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
+                    sub.nutritionPlanLocked
+                      ? 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/50 text-amber-300'
+                      : 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-300'
+                  }`}
+                >
+                  {sub.nutritionPlanLocked ? (
+                    <>
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>مقفل</span>
+                    </>
+                  ) : (
+                    <>
+                      <Unlock className="w-3.5 h-3.5" />
+                      <span>متاح</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Save Notification */}

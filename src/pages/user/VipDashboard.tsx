@@ -14,7 +14,6 @@ import {
 import {
   INITIAL_CLIENT_PROFILE,
   INITIAL_WORKOUT_DAYS,
-  INITIAL_CLIENT_NOTES,
   INITIAL_STREAK_DATA,
   INITIAL_BADGES,
   INITIAL_ATHLETE_RANK,
@@ -33,6 +32,7 @@ import { RestTimer } from '../../components/RestTimer';
 import { VideoModal } from '../../components/VideoModal';
 import { ShareableProgressCardModal } from '../../components/ShareableProgressCardModal';
 import { calculateSubscriptionDetails } from '../../lib/subscriptionUtils';
+import { syncNoteToSupabase, syncProfileToSupabase } from '../../lib/supabase';
 import {
   Home,
   LogOut,
@@ -76,22 +76,36 @@ export const VipDashboard: React.FC = () => {
     };
   });
 
-  // Real-time synchronization for coach replies and inquiries
+  // Real-time synchronization for coach replies, profile, workouts, streak & rank
   useEffect(() => {
     const handleSync = () => {
-      const saved = localStorage.getItem('oao_client_notes');
-      if (saved) {
-        try {
-          setNotes(JSON.parse(saved));
-        } catch {
-          // ignore
+      try {
+        const savedNotes = localStorage.getItem('oao_client_notes');
+        if (savedNotes) setNotes(JSON.parse(savedNotes));
+        const savedProfile = localStorage.getItem('oao_client_profile');
+        if (savedProfile) {
+          setProfile((prev) => ({ ...prev, ...JSON.parse(savedProfile), subscription_plan: 'VIP' }));
         }
+        const savedWorkouts = localStorage.getItem('oao_workout_days');
+        if (savedWorkouts) setWorkoutDays(JSON.parse(savedWorkouts));
+        const savedStreak = localStorage.getItem('oao_streak_data');
+        if (savedStreak) setStreakData(JSON.parse(savedStreak));
+        const savedRank = localStorage.getItem('oao_athlete_rank');
+        if (savedRank) setAthleteRank(JSON.parse(savedRank));
+      } catch {
+        // ignore
       }
     };
     window.addEventListener('oao_notes_updated', handleSync);
+    window.addEventListener('oao_profile_updated', handleSync);
+    window.addEventListener('oao_streak_updated', handleSync);
+    window.addEventListener('oao_rank_updated', handleSync);
     window.addEventListener('storage', handleSync);
     return () => {
       window.removeEventListener('oao_notes_updated', handleSync);
+      window.removeEventListener('oao_profile_updated', handleSync);
+      window.removeEventListener('oao_streak_updated', handleSync);
+      window.removeEventListener('oao_rank_updated', handleSync);
       window.removeEventListener('storage', handleSync);
     };
   }, []);
@@ -109,7 +123,7 @@ export const VipDashboard: React.FC = () => {
     return INITIAL_WORKOUT_DAYS;
   });
 
-  // Notes state
+  // Notes state (Starts cleanly empty without seeded mock notes)
   const [notes, setNotes] = useState<ClientNote[]>(() => {
     const saved = localStorage.getItem('oao_client_notes');
     if (saved) {
@@ -119,7 +133,7 @@ export const VipDashboard: React.FC = () => {
         // fallback
       }
     }
-    return INITIAL_CLIENT_NOTES;
+    return [];
   });
 
   // Streak & Gamification state
@@ -171,6 +185,7 @@ export const VipDashboard: React.FC = () => {
   const handleUpdateProfile = (updated: ClientProfile) => {
     setProfile(updated);
     localStorage.setItem('oao_client_profile', JSON.stringify(updated));
+    syncProfileToSupabase(updated).catch(() => {});
   };
 
   const handleUpdateWorkouts = (updatedDays: WorkoutDay[]) => {
@@ -188,9 +203,12 @@ export const VipDashboard: React.FC = () => {
       }),
       isResolved: false,
     };
-    const updated = [noteRecord, ...notes];
+    const latestRaw = localStorage.getItem('oao_client_notes');
+    const existingList: ClientNote[] = latestRaw ? JSON.parse(latestRaw) : notes;
+    const updated = [noteRecord, ...existingList];
     setNotes(updated);
     localStorage.setItem('oao_client_notes', JSON.stringify(updated));
+    syncNoteToSupabase(noteRecord).catch(() => {});
     window.dispatchEvent(new CustomEvent('oao_notes_updated'));
     window.dispatchEvent(new Event('storage'));
   };
@@ -435,6 +453,8 @@ export const VipDashboard: React.FC = () => {
           language={language}
           theme={theme}
           isVIP={true}
+          isLocked={profile.nutritionPlanLocked}
+          subscriberEmail={profile.email}
         />
 
         {/* DIRECT VIP NOTES & INQUIRIES WITH COACH */}

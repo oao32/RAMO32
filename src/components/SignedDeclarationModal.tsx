@@ -5,15 +5,14 @@ import {
   ShieldCheck,
   FileText,
   User,
-  Phone,
-  Mail,
-  Activity,
-  CheckCircle2,
   Printer,
   X,
   Lock,
   Calendar,
   AlertTriangle,
+  CheckCircle2,
+  Download,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface SignedDeclarationModalProps {
@@ -117,7 +116,46 @@ export const SignedDeclarationModal: React.FC<SignedDeclarationModalProps> = ({
                 <span className="text-slate-400 block text-[11px] mb-1">{language === 'ar' ? 'البريد الإلكتروني:' : 'Email:'}</span>
                 <span className="text-white font-mono font-bold">{agreement.email}</span>
               </div>
+              <div>
+                <span className="text-slate-400 block text-[11px] mb-1">{language === 'ar' ? 'العمر وفصيلة الدم:' : 'Age & Blood Type:'}</span>
+                <span className="text-slate-200 font-mono font-bold">
+                  {agreement.age ? `${agreement.age} ${language === 'ar' ? 'سنة' : 'yrs'}` : '—'} • {agreement.bloodType || '—'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px] mb-1">{language === 'ar' ? 'الهدف التصوري (Visual Goal):' : 'Visual Goal:'}</span>
+                <span className="text-orange-400 font-bold">{agreement.visualGoal || (language === 'ar' ? 'غير محدد' : 'Not set')}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px] mb-1">{language === 'ar' ? 'الباقة وخطة الدفع:' : 'Plan & Payment:'}</span>
+                <span className="text-amber-300 font-bold block">{agreement.planNameAr}</span>
+                <span className="text-[11px] text-amber-400/90 font-mono">
+                  {agreement.paymentInstallments === '3_installments'
+                    ? `${language === 'ar' ? 'ثلاث دفعات' : '3 Installments'} (${agreement.installmentAmount || Math.round(agreement.planPrice / 3)} ${language === 'ar' ? 'ر.س' : 'SAR'})`
+                    : agreement.paymentInstallments === '2_installments'
+                    ? `${language === 'ar' ? 'دفعتين' : '2 Installments'} (${agreement.installmentAmount || Math.round(agreement.planPrice / 2)} ${language === 'ar' ? 'ر.س' : 'SAR'})`
+                    : `${language === 'ar' ? 'دفعة كاملة' : 'Full Payment'} (${agreement.planPrice} ${language === 'ar' ? 'ر.س' : 'SAR'})`}
+                </span>
+              </div>
             </div>
+
+            {agreement.inBodyFileUrl && (
+              <div className="pt-2 border-t border-white/5 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-emerald-300 font-bold">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  <span>{language === 'ar' ? 'فحص InBody المرفق:' : 'Attached InBody:'}</span>
+                  <span className="font-mono text-slate-200">{agreement.inBodyFileName || 'inbody_scan'}</span>
+                </div>
+                <a
+                  href={agreement.inBodyFileUrl}
+                  download={agreement.inBodyFileName || 'inbody_scan'}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{language === 'ar' ? 'عرض / تنزيل InBody' : 'Download InBody'}</span>
+                </a>
+              </div>
+            )}
 
             {/* Health Disclosure */}
             <div className="pt-2 border-t border-white/5">

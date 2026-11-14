@@ -26,7 +26,6 @@ import {
 import {
   INITIAL_CLIENT_PROFILE,
   INITIAL_WORKOUT_DAYS,
-  INITIAL_CLIENT_NOTES,
   INITIAL_STREAK_DATA,
   INITIAL_BADGES,
   INITIAL_ATHLETE_RANK,
@@ -42,7 +41,6 @@ import { AthleteBiometricsBar } from './components/AthleteBiometricsBar';
 import { AthleteDietPlanSection } from './components/nutrition/AthleteDietPlanSection';
 import { RestTimer } from './components/RestTimer';
 import { VideoModal } from './components/VideoModal';
-import { AdminDashboard } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
 import { CoachPasskeyModal } from './components/CoachPasskeyModal';
 import { BackgroundEffects } from './components/BackgroundEffects';
@@ -187,7 +185,7 @@ function MainPortal() {
     return INITIAL_WORKOUT_DAYS;
   });
 
-  // Client Notes State with LocalStorage Persistence
+  // Client Notes State with LocalStorage Persistence (Starts cleanly empty without mock data)
   const [notes, setNotes] = useState<ClientNote[]>(() => {
     const saved = localStorage.getItem('oao_client_notes');
     if (saved) {
@@ -197,26 +195,47 @@ function MainPortal() {
         // fallback
       }
     }
-    return INITIAL_CLIENT_NOTES;
+    return [];
   });
 
-  // Real-time synchronization for coach replies and athlete inquiries
+  // Real-time synchronization for coach replies, athlete inquiries, profile updates, and login triggers
   useEffect(() => {
     const handleSync = () => {
-      const saved = localStorage.getItem('oao_client_notes');
-      if (saved) {
-        try {
-          setNotes(JSON.parse(saved));
-        } catch {
-          // ignore
+      try {
+        const savedNotes = localStorage.getItem('oao_client_notes');
+        if (savedNotes) {
+          setNotes(JSON.parse(savedNotes));
         }
+        const savedProfile = localStorage.getItem('oao_client_profile');
+        if (savedProfile) {
+          const parsed = JSON.parse(savedProfile) as ClientProfile;
+          setProfile((prev) => ({
+            ...prev,
+            ...parsed,
+            subscription_plan: normalizeSubscriptionPlan(parsed.subscription_plan || prev.subscription_plan),
+          }));
+        }
+        const savedWorkouts = localStorage.getItem('oao_workout_days');
+        if (savedWorkouts) {
+          setWorkoutDays(JSON.parse(savedWorkouts));
+        }
+      } catch {
+        // ignore
       }
     };
+    const handleOpenLogin = () => {
+      setAuthModalInitialRole('client');
+      setIsAuthModalOpen(true);
+    };
     window.addEventListener('oao_notes_updated', handleSync);
+    window.addEventListener('oao_profile_updated', handleSync);
     window.addEventListener('storage', handleSync);
+    window.addEventListener('oao-open-login-modal', handleOpenLogin);
     return () => {
       window.removeEventListener('oao_notes_updated', handleSync);
+      window.removeEventListener('oao_profile_updated', handleSync);
       window.removeEventListener('storage', handleSync);
+      window.removeEventListener('oao-open-login-modal', handleOpenLogin);
     };
   }, []);
 
@@ -579,6 +598,7 @@ function MainPortal() {
     if (role === 'admin') {
       setUserSession('admin');
       localStorage.setItem('oao_session', 'admin');
+      navigate('/admin');
     } else {
       setUserSession('client');
       localStorage.setItem('oao_session', 'client');
@@ -599,6 +619,7 @@ function MainPortal() {
   const handleCoachPasskeySuccess = () => {
     setUserSession('admin');
     localStorage.setItem('oao_session', 'admin');
+    navigate('/admin');
   };
 
   // Open video modal
@@ -820,16 +841,18 @@ function MainPortal() {
 
           {userSession === 'admin' && (
             <div className="flex items-center gap-2">
-              <div
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-bold ${
+              <button
+                type="button"
+                onClick={() => navigate('/admin')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-bold cursor-pointer transition-all hover:scale-105 ${
                   theme === 'dark'
-                    ? 'bg-blue-600/15 border-blue-500/40 text-blue-300'
+                    ? 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/40 text-blue-300'
                     : 'bg-gradient-to-r from-[#0B132B] to-[#1C2541] text-white border-blue-500/40'
                 }`}
               >
                 <ShieldCheck className="w-4 h-4 text-orange-400" />
-                <span>{language === 'ar' ? 'لوحة تحكم الكوتش (عمر عدنان)' : 'Coach Admin Portal'}</span>
-              </div>
+                <span>{language === 'ar' ? 'فتح لوحة تحكم الكوتش الموحدة' : 'Open Coach Admin Panel'}</span>
+              </button>
             </div>
           )}
 
@@ -1252,6 +1275,8 @@ function MainPortal() {
               language={language}
               theme={theme}
               isVIP={isClientVIP}
+              isLocked={profile.nutritionPlanLocked}
+              subscriberEmail={profile.email}
             />
 
             {/* DIRECT NOTES & INQUIRIES WITH COACH */}
@@ -1303,24 +1328,41 @@ function MainPortal() {
       )}
 
       {/* =========================================================================
-          VIEW 3: COACH ADMIN PORTAL (Entered via passkey 1234)
+          VIEW 3: COACH ADMIN PORTAL (Unified single panel at /admin)
           ========================================================================= */}
       {!isDirectPlansLanding && userSession === 'admin' && (
-        <main className="max-w-7xl mx-auto px-3 sm:px-6 py-6 pb-20 relative z-20">
-          <AdminDashboard
-            profile={profile}
-            onUpdateProfile={handleUpdateProfile}
-            workoutDays={workoutDays}
-            onUpdateWorkouts={handleUpdateWorkouts}
-            notes={notes}
-            onReplyNote={handleReplyNote}
-            onSwitchToClient={() => setUserSession('guest')}
-            language={language}
-            theme={theme}
-            onOpenShareCard={() => setIsShareCardModalOpen(true)}
-            onOpenQRModal={() => setIsQRModalOpen(true)}
-            streakData={streakData}
-          />
+        <main className="max-w-7xl mx-auto px-3 sm:px-6 py-12 pb-20 relative z-20">
+          <div className="max-w-xl mx-auto p-8 rounded-3xl bg-[#0B132B]/90 border-2 border-orange-500/40 text-center space-y-5 shadow-2xl">
+            <div className="w-14 h-14 rounded-2xl bg-orange-500/20 border border-orange-500/40 text-orange-400 flex items-center justify-center mx-auto">
+              <ShieldCheck className="w-7 h-7" />
+            </div>
+            <h2 className="text-xl font-black text-white">
+              {language === 'ar' ? 'أهلاً بك كوتش عمر عدنان' : 'Welcome Coach Omar Adnan'}
+            </h2>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {language === 'ar'
+                ? 'تم توحيد جميع صلاحيات الإدارة والتحليلات وإدارة المشتركين والتمارين والأنظمة الغذائية في لوحة تحكم واحدة.'
+                : 'All admin tools, analytics, subscribers, workouts, and nutrition editors are unified in the Coach Admin Panel.'}
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => navigate('/admin')}
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs sm:text-sm flex items-center gap-2 shadow-lg cursor-pointer transition-transform hover:scale-105"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>{language === 'ar' ? 'الدخول إلى لوحة التحكم الموحدة (/admin)' : 'Enter Coach Admin Panel'}</span>
+                <ArrowRight className="w-4 h-4 rtl:rotate-180" />
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/15 text-slate-300 font-bold text-xs cursor-pointer"
+              >
+                {language === 'ar' ? 'تسجيل الخروج' : 'Logout'}
+              </button>
+            </div>
+          </div>
         </main>
       )}
 

@@ -65,13 +65,19 @@ export interface ClientProfile {
     carbs: number; // in grams
     fats: number; // in grams
   };
-  subscriptionStatus: 'active' | 'expiring' | 'expired';
+  subscriptionStatus: 'active' | 'expiring' | 'expired' | 'suspended';
   subscriptionDaysLeft: number;
   subscriptionStartDate?: string; // e.g. '2026-11-01'
   subscriptionEndDate?: string; // e.g. '2026-12-01'
   coachName: string;
   joinedDate: string;
   assignedPassword?: string;
+  age?: number;
+  bloodType?: string;
+  visualGoal?: 'bulking' | 'cut' | 'maintenance' | 'keto' | string;
+  nutritionPlanLocked?: boolean;
+  inBodyFileUrl?: string;
+  inBodyFileName?: string;
   analysisData?: ComprehensiveAnalysisData;
   streakData?: StreakData;
   athleteRank?: AthleteRank;
@@ -106,7 +112,7 @@ export interface Exercise {
 
 export interface WorkoutDay {
   id: string;
-  key: 'push' | 'pull' | 'rest' | 'legs' | 'upper';
+  key: 'push' | 'pull' | 'rest' | 'legs' | 'upper' | (string & {});
   titleAr: string;
   titleEn: string;
   subtitleAr: string;
@@ -210,10 +216,22 @@ export interface SubscriptionAgreement {
   startDate?: string; // e.g. '2026-11-01'
   endDate?: string; // e.g. '2026-12-01'
 
+  // Payment plan & installments
+  paymentInstallments?: 'full' | '2_installments' | '3_installments';
+  installmentAmount?: number;
+
+  // Visual Goal
+  visualGoal?: 'bulking' | 'cut' | 'maintenance' | 'keto' | string;
+
   // Section 1: Personal & Health Data
   fullName: string;
   phoneWhatsapp: string;
   email: string;
+  age?: number;
+  bloodType?: string;
+  inBodyFileUrl?: string; // Base64 data URL or storage URL
+  inBodyFileName?: string;
+  inBodyFileSize?: string;
   hasHealthIssues: boolean;
   healthIssuesDetails?: string;
 

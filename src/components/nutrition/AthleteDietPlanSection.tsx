@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Language, Theme } from '../../types';
 import {
   getDietPlanCategories,
   MealCategory,
   DietMealItem,
 } from '../../data/nutrition/dietPlanData';
+import { isSubscriberNutritionLocked } from '../../lib/authStore';
 import {
   Utensils,
   Flame,
@@ -17,18 +18,47 @@ import {
   ChevronRight,
   ShieldCheck,
   Info,
+  Lock,
 } from 'lucide-react';
 
 interface AthleteDietPlanSectionProps {
   language: Language;
   theme?: Theme;
   isVIP?: boolean;
+  isLocked?: boolean;
+  subscriberEmail?: string;
 }
 
 export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
   language,
   isVIP = false,
+  isLocked = false,
+  subscriberEmail,
 }) => {
+  // Check global or per-subscriber lock setting reactively
+  const [storedLocked, setStoredLocked] = useState<boolean>(() =>
+    isSubscriberNutritionLocked(subscriberEmail)
+  );
+
+  useEffect(() => {
+    const syncLock = () => {
+      setStoredLocked(isSubscriberNutritionLocked(subscriberEmail));
+    };
+    syncLock();
+    window.addEventListener('oao_nutrition_lock_updated', syncLock);
+    window.addEventListener('oao_credentials_updated', syncLock);
+    window.addEventListener('oao_profile_updated', syncLock);
+    window.addEventListener('storage', syncLock);
+    return () => {
+      window.removeEventListener('oao_nutrition_lock_updated', syncLock);
+      window.removeEventListener('oao_credentials_updated', syncLock);
+      window.removeEventListener('oao_profile_updated', syncLock);
+      window.removeEventListener('storage', syncLock);
+    };
+  }, [subscriberEmail]);
+
+  const isNutritionLocked = Boolean(isLocked || storedLocked);
+
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<'breakfast' | 'lunch' | 'dinner' | 'snacks'>('breakfast');
   const [selectedMealIndex, setSelectedMealIndex] = useState<number>(0);
   const [viewMode, setViewMode] = useState<'featured' | 'grid'>('featured');
@@ -53,6 +83,33 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
   const handlePrevMeal = () => {
     setSelectedMealIndex((prev) => (prev - 1 + activeCategory.meals.length) % activeCategory.meals.length);
   };
+
+  if (isNutritionLocked) {
+    return (
+      <section className="relative w-full rounded-3xl p-8 sm:p-12 bg-gradient-to-b from-[#0B132B]/95 via-[#070E24]/95 to-[#030712] border-2 border-amber-500/40 shadow-[0_10px_40px_rgba(0,0,0,0.6)] backdrop-blur-xl text-center select-none overflow-hidden animate-in fade-in">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
+        <div className="relative z-10 max-w-xl mx-auto space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border-2 border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(245,158,11,0.3)]">
+            <Lock className="w-8 h-8" />
+          </div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>{language === 'ar' ? 'الخطة الغذائية معلقة مؤقتاً' : 'Nutrition Plan Temporarily Locked'}</span>
+          </div>
+          <h3 className="text-xl sm:text-2xl font-black text-white leading-snug">
+            {language === 'ar'
+              ? '🔒 تم تعليق/قفل عرض الخطة الغذائية من قبل الكوتش لحين تحديث التقييم والمقاييس الشخصية'
+              : '🔒 Nutrition plan access is temporarily suspended by the coach pending assessment and biometrics update'}
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
+            {language === 'ar'
+              ? 'يقوم الكوتش حالياً بمراجعة وتعديل خطتك الغذائية والسعرات والماكروز وفقاً لآخر قياساتك. يرجى التواصل مع الكوتش أو إرسال استفسار عند الحاجة.'
+              : 'The coach is updating your custom meal plan, macros, and calories. Please contact the coach or submit an inquiry if you have questions.'}
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="relative w-full rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#0B132B]/95 via-[#070E24]/95 to-[#030712] border border-orange-500/30 shadow-[0_10px_40px_rgba(0,0,0,0.6)] backdrop-blur-xl overflow-hidden select-none">

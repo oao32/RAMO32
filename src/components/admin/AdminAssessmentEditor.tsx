@@ -9,6 +9,7 @@ import {
   INITIAL_STREAK_DATA,
   INITIAL_ATHLETE_RANK,
 } from '../../data/initialData';
+import { syncProfileToSupabase } from '../../lib/supabase';
 import {
   Activity,
   Sparkles,
@@ -23,6 +24,7 @@ import {
   Trash2,
   Edit3,
   ShieldCheck,
+  RotateCcw,
 } from 'lucide-react';
 
 interface AdminAssessmentEditorProps {
@@ -111,10 +113,12 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
 
     onUpdateProfile(updatedProfile);
 
-    // Also mirror to global storage keys
+    // Also mirror to global storage keys & sync to Supabase
     localStorage.setItem('oao_client_profile', JSON.stringify(updatedProfile));
     localStorage.setItem('oao_streak_data', JSON.stringify(streakData));
     localStorage.setItem('oao_athlete_rank', JSON.stringify(athleteRank));
+
+    syncProfileToSupabase(updatedProfile).catch(() => {});
 
     window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
     window.dispatchEvent(new CustomEvent('oao_streak_updated', { detail: streakData }));
@@ -123,6 +127,36 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
 
     setSavedNotice(true);
     setTimeout(() => setSavedNotice(false), 3000);
+  };
+
+  const handleResetAssessment = () => {
+    const resetStreak = INITIAL_STREAK_DATA;
+    const resetRank = INITIAL_ATHLETE_RANK;
+    setStreakData(resetStreak);
+    setAthleteRank(resetRank);
+    setAnalysisData({
+      muscleAnalysis: {
+        strengthsTitleAr: 'نقاط القوة والكتلة المكتسبة',
+        strengthsItems: [],
+        focusTitleAr: 'التركيز الأساسي في الخطة الحالية',
+        focusItems: [],
+      },
+      nutritionEngineering: {
+        goalTitleAr: 'الهدف الغذائي الحالي',
+        preWorkoutNotesAr: '',
+        postWorkoutNotesAr: '',
+      },
+      trainingProtocol: {
+        splitNameAr: 'Push / Pull / Legs',
+        overloadNotesAr: '',
+        rpeNotesAr: '',
+      },
+      recoveryFramework: {
+        sleepNotesAr: '',
+        supplementItems: [],
+      },
+      customCoachNotes: '',
+    });
   };
 
   // Strength Items helper
@@ -605,17 +639,28 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
       </div>
 
       {/* Bottom Save Bar */}
-      <div className="flex items-center justify-between p-4 rounded-2xl bg-[#0B132B]/80 border border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[#0B132B]/80 border border-white/10">
         <span className="text-xs text-slate-400">
           💡 تنعكس جميع التعديلات المحفوظة هنا مباشرة داخل بوابات المشتركين وبطاقات التحليل الشامل.
         </span>
 
-        <button
-          type="submit"
-          className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs shadow-lg cursor-pointer"
-        >
-          حفظ التقييم وتحديث حساب المشترك
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleResetAssessment}
+            className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>إعادة ضبط القيم</span>
+          </button>
+
+          <button
+            type="submit"
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs shadow-lg cursor-pointer"
+          >
+            حفظ التقييم وتحديث حساب المشترك
+          </button>
+        </div>
       </div>
     </form>
   );

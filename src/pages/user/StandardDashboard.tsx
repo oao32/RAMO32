@@ -11,7 +11,6 @@ import {
 import {
   INITIAL_CLIENT_PROFILE,
   INITIAL_WORKOUT_DAYS,
-  INITIAL_CLIENT_NOTES,
 } from '../../data/initialData';
 import { BrandLogo } from '../../components/BrandLogo';
 import { AthleteBiometricsBar } from '../../components/AthleteBiometricsBar';
@@ -23,6 +22,7 @@ import { ClientNotesSection } from '../../components/ClientNotesSection';
 import { RestTimer } from '../../components/RestTimer';
 import { VideoModal } from '../../components/VideoModal';
 import { calculateSubscriptionDetails } from '../../lib/subscriptionUtils';
+import { syncNoteToSupabase, syncProfileToSupabase } from '../../lib/supabase';
 import {
   Home,
   LogOut,
@@ -78,7 +78,7 @@ export const StandardDashboard: React.FC = () => {
     return INITIAL_WORKOUT_DAYS;
   });
 
-  // Notes state
+  // Notes state (Starts cleanly empty without seeded mock notes)
   const [notes, setNotes] = useState<ClientNote[]>(() => {
     const saved = localStorage.getItem('oao_client_notes');
     if (saved) {
@@ -88,27 +88,37 @@ export const StandardDashboard: React.FC = () => {
         // fallback
       }
     }
-    return INITIAL_CLIENT_NOTES;
+    return [];
   });
 
-  // Real-time synchronization for coach replies and new notes
+  // Real-time synchronization for coach replies, profile updates, and workouts
   useEffect(() => {
-    const syncLiveNotes = () => {
+    const syncLive = () => {
       try {
         const savedNotes = localStorage.getItem('oao_client_notes');
         if (savedNotes) {
           setNotes(JSON.parse(savedNotes));
+        }
+        const savedProfile = localStorage.getItem('oao_client_profile');
+        if (savedProfile) {
+          setProfile((prev) => ({ ...prev, ...JSON.parse(savedProfile), subscription_plan: 'standard' }));
+        }
+        const savedWorkouts = localStorage.getItem('oao_workout_days');
+        if (savedWorkouts) {
+          setWorkoutDays(JSON.parse(savedWorkouts));
         }
       } catch {
         // ignore
       }
     };
 
-    window.addEventListener('oao_notes_updated', syncLiveNotes);
-    window.addEventListener('storage', syncLiveNotes);
+    window.addEventListener('oao_notes_updated', syncLive);
+    window.addEventListener('oao_profile_updated', syncLive);
+    window.addEventListener('storage', syncLive);
     return () => {
-      window.removeEventListener('oao_notes_updated', syncLiveNotes);
-      window.removeEventListener('storage', syncLiveNotes);
+      window.removeEventListener('oao_notes_updated', syncLive);
+      window.removeEventListener('oao_profile_updated', syncLive);
+      window.removeEventListener('storage', syncLive);
     };
   }, []);
 
@@ -123,6 +133,7 @@ export const StandardDashboard: React.FC = () => {
   const handleUpdateProfile = (updated: ClientProfile) => {
     setProfile(updated);
     localStorage.setItem('oao_client_profile', JSON.stringify(updated));
+    syncProfileToSupabase(updated).catch(() => {});
   };
 
   const handleUpdateWorkouts = (updatedDays: WorkoutDay[]) => {
@@ -145,6 +156,7 @@ export const StandardDashboard: React.FC = () => {
     const updated = [noteRecord, ...existingList];
     setNotes(updated);
     localStorage.setItem('oao_client_notes', JSON.stringify(updated));
+    syncNoteToSupabase(noteRecord).catch(() => {});
     window.dispatchEvent(new CustomEvent('oao_notes_updated'));
     window.dispatchEvent(new Event('storage'));
   };
@@ -326,6 +338,8 @@ export const StandardDashboard: React.FC = () => {
           language={language}
           theme={theme}
           isVIP={false}
+          isLocked={profile.nutritionPlanLocked}
+          subscriberEmail={profile.email}
         />
 
         {/* COACH NOTES & INQUIRIES */}

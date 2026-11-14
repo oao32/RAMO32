@@ -13,7 +13,6 @@ import {
 import {
   INITIAL_CLIENT_PROFILE,
   INITIAL_WORKOUT_DAYS,
-  INITIAL_CLIENT_NOTES,
 } from '../../data/initialData';
 import { BrandLogo } from '../../components/BrandLogo';
 import { SignedDeclarationModal } from '../../components/SignedDeclarationModal';
@@ -24,15 +23,16 @@ import {
   testSupabaseConnection,
   SUPABASE_SQL_SCHEMA,
   fetchAILogs,
+  fetchDeclarationsFromSupabase,
+  syncWorkoutDaysToSupabase,
+  syncProfileToSupabase,
+  syncNoteToSupabase,
+  deleteNoteFromSupabase,
 } from '../../lib/supabase';
-import {
-  STANDARD_DIET_CATEGORIES,
-  VIP_PLATINUM_DIET_CATEGORIES,
-  MealCategory,
-} from '../../data/nutrition/dietPlanData';
 import { AdminSubscribersManager } from '../../components/admin/AdminSubscribersManager';
 import { AdminDietEditor } from '../../components/admin/AdminDietEditor';
 import { AdminAssessmentEditor } from '../../components/admin/AdminAssessmentEditor';
+import { CoachAnalyticsView } from '../../components/CoachAnalyticsView';
 import {
   getWorkoutTemplates,
   saveWorkoutTemplate,
@@ -43,6 +43,7 @@ import {
   Dumbbell,
   MessageSquare,
   Database,
+  TrendingUp,
   Plus,
   Trash2,
   Save,
@@ -53,23 +54,18 @@ import {
   QrCode,
   Crown,
   Shield,
-  Clock,
-  Eye,
   Home,
   LogOut,
-  ExternalLink,
   Share2,
   AlertCircle,
-  Calendar,
   Edit3,
   Scale,
   Utensils,
   Activity,
-  Flame,
   Bookmark,
   Layers,
-  Sparkles,
   X,
+  RotateCcw,
 } from 'lucide-react';
 
 export const AdminPanel: React.FC = () => {
@@ -84,7 +80,7 @@ export const AdminPanel: React.FC = () => {
   });
 
   const [activeTab, setActiveTab] = useState<
-    'subscribers' | 'workouts' | 'biometrics' | 'analytics' | 'diet' | 'inquiries' | 'database'
+    'subscribers' | 'revenue' | 'assessment' | 'workouts' | 'biometrics' | 'analytics' | 'diet' | 'inquiries' | 'database'
   >('subscribers');
 
   // Workout templates state
@@ -137,20 +133,32 @@ export const AdminPanel: React.FC = () => {
   const [newExReps, setNewExReps] = useState('10 - 12');
   const [newExVideo, setNewExVideo] = useState('');
 
-  // Day Rename / Customize Modal
+  // Day Rename / Customize & Add Day Modals
   const [isEditDayModalOpen, setIsEditDayModalOpen] = useState(false);
   const [editDayTitleAr, setEditDayTitleAr] = useState('');
   const [editDaySubtitleAr, setEditDaySubtitleAr] = useState('');
+  const [isAddDayModalOpen, setIsAddDayModalOpen] = useState(false);
+  const [newDayTitleAr, setNewDayTitleAr] = useState('');
+  const [newDaySubtitleAr, setNewDaySubtitleAr] = useState('');
+  const [confirmDeleteDayKey, setConfirmDeleteDayKey] = useState<string | null>(null);
 
-  // Diet Plan View State
-  const [dietPlanTier, setDietPlanTier] = useState<'standard' | 'VIP'>('standard');
-
-  // Inquiries & Notes State
+  // Inquiries & Notes State (Starts Clean without Seeded Mock Data)
   const [notes, setNotes] = useState<ClientNote[]>(() => {
-    const saved = localStorage.getItem('oao_client_notes');
-    return saved ? JSON.parse(saved) : INITIAL_CLIENT_NOTES;
+    try {
+      const saved = localStorage.getItem('oao_client_notes');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
   const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
+  const [editingReplyNoteId, setEditingReplyNoteId] = useState<string | null>(null);
+  const [editReplyText, setEditReplyText] = useState('');
+  const [isAddInquiryOpen, setIsAddInquiryOpen] = useState(false);
+  const [newInquiryClientName, setNewInquiryClientName] = useState('');
+  const [newInquirySubject, setNewInquirySubject] = useState('');
+  const [newInquiryMessage, setNewInquiryMessage] = useState('');
+  const [confirmDeleteNoteId, setConfirmDeleteNoteId] = useState<string | null>(null);
 
   // Database & AI Logs State
   const currentConfig = getSupabaseConfig();
@@ -165,16 +173,23 @@ export const AdminPanel: React.FC = () => {
   const [aiLogs, setAiLogs] = useState<AIGenerationLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
-  // Refresh declarations and live notes on load
+  // Refresh declarations and live notes on load + Supabase sync
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('oao_client_declarations');
-      if (stored) {
-        setDeclarations(JSON.parse(stored));
+    let mounted = true;
+    fetchDeclarationsFromSupabase().then((remoteDecls) => {
+      if (mounted) setDeclarations(remoteDecls);
+    });
+
+    const syncLiveDeclarations = () => {
+      try {
+        const stored = localStorage.getItem('oao_client_declarations');
+        if (stored) {
+          setDeclarations(JSON.parse(stored));
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
+    };
 
     const syncLiveNotes = () => {
       try {
@@ -187,11 +202,19 @@ export const AdminPanel: React.FC = () => {
       }
     };
 
+    const handleStorage = () => {
+      syncLiveDeclarations();
+      syncLiveNotes();
+    };
+
+    window.addEventListener('oao_declarations_updated', syncLiveDeclarations);
     window.addEventListener('oao_notes_updated', syncLiveNotes);
-    window.addEventListener('storage', syncLiveNotes);
+    window.addEventListener('storage', handleStorage);
     return () => {
+      mounted = false;
+      window.removeEventListener('oao_declarations_updated', syncLiveDeclarations);
       window.removeEventListener('oao_notes_updated', syncLiveNotes);
-      window.removeEventListener('storage', syncLiveNotes);
+      window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
@@ -224,32 +247,130 @@ export const AdminPanel: React.FC = () => {
   const handleSendReply = (noteId: string) => {
     const text = replyTexts[noteId]?.trim();
     if (!text) return;
-    const updated = notes.map((n) =>
-      n.id === noteId
-        ? {
-            ...n,
-            reply: text,
-            replyTimestamp: new Date().toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-            isResolved: true,
-          }
-        : n
-    );
+    let modifiedNote: ClientNote | undefined;
+    const updated = notes.map((n) => {
+      if (n.id === noteId) {
+        modifiedNote = {
+          ...n,
+          reply: text,
+          replyTimestamp: new Date().toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          isResolved: true,
+        };
+        return modifiedNote;
+      }
+      return n;
+    });
     setNotes(updated);
     localStorage.setItem('oao_client_notes', JSON.stringify(updated));
+    if (modifiedNote) {
+      void syncNoteToSupabase(modifiedNote);
+    }
     window.dispatchEvent(new CustomEvent('oao_notes_updated'));
     window.dispatchEvent(new Event('storage'));
     setReplyTexts((prev) => ({ ...prev, [noteId]: '' }));
+  };
+
+  // Edit an existing reply
+  const handleSaveEditedReply = (noteId: string) => {
+    const trimmed = editReplyText.trim();
+    if (!trimmed) return;
+    let modifiedNote: ClientNote | undefined;
+    const updated = notes.map((n) => {
+      if (n.id === noteId) {
+        modifiedNote = {
+          ...n,
+          reply: trimmed,
+          replyTimestamp: new Date().toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          isResolved: true,
+        };
+        return modifiedNote;
+      }
+      return n;
+    });
+    setNotes(updated);
+    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
+    if (modifiedNote) {
+      void syncNoteToSupabase(modifiedNote);
+    }
+    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+    window.dispatchEvent(new Event('storage'));
+    setEditingReplyNoteId(null);
+    setEditReplyText('');
+  };
+
+  // Add a new admin note / inquiry
+  const handleAddAdminNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newInquirySubject.trim() || !newInquiryMessage.trim()) return;
+    const newNote: ClientNote = {
+      id: `note_${Date.now()}`,
+      clientId: profile.id,
+      clientName: newInquiryClientName.trim() || profile.name,
+      clientEmail: profile.email,
+      subject: newInquirySubject.trim(),
+      category: 'general',
+      message: newInquiryMessage.trim(),
+      timestamp: new Date().toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      isResolved: false,
+    };
+    const updated = [newNote, ...notes];
+    setNotes(updated);
+    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
+    void syncNoteToSupabase(newNote);
+    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+    window.dispatchEvent(new Event('storage'));
+    setNewInquiryClientName('');
+    setNewInquirySubject('');
+    setNewInquiryMessage('');
+    setIsAddInquiryOpen(false);
+  };
+
+  // Delete an inquiry / note
+  const handleDeleteNote = (noteId: string) => {
+    const updated = notes.filter((n) => n.id !== noteId);
+    setNotes(updated);
+    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
+    void deleteNoteFromSupabase(noteId);
+    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+    window.dispatchEvent(new Event('storage'));
+    setConfirmDeleteNoteId(null);
   };
 
   // Save Profile measurements (Weight, Height, Body Fat, Muscle Mass, etc.)
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('oao_client_profile', JSON.stringify(profile));
+    void syncProfileToSupabase(profile);
     window.dispatchEvent(new Event('storage'));
     window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: profile }));
+    setSavedProfileMessage(true);
+    setTimeout(() => setSavedProfileMessage(false), 3000);
+  };
+
+  // Reset Profile measurements to defaults
+  const handleResetProfile = () => {
+    const resetProfile: ClientProfile = {
+      ...INITIAL_CLIENT_PROFILE,
+      id: profile.id || INITIAL_CLIENT_PROFILE.id,
+      name: profile.name || INITIAL_CLIENT_PROFILE.name,
+      nameEn: profile.nameEn || INITIAL_CLIENT_PROFILE.nameEn,
+      email: profile.email,
+      subscription_plan: profile.subscription_plan,
+    };
+    setProfile(resetProfile);
+    localStorage.setItem('oao_client_profile', JSON.stringify(resetProfile));
+    void syncProfileToSupabase(resetProfile);
+    window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: resetProfile }));
     setSavedProfileMessage(true);
     setTimeout(() => setSavedProfileMessage(false), 3000);
   };
@@ -277,8 +398,59 @@ export const AdminPanel: React.FC = () => {
     );
     setWorkoutDays(updated);
     localStorage.setItem('oao_workout_days', JSON.stringify(updated));
+    void syncWorkoutDaysToSupabase(profile.id, updated);
     window.dispatchEvent(new Event('storage'));
     setIsEditDayModalOpen(false);
+  };
+
+  // Add a New Workout Day
+  const handleAddWorkoutDay = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDayTitleAr.trim()) return;
+    const dayKey = `day_${Date.now()}`;
+    const newDay: WorkoutDay = {
+      id: dayKey,
+      key: dayKey,
+      titleAr: newDayTitleAr.trim(),
+      titleEn: newDayTitleAr.trim(),
+      subtitleAr: newDaySubtitleAr.trim() || 'تمارين مخصصة لهذا اليوم',
+      subtitleEn: newDaySubtitleAr.trim() || 'Custom workout day',
+      isRestDay: false,
+      iconName: 'Dumbbell',
+      exercises: [],
+    };
+    const updated = [...workoutDays, newDay];
+    setWorkoutDays(updated);
+    setSelectedDayKey(dayKey);
+    localStorage.setItem('oao_workout_days', JSON.stringify(updated));
+    void syncWorkoutDaysToSupabase(profile.id, updated);
+    window.dispatchEvent(new Event('storage'));
+    setNewDayTitleAr('');
+    setNewDaySubtitleAr('');
+    setIsAddDayModalOpen(false);
+    setWorkoutTemplateNotice(`تمت إضافة يوم "${newDay.titleAr}" إلى جدول التمارين بنجاح!`);
+    setTimeout(() => setWorkoutTemplateNotice(null), 3000);
+  };
+
+  // Delete a Workout Day
+  const handleDeleteWorkoutDay = (dayKey: string) => {
+    if (workoutDays.length <= 1) {
+      setWorkoutTemplateNotice('يجب أن يحتوي الجدول على يوم تدريبي واحد على الأقل.');
+      setTimeout(() => setWorkoutTemplateNotice(null), 3000);
+      setConfirmDeleteDayKey(null);
+      return;
+    }
+    const updated = workoutDays.filter((d) => d.key !== dayKey);
+    setWorkoutDays(updated);
+    if (selectedDayKey === dayKey && updated.length > 0) {
+      setSelectedDayKey(updated[0].key);
+    }
+    localStorage.setItem('oao_workout_days', JSON.stringify(updated));
+    void syncWorkoutDaysToSupabase(profile.id, updated);
+    window.dispatchEvent(new Event('storage'));
+    setConfirmDeleteDayKey(null);
+    setWorkoutTemplateNotice('تم حذف يوم التمرين وتحديث الجدول بنجاح.');
+    setTimeout(() => setWorkoutTemplateNotice(null), 3000);
   };
 
   // Open Exercise Modal for Editing
@@ -321,6 +493,7 @@ export const AdminPanel: React.FC = () => {
       });
       setWorkoutDays(updated);
       localStorage.setItem('oao_workout_days', JSON.stringify(updated));
+      void syncWorkoutDaysToSupabase(profile.id, updated);
       window.dispatchEvent(new Event('storage'));
     } else {
       // Adding new exercise
@@ -351,6 +524,7 @@ export const AdminPanel: React.FC = () => {
       );
       setWorkoutDays(updated);
       localStorage.setItem('oao_workout_days', JSON.stringify(updated));
+      void syncWorkoutDaysToSupabase(profile.id, updated);
       window.dispatchEvent(new Event('storage'));
     }
 
@@ -369,6 +543,7 @@ export const AdminPanel: React.FC = () => {
     );
     setWorkoutDays(updated);
     localStorage.setItem('oao_workout_days', JSON.stringify(updated));
+    void syncWorkoutDaysToSupabase(profile.id, updated);
     window.dispatchEvent(new Event('storage'));
   };
 
@@ -492,6 +667,18 @@ export const AdminPanel: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('revenue')}
+            className={`px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'revenue'
+                ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-lg'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>لوحة التحليلات والإيرادات</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('workouts')}
             className={`px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === 'workouts'
@@ -516,9 +703,9 @@ export const AdminPanel: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab('analytics')}
+            onClick={() => setActiveTab('assessment')}
             className={`px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'analytics'
+              activeTab === 'assessment' || activeTab === 'analytics'
                 ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-lg'
                 : 'text-slate-400 hover:text-white'
             }`}
@@ -629,6 +816,18 @@ export const AdminPanel: React.FC = () => {
 
                 <button
                   onClick={() => {
+                    setNewDayTitleAr('');
+                    setNewDaySubtitleAr('');
+                    setIsAddDayModalOpen(true);
+                  }}
+                  className="px-4 py-2.5 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>إضافة يوم جديد</span>
+                </button>
+
+                <button
+                  onClick={() => {
                     setEditingExercise(null);
                     setNewExNameAr('');
                     setNewExNameEn('');
@@ -701,13 +900,42 @@ export const AdminPanel: React.FC = () => {
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => handleOpenEditDay(day)}
-                    className="px-3.5 py-1.5 rounded-xl bg-orange-500/15 border border-orange-500/30 text-orange-300 text-xs font-bold hover:bg-orange-500/25 transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span>تغيير اسم ووصف اليوم</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                    <button
+                      onClick={() => handleOpenEditDay(day)}
+                      className="px-3.5 py-1.5 rounded-xl bg-orange-500/15 border border-orange-500/30 text-orange-300 text-xs font-bold hover:bg-orange-500/25 transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>تغيير اسم ووصف اليوم</span>
+                    </button>
+
+                    {workoutDays.length > 1 && (
+                      confirmDeleteDayKey === day.key ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleDeleteWorkoutDay(day.key)}
+                            className="px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-black cursor-pointer hover:bg-red-500 transition-all"
+                          >
+                            تأكيد الحذف
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteDayKey(null)}
+                            className="px-2.5 py-1.5 rounded-xl bg-white/10 text-slate-300 text-xs font-bold cursor-pointer hover:bg-white/20 transition-all"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteDayKey(day.key)}
+                          className="px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>حذف اليوم</span>
+                        </button>
+                      )
+                    )}
+                  </div>
                 </div>
               ))}
 
@@ -919,22 +1147,44 @@ export const AdminPanel: React.FC = () => {
                   💡 عند الضغط على الحفظ، ستتحدث بيانات المشترك وشريط القياسات ومؤشر BMI تلقائياً في حسابه.
                 </span>
 
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>حفظ القياسات وتحديث حساب المتدرب</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResetProfile}
+                    className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-slate-300 hover:text-white font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <RotateCcw className="w-4 h-4 text-slate-400" />
+                    <span>إعادة ضبط</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>حفظ القياسات وتحديث حساب المتدرب</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         )}
 
         {/* =========================================================================
+            TAB 2.6: REAL REVENUE & ACADEMY ANALYTICS (لوحة التحليلات والإيرادات)
+            ========================================================================= */}
+        {activeTab === 'revenue' && (
+          <CoachAnalyticsView
+            language={language}
+            theme={theme}
+            onOpenClientProfile={() => setActiveTab('biometrics')}
+          />
+        )}
+
+        {/* =========================================================================
             TAB 2.7: DYNAMIC ASSESSMENT & ANALYTICS (التقييم والتحليل الشامل)
             ========================================================================= */}
-        {activeTab === 'analytics' && (
+        {(activeTab === 'assessment' || activeTab === 'analytics') && (
           <AdminAssessmentEditor
             profile={profile}
             onUpdateProfile={(updated) => {
@@ -956,12 +1206,80 @@ export const AdminPanel: React.FC = () => {
             ========================================================================= */}
         {activeTab === 'inquiries' && (
           <div className="space-y-6">
-            <div className="bg-[#0B132B]/80 p-6 rounded-3xl border border-white/10">
-              <h2 className="text-xl font-black text-white">صندوق استفسارات المشتركين</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                تواصل مباشر مع المتدربين والرد على ملاحظاتهم اليومية
-              </p>
+            <div className="bg-[#0B132B]/80 p-6 rounded-3xl border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-white">صندوق استفسارات المشتركين</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  تواصل مباشر مع المتدربين، الرد على ملاحظاتهم اليومية، أو إضافة توجيهات جديدة
+                </p>
+              </div>
+
+              <button
+                onClick={() => setIsAddInquiryOpen((prev) => !prev)}
+                className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs flex items-center gap-2 cursor-pointer shadow-lg self-start sm:self-auto"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{isAddInquiryOpen ? 'إغلاق النموذج' : 'إضافة ملاحظة / استفسار جديد'}</span>
+              </button>
             </div>
+
+            {isAddInquiryOpen && (
+              <form
+                onSubmit={handleAddAdminNote}
+                className="p-6 rounded-3xl bg-[#070e24] border border-orange-500/40 space-y-4 text-start"
+              >
+                <h3 className="text-sm font-black text-white">إضافة ملاحظة أو رسالة متابعة جديدة</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">اسم المشترك:</label>
+                    <input
+                      type="text"
+                      value={newInquiryClientName}
+                      onChange={(e) => setNewInquiryClientName(e.target.value)}
+                      placeholder={profile.name || 'اسم المتدرب'}
+                      className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white text-xs outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">عنوان الموضوع:</label>
+                    <input
+                      type="text"
+                      required
+                      value={newInquirySubject}
+                      onChange={(e) => setNewInquirySubject(e.target.value)}
+                      placeholder="مثال: تحديث جدول التمارين أو ملاحظة غذائية"
+                      className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white text-xs outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">نص الرسالة:</label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={newInquiryMessage}
+                    onChange={(e) => setNewInquiryMessage(e.target.value)}
+                    placeholder="اكتب الملاحظة أو الاستفسار هنا..."
+                    className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white text-xs outline-none resize-none"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddInquiryOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-white/10 text-slate-300 text-xs font-bold cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 text-white font-black text-xs cursor-pointer shadow-md"
+                  >
+                    حفظ وإرسال الملاحظة
+                  </button>
+                </div>
+              </form>
+            )}
 
             <div className="space-y-4">
               {notes.length === 0 ? (
@@ -980,13 +1298,40 @@ export const AdminPanel: React.FC = () => {
                   key={note.id}
                   className="p-6 rounded-3xl bg-[#0B132B]/90 border border-white/10 space-y-4"
                 >
-                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
                     <div>
                       <span className="text-sm font-black text-white">{note.clientName}</span>
                       <span className="text-xs text-slate-400 mx-2">•</span>
                       <span className="text-xs text-orange-400 font-bold">{note.subject}</span>
                     </div>
-                    <span className="text-[11px] text-slate-500">{note.timestamp}</span>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-500">{note.timestamp}</span>
+                      {confirmDeleteNoteId === note.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleDeleteNote(note.id)}
+                            className="px-2.5 py-1 rounded-lg bg-red-600 text-white text-[11px] font-black cursor-pointer hover:bg-red-500 transition-all"
+                          >
+                            تأكيد
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteNoteId(null)}
+                            className="px-2 py-1 rounded-lg bg-white/10 text-slate-300 text-[11px] font-bold cursor-pointer hover:bg-white/20 transition-all"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteNoteId(note.id)}
+                          className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 transition-all cursor-pointer"
+                          title="حذف الاستفسار"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <p className="text-xs sm:text-sm text-slate-300 leading-relaxed bg-black/40 p-4 rounded-2xl border border-white/5">
@@ -994,12 +1339,53 @@ export const AdminPanel: React.FC = () => {
                   </p>
 
                   {note.reply ? (
-                    <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/30 text-xs space-y-1">
+                    <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/30 text-xs space-y-2">
                       <div className="flex items-center justify-between text-orange-400 font-bold">
                         <span>رد الكوتش عمر:</span>
-                        <span className="text-[10px] text-slate-400">{note.replyTimestamp}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400">{note.replyTimestamp}</span>
+                          {editingReplyNoteId !== note.id && (
+                            <button
+                              onClick={() => {
+                                setEditingReplyNoteId(note.id);
+                                setEditReplyText(note.reply || '');
+                              }}
+                              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                            >
+                              <Edit3 className="w-3 h-3 text-orange-400" />
+                              <span>تعديل الرد</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-slate-200">{note.reply}</p>
+
+                      {editingReplyNoteId === note.id ? (
+                        <div className="flex items-center gap-2 pt-1">
+                          <input
+                            type="text"
+                            value={editReplyText}
+                            onChange={(e) => setEditReplyText(e.target.value)}
+                            className="flex-1 px-3 py-2 rounded-xl bg-black/50 border border-orange-500/40 text-white text-xs outline-none"
+                          />
+                          <button
+                            onClick={() => handleSaveEditedReply(note.id)}
+                            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 text-white font-black text-xs cursor-pointer"
+                          >
+                            حفظ
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingReplyNoteId(null);
+                              setEditReplyText('');
+                            }}
+                            className="px-3 py-2 rounded-xl bg-white/10 text-slate-300 font-bold text-xs cursor-pointer"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-slate-200">{note.reply}</p>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 pt-2">
@@ -1378,6 +1764,59 @@ export const AdminPanel: React.FC = () => {
         </div>
       )}
 
+      {/* Add New Workout Day Modal */}
+      {isAddDayModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="w-full max-w-lg bg-[#0B132B] border border-emerald-500/40 rounded-3xl p-6 sm:p-8 space-y-5">
+            <h3 className="text-lg font-black text-white">إضافة يوم تدريبي جديد</h3>
+            <p className="text-xs text-slate-400">
+              أضف يوماً جديداً إلى جدول التمارين (مثلاً: يوم الكارديو والبطن، أو يوم الذراعين والأكتاف)
+            </p>
+
+            <form onSubmit={handleAddWorkoutDay} className="space-y-4 text-start">
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">اسم اليوم بالعربي:</label>
+                <input
+                  type="text"
+                  required
+                  value={newDayTitleAr}
+                  onChange={(e) => setNewDayTitleAr(e.target.value)}
+                  placeholder="مثال: يوم الأكتاف والذراعين"
+                  className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 text-white text-xs outline-none focus:border-emerald-500 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">وصف العضلات المستهدفة (اختياري):</label>
+                <input
+                  type="text"
+                  value={newDaySubtitleAr}
+                  onChange={(e) => setNewDaySubtitleAr(e.target.value)}
+                  placeholder="مثال: تركيز على الأكتاف الجانبية والبايسبس والترايسبس"
+                  className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 text-white text-xs outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddDayModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-white/10 text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-xs font-black shadow-md cursor-pointer"
+                >
+                  إضافة اليوم
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Signed Declaration PDF Viewer Modal */}
       {selectedDeclaration && (
         <SignedDeclarationModal
@@ -1517,6 +1956,7 @@ export const AdminPanel: React.FC = () => {
                       if (tmpl.workoutDays && tmpl.workoutDays.length > 0) {
                         setWorkoutDays(tmpl.workoutDays);
                         localStorage.setItem('oao_workout_days', JSON.stringify(tmpl.workoutDays));
+                        void syncWorkoutDaysToSupabase(profile.id, tmpl.workoutDays);
                         window.dispatchEvent(new Event('storage'));
                       }
                       setIsApplyWorkoutTemplateModalOpen(false);

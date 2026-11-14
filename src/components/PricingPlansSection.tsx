@@ -100,9 +100,9 @@ export const PricingPlansSection: React.FC<PricingPlansSectionProps> = ({
         },
         {
           titleAr: 'النظام الغذائي:',
-          descAr: 'تصميم النظام الغذائي مع التحديث والتغيير شهرياً.',
+          descAr: 'يقتصر على الاساسيات فقط و للحصول على نظام غذائي متكامل يتم اضافة رسوم رمزيه.',
           titleEn: 'Nutrition Plan:',
-          descEn: 'Custom diet design with monthly updates and adjustments.',
+          descEn: 'Limited to basics only; an additional nominal fee applies for a complete nutrition plan.',
         },
         {
           titleAr: 'جدول التمارين:',

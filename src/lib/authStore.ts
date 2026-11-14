@@ -9,11 +9,17 @@ export interface UserCredentialRecord {
   clientCode?: string;
   plan: SubscriptionPlanTier;
   phone?: string;
-  status: 'active' | 'expiring' | 'expired';
+  status: 'active' | 'suspended' | 'expiring' | 'expired';
   createdAt: string;
   updatedAt: string;
   assignedByCoach: boolean;
   syncedToSupabase?: boolean;
+  age?: number;
+  bloodType?: string;
+  visualGoal?: string;
+  nutritionPlanLocked?: boolean;
+  inBodyFileName?: string;
+  inBodyFileUrl?: string;
 }
 
 const STORAGE_KEYS = {
@@ -21,64 +27,75 @@ const STORAGE_KEYS = {
   SUBSCRIBERS_LIST: 'oao_admin_subscribers',
 };
 
-// Default seed subscribers for smooth local development & testing
-const DEFAULT_ACCOUNTS: UserCredentialRecord[] = [
-  {
-    email: 'abdulrahman@oao.com',
-    password: 'oao-vip-2026',
-    clientName: 'عبدالرحمن الشمري',
-    clientCode: 'RAMO32',
-    plan: 'VIP',
-    phone: '0550001122',
-    status: 'active',
-    createdAt: '2026-11-01T00:00:00.000Z',
-    updatedAt: '2026-11-01T00:00:00.000Z',
-    assignedByCoach: true,
-    syncedToSupabase: false,
-  },
-  {
-    email: 'standard@oao.com',
-    password: 'oao-std-2026',
-    clientName: 'مشترك الباقة القياسية',
-    clientCode: 'OAO-101',
-    plan: 'standard',
-    phone: '0559998877',
-    status: 'active',
-    createdAt: '2026-11-01T00:00:00.000Z',
-    updatedAt: '2026-11-01T00:00:00.000Z',
-    assignedByCoach: true,
-    syncedToSupabase: false,
-  },
-  {
-    email: 'coach.omar@oao.com',
-    password: 'RAMO3223',
-    clientName: 'الكوتش عمر عدنان',
-    clientCode: 'RAMO3223',
-    plan: 'VIP',
-    phone: '0500000000',
-    status: 'active',
-    createdAt: '2026-11-01T00:00:00.000Z',
-    updatedAt: '2026-11-01T00:00:00.000Z',
-    assignedByCoach: true,
-    syncedToSupabase: false,
-  },
-];
+// Start cleanly with 0 dummy accounts (all records come dynamically from Supabase / Admin CRUD / Subscribe)
+const DEFAULT_ACCOUNTS: UserCredentialRecord[] = [];
 
 export function getAllSubscribersWithCredentials(): UserCredentialRecord[] {
-  if (typeof window === 'undefined') return DEFAULT_ACCOUNTS;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.CREDENTIALS, JSON.stringify(DEFAULT_ACCOUNTS));
-      return DEFAULT_ACCOUNTS;
+      return [];
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       return parsed;
     }
-    return DEFAULT_ACCOUNTS;
+    return [];
   } catch {
-    return DEFAULT_ACCOUNTS;
+    return [];
+  }
+}
+
+/**
+ * Sync real subscribers from Supabase `public.clients` table into local store.
+ */
+export async function fetchSubscribersFromSupabase(): Promise<UserCredentialRecord[]> {
+  const local = getAllSubscribersWithCredentials();
+  const supabase = getSupabaseClient();
+  if (!supabase) return local;
+
+  try {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return local;
+
+    const remoteList: UserCredentialRecord[] = data
+      .filter((row: Record<string, unknown>) => typeof row.email === 'string' && row.email.trim().length > 0)
+      .map((row: Record<string, unknown>) => ({
+        id: row.id ? String(row.id) : undefined,
+        email: String(row.email).trim().toLowerCase(),
+        password: row.assigned_password ? String(row.assigned_password) : 'OAO-2026',
+        clientName: String(row.name_ar || row.name_en || 'مشترك'),
+        clientCode: row.client_code ? String(row.client_code) : undefined,
+        plan: normalizeSubscriptionPlan(row.subscription_plan as string),
+        phone: row.phone ? String(row.phone) : undefined,
+        status: (row.status as UserCredentialRecord['status']) || 'active',
+        age: row.age ? Number(row.age) : undefined,
+        bloodType: row.blood_type ? String(row.blood_type) : undefined,
+        visualGoal: row.visual_goal ? String(row.visual_goal) : undefined,
+        nutritionPlanLocked: Boolean(row.nutrition_plan_locked),
+        inBodyFileName: row.inbody_filename ? String(row.inbody_filename) : undefined,
+        inBodyFileUrl: row.inbody_file_url ? String(row.inbody_file_url) : undefined,
+        createdAt: String(row.created_at || new Date().toISOString()),
+        updatedAt: String(row.created_at || new Date().toISOString()),
+        assignedByCoach: true,
+        syncedToSupabase: true,
+      }));
+
+    // Merge remote & any unsynced local records
+    const remoteEmails = new Set(remoteList.map((r) => r.email));
+    const merged = [
+      ...remoteList,
+      ...local.filter((l) => !remoteEmails.has(l.email.toLowerCase())),
+    ];
+    saveSubscribersList(merged);
+    return merged;
+  } catch {
+    return local;
   }
 }
 
@@ -104,7 +121,13 @@ export async function assignSubscriberPassword(params: {
   clientCode?: string;
   plan?: SubscriptionPlanTier;
   phone?: string;
-  status?: 'active' | 'expiring' | 'expired';
+  status?: 'active' | 'suspended' | 'expiring' | 'expired';
+  age?: number;
+  bloodType?: string;
+  visualGoal?: string;
+  nutritionPlanLocked?: boolean;
+  inBodyFileName?: string;
+  inBodyFileUrl?: string;
 }): Promise<{ success: boolean; syncedToSupabase: boolean; error?: string }> {
   const cleanEmail = params.email.trim().toLowerCase();
   const cleanPass = params.password.trim();
@@ -127,8 +150,17 @@ export async function assignSubscriberPassword(params: {
       clientName: params.clientName || all[existingIdx].clientName,
       clientCode: params.clientCode || all[existingIdx].clientCode,
       plan: normalizedPlan,
-      phone: params.phone || all[existingIdx].phone,
+      phone: params.phone !== undefined ? params.phone : all[existingIdx].phone,
       status: params.status || all[existingIdx].status || 'active',
+      age: params.age !== undefined ? params.age : all[existingIdx].age,
+      bloodType: params.bloodType !== undefined ? params.bloodType : all[existingIdx].bloodType,
+      visualGoal: params.visualGoal !== undefined ? params.visualGoal : all[existingIdx].visualGoal,
+      nutritionPlanLocked:
+        params.nutritionPlanLocked !== undefined
+          ? params.nutritionPlanLocked
+          : all[existingIdx].nutritionPlanLocked,
+      inBodyFileName: params.inBodyFileName || all[existingIdx].inBodyFileName,
+      inBodyFileUrl: params.inBodyFileUrl || all[existingIdx].inBodyFileUrl,
       updatedAt: nowIso,
       assignedByCoach: true,
     };
@@ -142,6 +174,12 @@ export async function assignSubscriberPassword(params: {
       plan: normalizedPlan,
       phone: params.phone,
       status: params.status || 'active',
+      age: params.age,
+      bloodType: params.bloodType,
+      visualGoal: params.visualGoal,
+      nutritionPlanLocked: params.nutritionPlanLocked || false,
+      inBodyFileName: params.inBodyFileName,
+      inBodyFileUrl: params.inBodyFileUrl,
       createdAt: nowIso,
       updatedAt: nowIso,
       assignedByCoach: true,
@@ -160,6 +198,7 @@ export async function assignSubscriberPassword(params: {
       plan: normalizedPlan,
       nameAr: params.clientName,
       status: params.status || 'active',
+      nutritionPlanLocked: updatedRecord.nutritionPlanLocked,
     };
     localStorage.setItem('oao_subscriber_plans_map', JSON.stringify(mapObj));
   } catch {
@@ -172,7 +211,6 @@ export async function assignSubscriberPassword(params: {
 
   if (supabase) {
     try {
-      // Upsert into public.clients table with assigned_password field if supported
       const clientPayload: Record<string, unknown> = {
         email: cleanEmail,
         name_ar: params.clientName,
@@ -180,23 +218,36 @@ export async function assignSubscriberPassword(params: {
         phone: params.phone || null,
         client_code: updatedRecord.clientCode,
         status: updatedRecord.status,
+        age: updatedRecord.age || null,
+        blood_type: updatedRecord.bloodType || null,
+        visual_goal: updatedRecord.visualGoal || null,
+        nutrition_plan_locked: Boolean(updatedRecord.nutritionPlanLocked),
+        inbody_filename: updatedRecord.inBodyFileName || null,
+        inbody_file_url: updatedRecord.inBodyFileUrl || null,
       };
 
-      // Try adding assigned_password
       try {
         await supabase
           .from('clients')
           .upsert({ ...clientPayload, assigned_password: cleanPass }, { onConflict: 'email' });
         syncedToSupabase = true;
       } catch {
-        // Fallback without assigned_password column
         await supabase
           .from('clients')
-          .upsert(clientPayload, { onConflict: 'email' });
+          .upsert(
+            {
+              email: cleanEmail,
+              name_ar: params.clientName,
+              subscription_plan: normalizedPlan,
+              phone: params.phone || null,
+              client_code: updatedRecord.clientCode,
+              status: updatedRecord.status,
+            },
+            { onConflict: 'email' }
+          );
         syncedToSupabase = true;
       }
 
-      // Mark locally as synced
       if (syncedToSupabase) {
         updatedRecord.syncedToSupabase = true;
         saveSubscribersList(all);
@@ -207,6 +258,188 @@ export async function assignSubscriberPassword(params: {
   }
 
   return { success: true, syncedToSupabase };
+}
+
+/**
+ * Permanently deletes a subscriber cascading through credentials, declarations, workouts, notes, and cloud.
+ */
+export async function deleteSubscriberRecord(email: string): Promise<boolean> {
+  const cleanEmail = email.trim().toLowerCase();
+  const all = getAllSubscribersWithCredentials();
+  const targetUser = all.find((u) => u.email.toLowerCase() === cleanEmail);
+  const filtered = all.filter((u) => u.email.toLowerCase() !== cleanEmail);
+  saveSubscribersList(filtered);
+
+  // Remove from declarations
+  try {
+    const declRaw = localStorage.getItem('oao_client_declarations');
+    if (declRaw) {
+      const decls = JSON.parse(declRaw) as Array<{ email?: string; id?: string }>;
+      const filteredDecls = decls.filter(
+        (d) => (d.email || '').trim().toLowerCase() !== cleanEmail
+      );
+      localStorage.setItem('oao_client_declarations', JSON.stringify(filteredDecls));
+      window.dispatchEvent(new CustomEvent('oao_declarations_updated', { detail: filteredDecls }));
+    }
+  } catch {
+    // ignore
+  }
+
+  // Remove related notes
+  try {
+    const notesRaw = localStorage.getItem('oao_client_notes');
+    if (notesRaw && targetUser) {
+      const notes = JSON.parse(notesRaw) as Array<{ clientId?: string; clientName?: string }>;
+      const filteredNotes = notes.filter(
+        (n) => n.clientId !== targetUser.id && n.clientName !== targetUser.clientName
+      );
+      localStorage.setItem('oao_client_notes', JSON.stringify(filteredNotes));
+      window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+    }
+  } catch {
+    // ignore
+  }
+
+  // Remove from plans map
+  try {
+    const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
+    if (mapRaw) {
+      const mapObj = JSON.parse(mapRaw);
+      delete mapObj[cleanEmail];
+      localStorage.setItem('oao_subscriber_plans_map', JSON.stringify(mapObj));
+    }
+  } catch {
+    // ignore
+  }
+
+  // Cascade delete from Supabase if configured
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase.from('clients').delete().eq('email', cleanEmail);
+      await supabase.from('declarations').delete().eq('email', cleanEmail);
+      if (targetUser?.id) {
+        await supabase.from('workouts').delete().eq('client_id', targetUser.id);
+        await supabase.from('notes').delete().eq('client_id', targetUser.id);
+        await supabase.from('profiles').delete().eq('id', targetUser.id);
+      }
+    } catch (e) {
+      console.warn('Supabase delete subscriber notice:', e);
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Toggles a subscriber status between 'active' and 'suspended' and syncs to Supabase.
+ */
+export function toggleSubscriberStatus(email: string): 'active' | 'suspended' {
+  const cleanEmail = email.trim().toLowerCase();
+  const all = getAllSubscribersWithCredentials();
+  const idx = all.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+  if (idx < 0) return 'active';
+
+  const newStatus = all[idx].status === 'suspended' ? 'active' : 'suspended';
+  all[idx].status = newStatus;
+  all[idx].updatedAt = new Date().toISOString();
+  saveSubscribersList(all);
+
+  // Mirror in plans map
+  try {
+    const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
+    const mapObj = mapRaw ? JSON.parse(mapRaw) : {};
+    if (mapObj[cleanEmail]) {
+      mapObj[cleanEmail].status = newStatus;
+      localStorage.setItem('oao_subscriber_plans_map', JSON.stringify(mapObj));
+    }
+  } catch {
+    // ignore
+  }
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase.from('clients').update({ status: newStatus }).eq('email', cleanEmail).then(() => {});
+  }
+
+  return newStatus;
+}
+
+/**
+ * Toggles a subscriber nutrition plan access lock and syncs to Supabase.
+ */
+export function toggleSubscriberNutritionLock(email: string, locked?: boolean): boolean {
+  const cleanEmail = email.trim().toLowerCase();
+  const all = getAllSubscribersWithCredentials();
+  const idx = all.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+  if (idx < 0) return false;
+
+  const currentVal = all[idx].nutritionPlanLocked || false;
+  const newVal = locked !== undefined ? locked : !currentVal;
+  all[idx].nutritionPlanLocked = newVal;
+  all[idx].updatedAt = new Date().toISOString();
+  saveSubscribersList(all);
+
+  try {
+    const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
+    const mapObj = mapRaw ? JSON.parse(mapRaw) : {};
+    if (mapObj[cleanEmail]) {
+      mapObj[cleanEmail].nutritionPlanLocked = newVal;
+      localStorage.setItem('oao_subscriber_plans_map', JSON.stringify(mapObj));
+    }
+  } catch {
+    // ignore
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('oao_nutrition_lock_updated', { detail: { email: cleanEmail, locked: newVal } }));
+  }
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase.from('clients').update({ nutrition_plan_locked: newVal }).eq('email', cleanEmail).then(() => {});
+  }
+
+  return newVal;
+}
+
+/**
+ * Check if nutrition plan is locked for a given subscriber email (or current logged-in user)
+ */
+export function isSubscriberNutritionLocked(email?: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (localStorage.getItem('oao_nutrition_locked') === 'true') return true;
+    let checkEmail = email?.trim().toLowerCase();
+    if (!checkEmail) {
+      const currentRaw = localStorage.getItem('oao_current_user');
+      if (currentRaw) {
+        const parsed = JSON.parse(currentRaw);
+        checkEmail = (parsed?.email || '').trim().toLowerCase();
+      }
+    }
+    if (!checkEmail) {
+      const profRaw = localStorage.getItem('oao_client_profile');
+      if (profRaw) {
+        const prof = JSON.parse(profRaw);
+        if (prof?.nutritionPlanLocked) return true;
+        checkEmail = (prof?.email || '').trim().toLowerCase();
+      }
+    }
+    if (!checkEmail) return false;
+    const all = getAllSubscribersWithCredentials();
+    const matched = all.find((u) => u.email.toLowerCase() === checkEmail);
+    if (matched?.nutritionPlanLocked) return true;
+
+    const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
+    if (mapRaw) {
+      const mapObj = JSON.parse(mapRaw);
+      if (mapObj[checkEmail]?.nutritionPlanLocked) return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
 }
 
 /**
@@ -244,6 +477,16 @@ export async function authenticateUser(
   // Search by email match with password
   const matchedByEmail = all.find((u) => u.email.toLowerCase() === cleanId);
   if (matchedByEmail) {
+    if (matchedByEmail.status === 'suspended') {
+      return {
+        success: false,
+        role: 'client',
+        email: matchedByEmail.email,
+        name: matchedByEmail.clientName,
+        plan: matchedByEmail.plan,
+        error: 'تم تعليق هذا الحساب مؤقتاً من قبل الكوتش. يرجى التواصل مع الإدارة.',
+      };
+    }
     if (!cleanPass) {
       return {
         success: false,
@@ -279,6 +522,16 @@ export async function authenticateUser(
     (u) => (u.clientCode && u.clientCode.toLowerCase() === cleanId) || cleanId === u.clientCode?.toUpperCase()
   );
   if (matchedByCode) {
+    if (matchedByCode.status === 'suspended') {
+      return {
+        success: false,
+        role: 'client',
+        email: matchedByCode.email,
+        name: matchedByCode.clientName,
+        plan: matchedByCode.plan,
+        error: 'تم تعليق هذا الحساب مؤقتاً من قبل الكوتش. يرجى التواصل مع الإدارة.',
+      };
+    }
     return {
       success: true,
       role: 'client',
