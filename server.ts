@@ -103,7 +103,7 @@ async function startServer() {
         updated_at: nowIso,
       };
 
-      const { data: existingSub } = await adminSupabase
+      const { data: existingSub, error: lookupSubErr } = await adminSupabase
         .from('subscribers')
         .select('id')
         .ilike('email', cleanEmail)
@@ -111,36 +111,44 @@ async function startServer() {
         .maybeSingle();
 
       let targetId = String(record.id || '');
-      if (existingSub && existingSub.id !== undefined) {
-        targetId = String(existingSub.id);
-        const { error: subUpdErr } = await adminSupabase
-          .from('subscribers')
-          .update(fullSubPayload)
-          .eq('id', existingSub.id);
-        if (subUpdErr && subUpdErr.message.toLowerCase().includes('column')) {
-          await adminSupabase
+      const isSubTableMissing =
+        Boolean(lookupSubErr) &&
+        (lookupSubErr?.code === '42P01' ||
+          lookupSubErr?.code === 'PGRST205' ||
+          (lookupSubErr?.message || '').toLowerCase().includes('could not find the table'));
+
+      if (!isSubTableMissing) {
+        if (existingSub && existingSub.id !== undefined) {
+          targetId = String(existingSub.id);
+          const { error: subUpdErr } = await adminSupabase
             .from('subscribers')
-            .update({
+            .update(fullSubPayload)
+            .eq('id', existingSub.id);
+          if (subUpdErr && subUpdErr.message.toLowerCase().includes('column')) {
+            await adminSupabase
+              .from('subscribers')
+              .update({
+                name: clientName,
+                email: cleanEmail,
+                passcode: cleanPass,
+                tier: normalizedPlan,
+                goals: record.visualGoal || null,
+              })
+              .eq('id', existingSub.id);
+          }
+        } else {
+          const { error: subInsErr } = await adminSupabase
+            .from('subscribers')
+            .insert({ ...(targetId ? { id: targetId } : {}), ...fullSubPayload });
+          if (subInsErr && subInsErr.message.toLowerCase().includes('column')) {
+            await adminSupabase.from('subscribers').insert({
               name: clientName,
               email: cleanEmail,
               passcode: cleanPass,
               tier: normalizedPlan,
               goals: record.visualGoal || null,
-            })
-            .eq('id', existingSub.id);
-        }
-      } else {
-        const { error: subInsErr } = await adminSupabase
-          .from('subscribers')
-          .insert({ ...(targetId ? { id: targetId } : {}), ...fullSubPayload });
-        if (subInsErr && subInsErr.message.toLowerCase().includes('column')) {
-          await adminSupabase.from('subscribers').insert({
-            name: clientName,
-            email: cleanEmail,
-            passcode: cleanPass,
-            tier: normalizedPlan,
-            goals: record.visualGoal || null,
-          });
+            });
+          }
         }
       }
 
@@ -268,16 +276,19 @@ async function startServer() {
         break;
       }
 
-      await adminSupabase.from('workouts').upsert(
-        {
-          id: `auth_${cleanEmail}`,
-          client_id: resolvedClientId || cleanEmail,
-          day_key: 'client_auth',
-          workout_data: { ...record, id: resolvedClientId || record.id, syncedToSupabase: true },
-          updated_at: nowIso,
-        },
-        { onConflict: 'id' }
-      );
+      await adminSupabase
+        .from('workouts')
+        .upsert(
+          {
+            id: `auth_${cleanEmail}`,
+            client_id: resolvedClientId || cleanEmail,
+            day_key: 'client_auth',
+            workout_data: { ...record, id: resolvedClientId || record.id, syncedToSupabase: true },
+            updated_at: nowIso,
+          },
+          { onConflict: 'id' }
+        )
+        .then(() => undefined, () => undefined);
 
       res.json({ success: true, id: resolvedClientId || targetId });
     } catch (err) {

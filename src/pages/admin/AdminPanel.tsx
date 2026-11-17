@@ -21,6 +21,8 @@ import {
   getSupabaseConfig,
   saveSupabaseConfig,
   testSupabaseConnection,
+  checkSupabaseTablesStatus,
+  SupabaseTableHealth,
   SUPABASE_SQL_SCHEMA,
   SUPABASE_RLS_FIX_SQL,
   fetchAILogs,
@@ -158,10 +160,17 @@ export const AdminPanel: React.FC = () => {
   const currentConfig = getSupabaseConfig();
   const [supabaseUrl, setSupabaseUrl] = useState(currentConfig.url);
   const [supabaseKey, setSupabaseKey] = useState(currentConfig.key);
-  const [connStatus, setConnStatus] = useState<{ testing: boolean; message: string; success?: boolean; isLocalMode?: boolean }>({
+  const [connStatus, setConnStatus] = useState<{
+    testing: boolean;
+    message: string;
+    success?: boolean;
+    isLocalMode?: boolean;
+    tables?: SupabaseTableHealth[];
+  }>({
     testing: false,
     message: '',
   });
+  const [dbTablesHealth, setDbTablesHealth] = useState<SupabaseTableHealth[]>([]);
   const [savedConfigMessage, setSavedConfigMessage] = useState(false);
   const [copiedSchema, setCopiedSchema] = useState(false);
   const [copiedRlsFix, setCopiedRlsFix] = useState(false);
@@ -279,6 +288,8 @@ export const AdminPanel: React.FC = () => {
         selectedTargetKeyRef.current = savedTargetKey;
       }
       await refreshSubscribersDirectory(true);
+      const tableHealth = await checkSupabaseTablesStatus();
+      if (mounted && tableHealth.length > 0) setDbTablesHealth(tableHealth);
     })();
 
     const syncLiveDeclarations = () => {
@@ -1589,11 +1600,13 @@ export const AdminPanel: React.FC = () => {
                     onClick={async () => {
                       setConnStatus({ testing: true, message: 'جاري فحص الاتصال...' });
                       const res = await testSupabaseConnection(supabaseUrl, supabaseKey);
+                      if (res.tables && res.tables.length > 0) setDbTablesHealth(res.tables);
                       setConnStatus({
                         testing: false,
                         message: res.message,
                         success: res.success,
                         isLocalMode: res.isLocalMode,
+                        tables: res.tables,
                       });
                     }}
                     disabled={connStatus.testing}
@@ -1630,6 +1643,39 @@ export const AdminPanel: React.FC = () => {
                         ملاحظة: يجب إدخال بيانات مشروع Supabase صالحة (Project URL و Anon Key) لحفظ واسترجاع بيانات المشتركين سحابياً عبر الأجهزة.
                       </p>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Live 7-Table Schema Diagnostics */}
+              {dbTablesHealth.length > 0 && (
+                <div className="p-4 rounded-2xl bg-black/40 border border-white/10 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-200">
+                      حالة جداول Supabase المطلوبة ({dbTablesHealth.filter((t) => t.exists && !t.rlsBlocked).length}/{dbTablesHealth.length} جاهز):
+                    </span>
+                    {dbTablesHealth.some((t) => !t.exists || t.rlsBlocked) && (
+                      <span className="text-[11px] text-amber-300 font-semibold">
+                        انسخ كود SQL لتهيئة الجداول وشغّله في Supabase SQL Editor لإنشاء الجداول المفقودة
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {dbTablesHealth.map((t) => (
+                      <span
+                        key={t.table}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border flex items-center gap-1.5 ${
+                          !t.exists
+                            ? 'bg-red-500/15 border-red-500/40 text-red-300'
+                            : t.rlsBlocked
+                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                            : 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                        }`}
+                      >
+                        <span>{t.table}</span>
+                        <span>{!t.exists ? '✕ مفقود' : t.rlsBlocked ? '⚠ RLS' : '✓'}</span>
+                      </span>
+                    ))}
                   </div>
                 </div>
               )}

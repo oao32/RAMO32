@@ -195,12 +195,18 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     setEditMessage(null);
     setIsSavingEdit(true);
 
+    const trimmedNewPass = editPassword.trim() || editingSubscriber.password || 'OAO-2026';
+    const nextClientCode =
+      editPassword.trim() && editPassword.trim() !== editingSubscriber.password
+        ? editPassword.trim()
+        : editingSubscriber.clientCode;
+
     const res = await assignSubscriberPassword({
       id: editingSubscriber.id,
       email: editEmail.trim(),
-      password: editPassword.trim() || editingSubscriber.password || 'OAO-2026',
+      password: trimmedNewPass,
       clientName: editName.trim(),
-      clientCode: editingSubscriber.clientCode,
+      clientCode: nextClientCode,
       plan: editPlan,
       phone: editPhone.trim() || undefined,
       age: editAge ? Number(editAge) : undefined,
@@ -301,7 +307,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       email: resetModalUser.email,
       password: newPasswordVal.trim(),
       clientName: resetModalUser.clientName,
-      clientCode: resetModalUser.clientCode,
+      clientCode: newPasswordVal.trim(),
       plan: resetModalUser.plan,
       phone: resetModalUser.phone,
       age: resetModalUser.age,

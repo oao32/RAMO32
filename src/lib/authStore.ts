@@ -3,8 +3,10 @@ import {
   formatSupabaseErrorMessage,
   getSupabaseClient,
   isCoachIdConstraintError,
+  isMissingTableError as isMissingTableErrShared,
   normalizeSubscriptionPlan,
   writeClientRowSafely,
+  writeTableRowSafely,
 } from './supabase';
 
 export interface UserCredentialRecord {
@@ -196,7 +198,7 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
       subscribersRes = await supabase.from('subscribers').select('*');
     }
 
-    const [clientsRes, authMirrorsRes] = await Promise.all([
+    let [clientsRes, authMirrorsRes] = await Promise.all([
       supabase
         .from('clients')
         .select('*')
@@ -206,6 +208,10 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
         .select('*')
         .eq('day_key', 'client_auth'),
     ]);
+
+    if (clientsRes.error && isMissingColumnError(clientsRes.error)) {
+      clientsRes = await supabase.from('clients').select('*');
+    }
 
     if (subscribersRes.error && clientsRes.error && authMirrorsRes.error) {
       return subscribersMemoryCache;
@@ -265,6 +271,8 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
             ? String(row.assigned_password)
             : mirror?.password
             ? String(mirror.password)
+            : row.client_code
+            ? String(row.client_code)
             : 'OAO-2026',
           clientName: String(row.name_ar || row.name_en || mirror?.clientName || 'مشترك'),
           clientCode: row.client_code
@@ -458,7 +466,7 @@ export async function assignSubscriberPassword(params: {
       }
     }
 
-    // 1. Insert / Update directly into central `public.subscribers` table (avoid `.select()` after write & `.upsert()` to minimize RLS surface)
+    // 1. Insert / Update directly into central `public.subscribers` table (schema-adaptive)
     let targetSubscriberId = resolvedId;
     let subscribersTableMissing = false;
     let subscribersSynced = false;
@@ -471,10 +479,11 @@ export async function assignSubscriberPassword(params: {
       .limit(1)
       .maybeSingle();
 
-    if (isMissingTableError(lookupSubErr)) {
+    if (isMissingTableError(lookupSubErr) || isMissingTableErrShared(lookupSubErr)) {
       subscribersTableMissing = true;
     } else {
       const fullSubPayload: Record<string, unknown> = {
+        id: targetSubscriberId,
         name: updatedRecord.clientName,
         email: cleanEmail,
         passcode: cleanPass,
@@ -491,46 +500,24 @@ export async function assignSubscriberPassword(params: {
         updated_at: nowIso,
       };
 
-      const coreSubPayload: Record<string, unknown> = {
-        name: updatedRecord.clientName,
-        email: cleanEmail,
-        passcode: cleanPass,
-        tier: normalizedPlan,
-        goals: updatedRecord.visualGoal || null,
-      };
+      const existingSubId =
+        existingSub && existingSub.id !== undefined && existingSub.id !== null
+          ? (existingSub.id as string | number)
+          : null;
+      if (existingSubId !== null) {
+        targetSubscriberId = String(existingSubId);
+      }
 
-      if (existingSub && existingSub.id !== undefined && existingSub.id !== null) {
-        targetSubscriberId = String(existingSub.id);
-        let res = await supabase
-          .from('subscribers')
-          .update(fullSubPayload)
-          .eq('id', existingSub.id);
+      const subWriteRes = await writeTableRowSafely(supabase, 'subscribers', fullSubPayload, {
+        matchColumn: existingSubId !== null ? 'id' : undefined,
+        matchValue: existingSubId,
+      });
 
-        if (res.error && isMissingColumnError(res.error)) {
-          res = await supabase
-            .from('subscribers')
-            .update(coreSubPayload)
-            .eq('id', existingSub.id);
-        }
-        subscribersErr = res.error;
-        subscribersSynced = !res.error;
+      if (subWriteRes.missingTable) {
+        subscribersTableMissing = true;
       } else {
-        let res = await supabase
-          .from('subscribers')
-          .insert({ id: targetSubscriberId, ...fullSubPayload });
-
-        if (res.error && isMissingColumnError(res.error)) {
-          res = await supabase
-            .from('subscribers')
-            .insert(coreSubPayload);
-        } else if (res.error && res.error.message.toLowerCase().includes('uuid')) {
-          res = await supabase
-            .from('subscribers')
-            .insert(fullSubPayload);
-        }
-
-        subscribersErr = res.error;
-        subscribersSynced = !res.error;
+        subscribersErr = subWriteRes.error;
+        subscribersSynced = !subWriteRes.error;
       }
     }
 
@@ -549,9 +536,13 @@ export async function assignSubscriberPassword(params: {
       };
     }
 
-    // 2. Keep linked `public.clients` table synchronized (explicit insert vs update to avoid upsert dual-RLS check)
+    // 2. Keep linked `public.clients` table synchronized (schema-adaptive across any pre-existing columns/constraints)
     let targetClientId = UUID_REGEX.test(targetSubscriberId) ? targetSubscriberId : resolvedId;
-    const { data: existingClient } = await supabase
+    let clientsTableMissing = false;
+    let clientsErr: { code?: string; message: string } | null = null;
+    let clientsResData: { id?: string } | null = null;
+
+    let clientLookup = await supabase
       .from('clients')
       .select('id')
       .ilike('email', cleanEmail)
@@ -559,65 +550,75 @@ export async function assignSubscriberPassword(params: {
       .limit(1)
       .maybeSingle();
 
-    const clientExistsInDb = Boolean(existingClient && typeof existingClient.id === 'string');
-    if (existingClient && typeof existingClient.id === 'string') {
-      targetClientId = existingClient.id;
-      updatedRecord.id = targetClientId;
+    if (clientLookup.error && isMissingColumnError(clientLookup.error)) {
+      clientLookup = await supabase
+        .from('clients')
+        .select('id')
+        .ilike('email', cleanEmail)
+        .limit(1)
+        .maybeSingle();
     }
 
-    const fullClientPayload: Record<string, unknown> = {
-      id: targetClientId,
-      email: cleanEmail,
-      name_ar: updatedRecord.clientName,
-      name_en: updatedRecord.clientName,
-      height_cm: 175,
-      target_weight_kg: 70,
-      subscription_plan: normalizedPlan,
-      package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
-      package_type_en: normalizedPlan,
-      phone: updatedRecord.phone || null,
-      client_code: updatedRecord.clientCode,
-      status: updatedRecord.status,
-      assigned_password: cleanPass,
-      age: updatedRecord.age ?? null,
-      blood_type: updatedRecord.bloodType || null,
-      visual_goal: updatedRecord.visualGoal || null,
-      nutrition_plan_locked: Boolean(updatedRecord.nutritionPlanLocked),
-      inbody_filename: updatedRecord.inBodyFileName || null,
-      inbody_file_url: updatedRecord.inBodyFileUrl || null,
-    };
+    if (isMissingTableError(clientLookup.error) || isMissingTableErrShared(clientLookup.error)) {
+      clientsTableMissing = true;
+    } else {
+      clientsResData = clientLookup.data as { id?: string } | null;
+      const clientExistsInDb = Boolean(clientsResData && typeof clientsResData.id === 'string');
+      if (clientsResData && typeof clientsResData.id === 'string') {
+        targetClientId = clientsResData.id;
+        updatedRecord.id = targetClientId;
+      }
 
-    const existingClientRowId = clientExistsInDb ? targetClientId : null;
-    let { error: clientsErr } = await writeClientRowSafely(
-      supabase,
-      fullClientPayload,
-      existingClientRowId
-    );
-
-    if (clientsErr && isMissingColumnError(clientsErr)) {
-      const corePayload: Record<string, unknown> = {
+      const fullClientPayload: Record<string, unknown> = {
         id: targetClientId,
         email: cleanEmail,
         name_ar: updatedRecord.clientName,
         name_en: updatedRecord.clientName,
         height_cm: 175,
         target_weight_kg: 70,
+        subscription_plan: normalizedPlan,
         package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
         package_type_en: normalizedPlan,
         phone: updatedRecord.phone || null,
         client_code: updatedRecord.clientCode,
         status: updatedRecord.status,
+        assigned_password: cleanPass,
+        age: updatedRecord.age ?? null,
+        blood_type: updatedRecord.bloodType || null,
+        visual_goal: updatedRecord.visualGoal || null,
+        nutrition_plan_locked: Boolean(updatedRecord.nutritionPlanLocked),
+        inbody_filename: updatedRecord.inBodyFileName || null,
+        inbody_file_url: updatedRecord.inBodyFileUrl || null,
       };
-      const retryRes = await writeClientRowSafely(
+
+      const existingClientRowId = clientExistsInDb ? targetClientId : null;
+      const clientWriteRes = await writeClientRowSafely(
         supabase,
-        corePayload,
+        fullClientPayload,
         existingClientRowId
       );
-      clientsErr = retryRes.error;
+
+      clientsTableMissing = clientWriteRes.missingTable;
+      clientsErr = clientWriteRes.error;
+
+      // If `assigned_password` column doesn't exist in `clients` yet, mirror the passcode into `client_code`
+      if (
+        !clientsTableMissing &&
+        !clientsErr &&
+        clientWriteRes.strippedColumns.includes('assigned_password') &&
+        updatedRecord.clientCode !== cleanPass
+      ) {
+        updatedRecord.clientCode = cleanPass;
+        await supabase
+          .from('clients')
+          .update({ client_code: cleanPass })
+          .ilike('email', cleanEmail);
+      }
     }
 
-    // If `clients` threw an RLS or NOT NULL constraint violation, fail visibly with actionable instructions
+    // If `clients` threw an RLS or unrecoverable constraint violation, fail visibly
     if (
+      !clientsTableMissing &&
       clientsErr &&
       (isRlsPolicyError(clientsErr) ||
         isCoachIdConstraintError(clientsErr) ||
@@ -631,32 +632,62 @@ export async function assignSubscriberPassword(params: {
       };
     }
 
-    // 3. Mirror full subscriber auth bundle into `workouts` (`day_key = 'client_auth'`)
+    // 3. Optionally mirror full subscriber auth bundle into `workouts` (`day_key = 'client_auth'`) if `workouts` table exists
+    let workoutsTableMissing = false;
+    let mirrorErr: { code?: string; message: string } | null = null;
     const authMirrorId = `auth_${cleanEmail}`;
-    const { data: existingAuthRow } = await supabase
+
+    const { data: existingAuthRow, error: authLookupErr } = await supabase
       .from('workouts')
       .select('id')
       .eq('id', authMirrorId)
       .limit(1)
       .maybeSingle();
 
-    const authMirrorPayload = {
-      client_id: targetClientId,
-      day_key: 'client_auth',
-      workout_data: {
-        ...updatedRecord,
-        syncedToSupabase: true,
-      },
-      updated_at: nowIso,
-    };
+    if (isMissingTableError(authLookupErr) || isMissingTableErrShared(authLookupErr)) {
+      workoutsTableMissing = true;
+    } else {
+      const authMirrorPayload = {
+        client_id: targetClientId,
+        day_key: 'client_auth',
+        workout_data: {
+          ...updatedRecord,
+          syncedToSupabase: true,
+        },
+        updated_at: nowIso,
+      };
 
-    const { error: mirrorErr } = existingAuthRow
-      ? await supabase.from('workouts').update(authMirrorPayload).eq('id', authMirrorId)
-      : await supabase.from('workouts').insert({ id: authMirrorId, ...authMirrorPayload });
+      const mirrorRes = existingAuthRow
+        ? await supabase.from('workouts').update(authMirrorPayload).eq('id', authMirrorId)
+        : await supabase.from('workouts').insert({ id: authMirrorId, ...authMirrorPayload });
 
-    const syncedToSupabase = subscribersSynced || (!clientsErr && !mirrorErr);
+      if (isMissingTableError(mirrorRes.error) || isMissingTableErrShared(mirrorRes.error)) {
+        workoutsTableMissing = true;
+      } else {
+        mirrorErr = mirrorRes.error;
+      }
+    }
+
+    const clientsSaved = !clientsTableMissing && !clientsErr;
+    const workoutsSaved = !workoutsTableMissing && !mirrorErr;
+    const syncedToSupabase = subscribersSynced || clientsSaved || workoutsSaved;
+
     if (!syncedToSupabase) {
-      const rawErr = subscribersErr || clientsErr || mirrorErr;
+      if (subscribersTableMissing && clientsTableMissing && workoutsTableMissing) {
+        return {
+          success: false,
+          syncedToSupabase: false,
+          error:
+            'لم يتم العثور على جداول قاعدة البيانات (subscribers / clients / workouts) في Supabase. افتح تبويب (قاعدة البيانات و Supabase) واضغط (نسخ كود SQL لتهيئة الجداول) وشغّله في Supabase SQL Editor.',
+        };
+      }
+      const rawErr =
+        (!subscribersTableMissing && subscribersErr) ||
+        (!clientsTableMissing && clientsErr) ||
+        (!workoutsTableMissing && mirrorErr) ||
+        subscribersErr ||
+        clientsErr ||
+        mirrorErr;
       return {
         success: false,
         syncedToSupabase: false,
@@ -1030,7 +1061,7 @@ export async function authenticateUser(
   // Always query live subscriber directory directly from Supabase (`subscribers` + `clients` + `client_auth`)
   const all = await fetchSubscribersFromSupabase();
 
-  // Also run a direct targeted query against `public.subscribers` to guarantee immediate fresh validation
+  // Also run a direct targeted query against `public.subscribers` and `public.clients` for immediate fresh validation
   let directSubRecord: UserCredentialRecord | null = null;
   try {
     const directRes = cleanPass
@@ -1044,8 +1075,7 @@ export async function authenticateUser(
 
     if (!directRes.error && directRes.data) {
       directSubRecord = mapSubscribersRowToRecord(directRes.data as Record<string, unknown>);
-    } else if (directRes.error && !cleanPass) {
-      // Retry without `client_code` in case `subscribers` has only the 5 core columns
+    } else if (directRes.error && !cleanPass && !isMissingTableError(directRes.error)) {
       const fallbackRes = await supabase
         .from('subscribers')
         .select('*')
@@ -1057,7 +1087,42 @@ export async function authenticateUser(
       }
     }
   } catch {
-    // ignore transient targeted query failure; fall back to `all` hydrated above
+    // ignore transient failure; check `clients` next
+  }
+
+  if (!directSubRecord) {
+    try {
+      let directClientRes = cleanPass
+        ? await supabase.from('clients').select('*').ilike('email', cleanId).limit(1).maybeSingle()
+        : await supabase
+            .from('clients')
+            .select('*')
+            .or(`email.ilike.${cleanId},assigned_password.ilike.${cleanId},client_code.ilike.${cleanId}`)
+            .limit(1)
+            .maybeSingle();
+
+      if (directClientRes.error && !cleanPass && isMissingColumnError(directClientRes.error)) {
+        directClientRes = await supabase
+          .from('clients')
+          .select('*')
+          .or(`email.ilike.${cleanId},client_code.ilike.${cleanId}`)
+          .limit(1)
+          .maybeSingle();
+      }
+
+      if (!directClientRes.error && directClientRes.data) {
+        const cRow = directClientRes.data as Record<string, unknown>;
+        directSubRecord = mapSubscribersRowToRecord({
+          ...cRow,
+          passcode: cRow.assigned_password ?? cRow.client_code,
+          tier: cRow.subscription_plan ?? cRow.package_type_en,
+          name: cRow.name_ar ?? cRow.name_en,
+          goals: cRow.visual_goal,
+        });
+      }
+    } catch {
+      // fall back to `all` hydrated above
+    }
   }
 
   // 1. Credentials mode (Email + Passcode/Password) or direct email lookup

@@ -76,6 +76,23 @@ function generateUUID(): string {
   });
 }
 
+export function isMissingTableError(err: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  return (
+    err.code === '42P01' ||
+    err.code === 'PGRST205' ||
+    msg.includes('could not find the table') ||
+    (msg.includes('relation') && msg.includes('does not exist'))
+  );
+}
+
+export function isMissingColumnError(err: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  return err.code === 'PGRST204' || err.code === '42703' || msg.includes('could not find the') || msg.includes('column');
+}
+
 /**
  * Format any Supabase or network error into a clear, user-friendly message
  */
@@ -103,8 +120,16 @@ export function formatSupabaseErrorMessage(error: unknown): string {
   if (rawMsg.includes('User already registered')) {
     return 'هذا الحساب مسجل مسبقاً، يرجى الانتقال إلى تسجيل الدخول.';
   }
-  if (rawMsg.includes('relation') && rawMsg.includes('does not exist')) {
-    return 'الجدول غير موجود في قاعدة بيانات Supabase. يرجى تشغيل استعلام SQL الموجود في لوحة التحكم.';
+  if (
+    rawMsg.includes('PGRST205') ||
+    rawMsg.toLowerCase().includes('could not find the table') ||
+    (rawMsg.includes('relation') && rawMsg.includes('does not exist'))
+  ) {
+    const tblMatch =
+      rawMsg.match(/table ['"]?([a-zA-Z0-9_.]+)['"]?/i) ||
+      rawMsg.match(/relation ["']?([a-zA-Z0-9_.]+)["']?/i);
+    const tblName = tblMatch?.[1] || 'المطلوب';
+    return `الجدول (${tblName}) غير منشأ بعد في قاعدة بيانات Supabase. افتح تبويب (قاعدة البيانات و Supabase) واضغط (نسخ كود SQL لتهيئة الجداول) ثم شغّله مرة واحدة في Supabase SQL Editor.`;
   }
   if (
     rawMsg.toLowerCase().includes('row-level security') ||
@@ -554,11 +579,59 @@ export function mapGeneratedDaysToSchedule(
   return [...mappedActiveDays, restDay];
 }
 
+export interface SupabaseTableHealth {
+  table: string;
+  exists: boolean;
+  rlsBlocked: boolean;
+}
+
+export const REQUIRED_SUPABASE_TABLES = [
+  'subscribers',
+  'clients',
+  'workouts',
+  'profiles',
+  'declarations',
+  'notes',
+  'ai_generation_logs',
+] as const;
+
+export async function checkSupabaseTablesStatus(
+  url?: string,
+  key?: string
+): Promise<SupabaseTableHealth[]> {
+  const cfg = getSupabaseConfig();
+  const cleanUrl = (url || cfg.url || '').trim();
+  const cleanKey = (key || cfg.key || '').trim();
+  if (!cleanUrl || !cleanKey || !cleanUrl.startsWith('http')) {
+    return [];
+  }
+  const client = createClient(cleanUrl, cleanKey);
+  return Promise.all(
+    REQUIRED_SUPABASE_TABLES.map(async (table) => {
+      try {
+        const { error } = await client.from(table).select('*', { count: 'exact', head: true });
+        if (!error || error.code === 'PGRST116') {
+          return { table, exists: true, rlsBlocked: false };
+        }
+        if (isMissingTableError(error)) {
+          return { table, exists: false, rlsBlocked: false };
+        }
+        if (error.code === '42501' || (error.message || '').toLowerCase().includes('row-level security')) {
+          return { table, exists: true, rlsBlocked: true };
+        }
+        return { table, exists: true, rlsBlocked: false };
+      } catch {
+        return { table, exists: false, rlsBlocked: false };
+      }
+    })
+  );
+}
+
 // Check connection to Supabase
 export async function testSupabaseConnection(
   url: string,
   key: string
-): Promise<{ success: boolean; message: string; isLocalMode?: boolean }> {
+): Promise<{ success: boolean; message: string; isLocalMode?: boolean; tables?: SupabaseTableHealth[] }> {
   try {
     const cleanUrl = (url || '').trim();
     const cleanKey = (key || '').trim();
@@ -574,23 +647,34 @@ export async function testSupabaseConnection(
 
     const testClient = createClient(cleanUrl, cleanKey);
     const { error } = await testClient
-      .from('ai_generation_logs')
+      .from('clients')
       .select('id', { count: 'exact', head: true });
 
-    if (error && error.code !== 'PGRST116') {
-      if (error.message.includes('relation') || error.message.includes('does not exist')) {
-        return {
-          success: true,
-          isLocalMode: false,
-          message: 'تم الاتصال بـ Supabase بنجاح! (يرجى تشغيل كود SQL لإنشاء الجداول في حال عدم إنشائها مسبقاً)',
-        };
-      }
-      return { success: false, isLocalMode: false, message: formatSupabaseErrorMessage(error) };
+    const tables = await checkSupabaseTablesStatus(cleanUrl, cleanKey);
+    const missingTables = tables.filter((t) => !t.exists).map((t) => t.table);
+    const rlsTables = tables.filter((t) => t.rlsBlocked).map((t) => t.table);
+
+    if (error && error.code !== 'PGRST116' && !isMissingTableError(error) && error.code !== '42501') {
+      return { success: false, isLocalMode: false, message: formatSupabaseErrorMessage(error), tables };
     }
+
+    if (missingTables.length > 0 || rlsTables.length > 0) {
+      const notes: string[] = [];
+      if (missingTables.length > 0) notes.push(`جداول مفقودة: ${missingTables.join(', ')}`);
+      if (rlsTables.length > 0) notes.push(`جداول مقيدة بـ RLS: ${rlsTables.join(', ')}`);
+      return {
+        success: true,
+        isLocalMode: false,
+        tables,
+        message: `تم الاتصال بـ Supabase بنجاح! تنبيه: (${notes.join(' | ')}). يرجى تشغيل كود SQL لتهيئة الجداول أو إصلاح RLS.`,
+      };
+    }
+
     return {
       success: true,
       isLocalMode: false,
-      message: 'تم التحقق من الاتصال السحابي بـ Supabase وجدول ai_generation_logs بنجاح!',
+      tables,
+      message: 'تم التحقق من الاتصال السحابي بـ Supabase وجميع الجداول الـ 7 جاهزة وتعمل بنجاح!',
     };
   } catch (err) {
     return {
@@ -621,13 +705,8 @@ export async function syncNoteToSupabase(note: ClientNote): Promise<boolean> {
       is_resolved: note.isResolved,
     };
 
-    let { error } = await client.from('notes').upsert(fullPayload, { onConflict: 'id' });
-    if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message.includes('client_email'))) {
-      const { client_email: _omit, ...corePayload } = fullPayload;
-      const retry = await client.from('notes').upsert(corePayload, { onConflict: 'id' });
-      error = retry.error;
-    }
-    return !error;
+    const res = await writeTableRowSafely(client, 'notes', fullPayload, { onConflict: 'id' });
+    return !res.error;
   } catch (err) {
     console.warn('Supabase sync note error:', err);
     return false;
@@ -762,7 +841,7 @@ export async function resolveDefaultCoachId(
   return DEFAULT_COACH_UUID;
 }
 
-function getDefaultValueForRequiredClientColumn(
+function getDefaultValueForRequiredColumn(
   colName: string,
   payload: Record<string, unknown>,
   resolvedCoachId: string
@@ -776,14 +855,15 @@ function getDefaultValueForRequiredClientColumn(
   if (c === 'muscle_mass' || c === 'muscle_mass_kg') return 32;
   if (c === 'body_fat' || c === 'body_fat_pct') return 20;
   if (c === 'daily_calories' || c === 'calories') return 2000;
+  if (c === 'daily_water_current') return 2.0;
   if (c === 'gender') return 'male';
   if (c === 'status') return 'active';
   if (c === 'subscription_plan' || c === 'package_type_en' || c === 'tier') return 'standard';
-  if (c === 'package_type_ar') return 'الباقة القياسية (Standard)';
-  if (c === 'name_ar' || c === 'name_en' || c === 'name' || c === 'full_name') {
-    return payload.name_ar || payload.name_en || payload.email || 'مشترك';
+  if (c === 'package_type_ar' || c === 'plan_name_ar') return 'الباقة القياسية (Standard)';
+  if (c === 'name_ar' || c === 'name_en' || c === 'name' || c === 'full_name' || c === 'client_name') {
+    return payload.name_ar || payload.name_en || payload.name || payload.full_name || payload.email || 'مشترك';
   }
-  if (c === 'client_code') return payload.client_code || 'OAO-1000';
+  if (c === 'client_code' || c === 'passcode') return payload.client_code || payload.passcode || 'OAO-1000';
   if (c === 'phone' || c === 'phone_whatsapp') return '0500000000';
   if (c === 'email') return payload.email || 'client@oao.fit';
   if (c === 'visual_goal' || c === 'goal' || c === 'goals') return 'Bulking';
@@ -792,8 +872,9 @@ function getDefaultValueForRequiredClientColumn(
   if (c === 'subscription_end_date' || c === 'end_date') {
     return new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
   }
+  if (c === 'workout_data' || c === 'structured_plan') return {};
   if (c.endsWith('_id') || c.includes('uuid')) return generateUUID();
-  if (c.endsWith('_at') || c.endsWith('_date')) return new Date().toISOString();
+  if (c.endsWith('_at') || c.endsWith('_date') || c.endsWith('_timestamp')) return new Date().toISOString();
   if (c.startsWith('is_') || c.startsWith('has_') || c.startsWith('agreed_') || c.endsWith('_locked')) {
     return false;
   }
@@ -825,23 +906,35 @@ function extractColumnFromPostgresError(message: string): string | null {
   return null;
 }
 
+export interface SafeTableWriteResult {
+  error: { code?: string; message: string } | null;
+  missingTable: boolean;
+  strippedColumns: string[];
+}
+
 /**
- * Insert or update a row in `public.clients` safely:
- * - Includes valid `coach_id` only if explicitly provided, otherwise omits it cleanly.
- * - Automatically adapts to pre-existing DB schemas:
- *   1) If ANY column fails NOT NULL (`23502`, e.g. `height_cm`, `target_weight_kg`, `coach_id`), populates a valid default and retries.
- *   2) If ANY column is missing (`PGRST204` / `42703`), strips that missing column and retries without losing the other fields.
- *   3) If `coach_id` hits a FK error (`23503`) when nullable, strips `coach_id` and retries.
+ * Universal schema-adaptive writer for Supabase tables (`clients`, `subscribers`, `declarations`, `notes`, `profiles`):
+ * 1) Detects missing table (`PGRST205` / `42P01`) without crashing.
+ * 2) Auto-fills any pre-existing `NOT NULL` (`23502`) column with a safe default and retries.
+ * 3) Auto-strips ONLY missing columns (`PGRST204` / `42703`) and retries while preserving all remaining fields.
+ * 4) Strips synthetic `coach_id` if it hits a FK error (`23503`) when nullable.
  */
-export async function writeClientRowSafely(
+export async function writeTableRowSafely(
   client: SupabaseClient,
+  tableName: string,
   payload: Record<string, unknown>,
-  existingRowId?: string | null,
-  explicitCoachId?: string | null
-): Promise<{ error: { code?: string; message: string } | null }> {
+  options?: {
+    matchColumn?: string;
+    matchValue?: string | number | null;
+    onConflict?: string;
+    explicitCoachId?: string | null;
+  }
+): Promise<SafeTableWriteResult> {
   const currentPayload: Record<string, unknown> = { ...payload };
-  if (explicitCoachId && UUID_REGEX.test(explicitCoachId.trim())) {
-    currentPayload.coach_id = explicitCoachId.trim();
+  const strippedColumns: string[] = [];
+
+  if (options?.explicitCoachId && UUID_REGEX.test(options.explicitCoachId.trim())) {
+    currentPayload.coach_id = options.explicitCoachId.trim();
   } else if (
     currentPayload.coach_id === undefined ||
     currentPayload.coach_id === null ||
@@ -851,21 +944,40 @@ export async function writeClientRowSafely(
   }
 
   const executeWrite = async (row: Record<string, unknown>) => {
-    if (existingRowId) {
-      const { id: _omit, ...upd } = row;
-      return client.from('clients').update(upd).eq('id', existingRowId);
+    if (options?.matchValue !== undefined && options?.matchValue !== null && options?.matchColumn) {
+      const { id: _omitId, ...upd } = row;
+      return client.from(tableName).update(upd).eq(options.matchColumn, options.matchValue);
     }
-    return client.from('clients').insert(row);
+    if (options?.onConflict) {
+      return client.from(tableName).upsert(row, { onConflict: options.onConflict });
+    }
+    return client.from(tableName).insert(row);
   };
 
   let { error } = await executeWrite(currentPayload);
   let cachedCoachId: string | null = null;
 
-  for (let attempt = 0; attempt < 8 && error; attempt++) {
+  for (let attempt = 0; attempt < 10 && error; attempt++) {
+    if (isMissingTableError(error)) {
+      return { error, missingTable: true, strippedColumns };
+    }
+
     const msg = error.message || '';
     const lowerMsg = msg.toLowerCase();
 
-    // 1. Handle NOT NULL constraint (23502) on any column (coach_id, height_cm, target_weight_kg, etc.)
+    // Handle invalid UUID format on primary key `id` (e.g. if table uses auto-increment or different UUID)
+    if (
+      (error.code === '22P02' || lowerMsg.includes('invalid input syntax for type uuid')) &&
+      Object.prototype.hasOwnProperty.call(currentPayload, 'id')
+    ) {
+      delete currentPayload.id;
+      strippedColumns.push('id');
+      const retryRes = await executeWrite(currentPayload);
+      error = retryRes.error;
+      continue;
+    }
+
+    // 1. Handle NOT NULL constraint (23502) on any column
     if (
       error.code === '23502' ||
       lowerMsg.includes('not-null') ||
@@ -874,10 +986,10 @@ export async function writeClientRowSafely(
       const col = extractColumnFromPostgresError(msg) || (lowerMsg.includes('coach_id') ? 'coach_id' : null);
       if (col) {
         if (col === 'coach_id' && !cachedCoachId) {
-          cachedCoachId = await resolveDefaultCoachId(client, explicitCoachId);
+          cachedCoachId = await resolveDefaultCoachId(client, options?.explicitCoachId);
         }
         const resolvedCoach = cachedCoachId || DEFAULT_COACH_UUID;
-        const nextVal = getDefaultValueForRequiredClientColumn(col, currentPayload, resolvedCoach);
+        const nextVal = getDefaultValueForRequiredColumn(col, currentPayload, resolvedCoach);
         if (currentPayload[col] !== nextVal) {
           currentPayload[col] = nextVal;
           const retryRes = await executeWrite(currentPayload);
@@ -897,6 +1009,7 @@ export async function writeClientRowSafely(
       const missingCol = extractColumnFromPostgresError(msg);
       if (missingCol && Object.prototype.hasOwnProperty.call(currentPayload, missingCol)) {
         delete currentPayload[missingCol];
+        strippedColumns.push(missingCol);
         const retryRes = await executeWrite(currentPayload);
         error = retryRes.error;
         continue;
@@ -910,6 +1023,7 @@ export async function writeClientRowSafely(
       (error.code === '23503' || lowerMsg.includes('foreign key'))
     ) {
       delete currentPayload.coach_id;
+      strippedColumns.push('coach_id');
       const retryRes = await executeWrite(currentPayload);
       error = retryRes.error;
       continue;
@@ -918,7 +1032,27 @@ export async function writeClientRowSafely(
     break;
   }
 
-  return { error };
+  return {
+    error,
+    missingTable: isMissingTableError(error),
+    strippedColumns,
+  };
+}
+
+/**
+ * Insert or update a row in `public.clients` safely using `writeTableRowSafely`.
+ */
+export async function writeClientRowSafely(
+  client: SupabaseClient,
+  payload: Record<string, unknown>,
+  existingRowId?: string | null,
+  explicitCoachId?: string | null
+): Promise<SafeTableWriteResult> {
+  return writeTableRowSafely(client, 'clients', payload, {
+    matchColumn: existingRowId ? 'id' : undefined,
+    matchValue: existingRowId || undefined,
+    explicitCoachId,
+  });
 }
 
 export interface SaveSubscriberPlanInput {
@@ -1147,20 +1281,25 @@ export async function syncProfileToSupabase(profile: ClientProfile): Promise<boo
   let extSynced = false;
 
   try {
-    const { error } = await client.from('profiles').upsert({
-      id: resolvedId,
-      name: profile.name,
-      subscription_plan: normalizedPlan,
-      weight: profile.weight,
-      height: profile.height,
-      muscle_mass: profile.muscleMass,
-      body_fat: profile.bodyFat,
-      target_weight: profile.targetWeight,
-      daily_calories: profile.dailyCalories,
-      daily_water_current: profile.dailyWaterCurrent,
-      updated_at: new Date().toISOString(),
-    });
-    profilesSynced = !error;
+    const res = await writeTableRowSafely(
+      client,
+      'profiles',
+      {
+        id: resolvedId,
+        name: profile.name,
+        subscription_plan: normalizedPlan,
+        weight: profile.weight,
+        height: profile.height,
+        muscle_mass: profile.muscleMass,
+        body_fat: profile.bodyFat,
+        target_weight: profile.targetWeight,
+        daily_calories: profile.dailyCalories,
+        daily_water_current: profile.dailyWaterCurrent,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    profilesSynced = !res.error;
   } catch {
     profilesSynced = false;
   }
@@ -1432,12 +1571,10 @@ export async function saveDeclarationToSupabase(
       completed_timestamp: agreement.completedTimestamp || new Date().toISOString(),
     };
 
-    const { error } = await client
-      .from('declarations')
-      .upsert(payload, { onConflict: 'id' });
+    const res = await writeTableRowSafely(client, 'declarations', payload, { onConflict: 'id' });
 
-    if (error) {
-      return { synced: false, error: error.message };
+    if (res.error) {
+      return { synced: false, error: formatSupabaseErrorMessage(res.error) };
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('oao_declarations_updated'));
@@ -1456,10 +1593,16 @@ export async function fetchDeclarationsFromSupabase(): Promise<SubscriptionAgree
   if (!client) return [];
 
   try {
-    const { data, error } = await client
+    let { data, error } = await client
       .from('declarations')
       .select('*')
       .order('completed_timestamp', { ascending: false });
+
+    if (error && isMissingColumnError(error)) {
+      const retry = await client.from('declarations').select('*');
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error || !data) return [];
 
