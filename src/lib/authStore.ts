@@ -570,6 +570,8 @@ export async function assignSubscriberPassword(params: {
       email: cleanEmail,
       name_ar: updatedRecord.clientName,
       name_en: updatedRecord.clientName,
+      height_cm: 175,
+      target_weight_kg: 70,
       subscription_plan: normalizedPlan,
       package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
       package_type_en: normalizedPlan,
@@ -598,6 +600,8 @@ export async function assignSubscriberPassword(params: {
         email: cleanEmail,
         name_ar: updatedRecord.clientName,
         name_en: updatedRecord.clientName,
+        height_cm: 175,
+        target_weight_kg: 70,
         package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
         package_type_en: normalizedPlan,
         phone: updatedRecord.phone || null,
@@ -612,8 +616,14 @@ export async function assignSubscriberPassword(params: {
       clientsErr = retryRes.error;
     }
 
-    // If `clients` threw an RLS or coach_id NOT NULL violation, fail visibly with actionable instructions
-    if (clientsErr && (isRlsPolicyError(clientsErr) || isCoachIdConstraintError(clientsErr))) {
+    // If `clients` threw an RLS or NOT NULL constraint violation, fail visibly with actionable instructions
+    if (
+      clientsErr &&
+      (isRlsPolicyError(clientsErr) ||
+        isCoachIdConstraintError(clientsErr) ||
+        clientsErr.code === '23502' ||
+        (clientsErr.message || '').toLowerCase().includes('not-null'))
+    ) {
       return {
         success: false,
         syncedToSupabase: false,

@@ -162,6 +162,8 @@ async function startServer() {
         email: cleanEmail,
         name_ar: clientName,
         name_en: clientName,
+        height_cm: 175,
+        target_weight_kg: 70,
         subscription_plan: normalizedPlan,
         package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
         package_type_en: normalizedPlan,
@@ -189,55 +191,81 @@ async function startServer() {
         return adminSupabase.from('clients').insert(payload);
       };
 
-      let { error: clientWriteErr } = await writeAdminClient(clientPayload);
+      const workingClientPayload: Record<string, unknown> = { ...clientPayload };
+      let { error: clientWriteErr } = await writeAdminClient(workingClientPayload);
+      let cachedCoachId: string | null = null;
 
-      if (
-        clientWriteErr &&
-        (clientWriteErr.code === '23502' ||
-          (clientWriteErr.message.toLowerCase().includes('coach_id') &&
-            (clientWriteErr.message.toLowerCase().includes('not-null') ||
-              clientWriteErr.message.toLowerCase().includes('null value'))))
-      ) {
-        let fallbackCoachId = DEFAULT_COACH_UUID;
-        const { data: coachRow } = await adminSupabase
-          .from('clients')
-          .select('coach_id')
-          .not('coach_id', 'is', null)
-          .limit(1)
-          .maybeSingle();
-        if (coachRow && typeof coachRow.coach_id === 'string' && UUID_RE.test(coachRow.coach_id)) {
-          fallbackCoachId = coachRow.coach_id;
-        } else {
-          const { data: coachesTblRow } = await adminSupabase.from('coaches').select('id').limit(1).maybeSingle();
-          if (coachesTblRow && typeof coachesTblRow.id === 'string' && UUID_RE.test(coachesTblRow.id)) {
-            fallbackCoachId = coachesTblRow.id;
+      for (let attempt = 0; attempt < 8 && clientWriteErr; attempt++) {
+        const msg = clientWriteErr.message || '';
+        const lowerMsg = msg.toLowerCase();
+
+        if (
+          clientWriteErr.code === '23502' ||
+          lowerMsg.includes('not-null') ||
+          lowerMsg.includes('null value in column')
+        ) {
+          const match = msg.match(/null value in column ["']?([a-zA-Z0-9_]+)["']?/i);
+          const col = match?.[1] || (lowerMsg.includes('coach_id') ? 'coach_id' : null);
+          if (col) {
+            if (col === 'coach_id') {
+              if (!cachedCoachId) {
+                cachedCoachId = DEFAULT_COACH_UUID;
+                const { data: coachRow } = await adminSupabase
+                  .from('clients')
+                  .select('coach_id')
+                  .not('coach_id', 'is', null)
+                  .limit(1)
+                  .maybeSingle();
+                if (coachRow && typeof coachRow.coach_id === 'string' && UUID_RE.test(coachRow.coach_id)) {
+                  cachedCoachId = coachRow.coach_id;
+                } else {
+                  const { data: coachesTblRow } = await adminSupabase.from('coaches').select('id').limit(1).maybeSingle();
+                  if (coachesTblRow && typeof coachesTblRow.id === 'string' && UUID_RE.test(coachesTblRow.id)) {
+                    cachedCoachId = coachesTblRow.id;
+                  }
+                }
+              }
+              workingClientPayload.coach_id = cachedCoachId;
+            } else if (col === 'height_cm' || col === 'height') {
+              workingClientPayload[col] = 175;
+            } else if (col === 'target_weight_kg' || col === 'target_weight') {
+              workingClientPayload[col] = 70;
+            } else if (col === 'weight_kg' || col === 'starting_weight_kg' || col === 'current_weight_kg' || col === 'weight') {
+              workingClientPayload[col] = 75;
+            } else if (col === 'age') {
+              workingClientPayload[col] = 25;
+            } else if (col === 'gender') {
+              workingClientPayload[col] = 'male';
+            } else if (col.endsWith('_cm') || col.endsWith('_kg') || col.endsWith('_pct')) {
+              workingClientPayload[col] = 0;
+            } else {
+              workingClientPayload[col] = '';
+            }
+            const retryRes = await writeAdminClient(workingClientPayload);
+            clientWriteErr = retryRes.error;
+            continue;
           }
         }
-        const retryCoach = await writeAdminClient({ ...clientPayload, coach_id: fallbackCoachId });
-        clientWriteErr = retryCoach.error;
-      }
 
-      if (
-        clientWriteErr &&
-        (clientWriteErr.code === 'PGRST204' ||
+        if (
+          clientWriteErr.code === 'PGRST204' ||
           clientWriteErr.code === '42703' ||
-          clientWriteErr.message.toLowerCase().includes('column'))
-      ) {
-        const coreClientPayload: Record<string, unknown> = {
-          ...(resolvedClientId ? { id: resolvedClientId } : {}),
-          email: cleanEmail,
-          name_ar: clientName,
-          name_en: clientName,
-          package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
-          package_type_en: normalizedPlan,
-          phone: record.phone || null,
-          client_code: record.clientCode || cleanPass,
-          status: record.status || 'active',
-        };
-        if (clientPayload.coach_id) {
-          coreClientPayload.coach_id = clientPayload.coach_id;
+          lowerMsg.includes('could not find') ||
+          lowerMsg.includes('does not exist')
+        ) {
+          const colMatch =
+            msg.match(/Could not find the ['"]([a-zA-Z0-9_]+)['"] column/i) ||
+            msg.match(/column ["']?([a-zA-Z0-9_]+)["']?/i);
+          const missingCol = colMatch?.[1];
+          if (missingCol && Object.prototype.hasOwnProperty.call(workingClientPayload, missingCol)) {
+            delete workingClientPayload[missingCol];
+            const retryRes = await writeAdminClient(workingClientPayload);
+            clientWriteErr = retryRes.error;
+            continue;
+          }
         }
-        await writeAdminClient(coreClientPayload);
+
+        break;
       }
 
       await adminSupabase.from('workouts').upsert(

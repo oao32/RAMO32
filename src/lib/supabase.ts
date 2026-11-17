@@ -115,10 +115,12 @@ export function formatSupabaseErrorMessage(error: unknown): string {
   }
   if (
     rawMsg.includes('23502') ||
-    (rawMsg.toLowerCase().includes('coach_id') &&
-      (rawMsg.toLowerCase().includes('not-null') || rawMsg.toLowerCase().includes('null value')))
+    rawMsg.toLowerCase().includes('not-null') ||
+    rawMsg.toLowerCase().includes('null value in column')
   ) {
-    return 'فشل الحفظ بسبب قيد عدم ترك حقل coach_id فارغاً (NOT NULL) في جدول clients. يرجى تشغيل كود SQL من تبويب (قاعدة البيانات و Supabase) لإزالة قيد NOT NULL عن coach_id.';
+    const colMatch = rawMsg.match(/null value in column ["']?([a-zA-Z0-9_]+)["']?/i);
+    const colName = colMatch?.[1] || 'مطلوب';
+    return `فشل الحفظ بسبب وجود حقل (${colName}) مطلوب في قاعدة البيانات (NOT NULL). تم تحديث المعالجة التلقائية، وفي حال استمرار الخطأ شغّل كود إصلاح الجداول من تبويب (قاعدة البيانات و Supabase).`;
   }
   return rawMsg;
 }
@@ -760,11 +762,76 @@ export async function resolveDefaultCoachId(
   return DEFAULT_COACH_UUID;
 }
 
+function getDefaultValueForRequiredClientColumn(
+  colName: string,
+  payload: Record<string, unknown>,
+  resolvedCoachId: string
+): unknown {
+  const c = colName.toLowerCase();
+  if (c === 'coach_id') return resolvedCoachId;
+  if (c === 'height_cm' || c === 'height') return 175;
+  if (c === 'target_weight_kg' || c === 'target_weight') return 70;
+  if (c === 'starting_weight_kg' || c === 'current_weight_kg' || c === 'weight_kg' || c === 'weight') return 75;
+  if (c === 'age') return 25;
+  if (c === 'muscle_mass' || c === 'muscle_mass_kg') return 32;
+  if (c === 'body_fat' || c === 'body_fat_pct') return 20;
+  if (c === 'daily_calories' || c === 'calories') return 2000;
+  if (c === 'gender') return 'male';
+  if (c === 'status') return 'active';
+  if (c === 'subscription_plan' || c === 'package_type_en' || c === 'tier') return 'standard';
+  if (c === 'package_type_ar') return 'الباقة القياسية (Standard)';
+  if (c === 'name_ar' || c === 'name_en' || c === 'name' || c === 'full_name') {
+    return payload.name_ar || payload.name_en || payload.email || 'مشترك';
+  }
+  if (c === 'client_code') return payload.client_code || 'OAO-1000';
+  if (c === 'phone' || c === 'phone_whatsapp') return '0500000000';
+  if (c === 'email') return payload.email || 'client@oao.fit';
+  if (c === 'visual_goal' || c === 'goal' || c === 'goals') return 'Bulking';
+  if (c === 'blood_type') return 'O+';
+  if (c === 'subscription_start_date' || c === 'start_date') return new Date().toISOString().split('T')[0];
+  if (c === 'subscription_end_date' || c === 'end_date') {
+    return new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
+  }
+  if (c.endsWith('_id') || c.includes('uuid')) return generateUUID();
+  if (c.endsWith('_at') || c.endsWith('_date')) return new Date().toISOString();
+  if (c.startsWith('is_') || c.startsWith('has_') || c.startsWith('agreed_') || c.endsWith('_locked')) {
+    return false;
+  }
+  if (
+    c.endsWith('_cm') ||
+    c.endsWith('_kg') ||
+    c.endsWith('_pct') ||
+    c.endsWith('_count') ||
+    c.endsWith('_days') ||
+    c.endsWith('_amount') ||
+    c.endsWith('_price')
+  ) {
+    return 0;
+  }
+  return '';
+}
+
+function extractColumnFromPostgresError(message: string): string | null {
+  const patterns = [
+    /null value in column ["']?([a-zA-Z0-9_]+)["']?/i,
+    /Could not find the ['"]([a-zA-Z0-9_]+)['"] column/i,
+    /column ["']?([a-zA-Z0-9_]+)["']? of relation/i,
+    /column ["']?([a-zA-Z0-9_]+)["']? does not exist/i,
+  ];
+  for (const re of patterns) {
+    const match = message.match(re);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
 /**
  * Insert or update a row in `public.clients` safely:
  * - Includes valid `coach_id` only if explicitly provided, otherwise omits it cleanly.
- * - If DB enforces `coach_id NOT NULL` (23502), automatically resolves a valid/default `coach_id` and retries.
- * - If DB does not have `coach_id` or hits a FK error on synthetic `coach_id`, omits it gracefully on retry.
+ * - Automatically adapts to pre-existing DB schemas:
+ *   1) If ANY column fails NOT NULL (`23502`, e.g. `height_cm`, `target_weight_kg`, `coach_id`), populates a valid default and retries.
+ *   2) If ANY column is missing (`PGRST204` / `42703`), strips that missing column and retries without losing the other fields.
+ *   3) If `coach_id` hits a FK error (`23503`) when nullable, strips `coach_id` and retries.
  */
 export async function writeClientRowSafely(
   client: SupabaseClient,
@@ -772,11 +839,15 @@ export async function writeClientRowSafely(
   existingRowId?: string | null,
   explicitCoachId?: string | null
 ): Promise<{ error: { code?: string; message: string } | null }> {
-  const cleanPayload: Record<string, unknown> = { ...payload };
+  const currentPayload: Record<string, unknown> = { ...payload };
   if (explicitCoachId && UUID_REGEX.test(explicitCoachId.trim())) {
-    cleanPayload.coach_id = explicitCoachId.trim();
-  } else if (cleanPayload.coach_id === undefined || cleanPayload.coach_id === null || cleanPayload.coach_id === '') {
-    delete cleanPayload.coach_id;
+    currentPayload.coach_id = explicitCoachId.trim();
+  } else if (
+    currentPayload.coach_id === undefined ||
+    currentPayload.coach_id === null ||
+    currentPayload.coach_id === ''
+  ) {
+    delete currentPayload.coach_id;
   }
 
   const executeWrite = async (row: Record<string, unknown>) => {
@@ -787,30 +858,64 @@ export async function writeClientRowSafely(
     return client.from('clients').insert(row);
   };
 
-  let { error } = await executeWrite(cleanPayload);
+  let { error } = await executeWrite(currentPayload);
+  let cachedCoachId: string | null = null;
 
-  // If `coach_id` triggered a NOT NULL constraint (23502), resolve a valid coach UUID and retry
-  if (
-    error &&
-    (error.code === '23502' ||
-      (error.message.toLowerCase().includes('coach_id') &&
-        (error.message.toLowerCase().includes('not-null') || error.message.toLowerCase().includes('null value'))))
-  ) {
-    const resolvedCoachId = await resolveDefaultCoachId(client, explicitCoachId);
-    const retryRes = await executeWrite({ ...cleanPayload, coach_id: resolvedCoachId });
-    error = retryRes.error;
-  }
+  for (let attempt = 0; attempt < 8 && error; attempt++) {
+    const msg = error.message || '';
+    const lowerMsg = msg.toLowerCase();
 
-  // If `coach_id` was included but column is missing or has an incompatible FK when nullable, strip `coach_id` and retry
-  if (
-    error &&
-    cleanPayload.coach_id !== undefined &&
-    error.message.toLowerCase().includes('coach_id') &&
-    (error.code === 'PGRST204' || error.code === '42703' || error.code === '23503')
-  ) {
-    const { coach_id: _dropCoach, ...withoutCoach } = cleanPayload;
-    const retryRes = await executeWrite(withoutCoach);
-    error = retryRes.error;
+    // 1. Handle NOT NULL constraint (23502) on any column (coach_id, height_cm, target_weight_kg, etc.)
+    if (
+      error.code === '23502' ||
+      lowerMsg.includes('not-null') ||
+      lowerMsg.includes('null value in column')
+    ) {
+      const col = extractColumnFromPostgresError(msg) || (lowerMsg.includes('coach_id') ? 'coach_id' : null);
+      if (col) {
+        if (col === 'coach_id' && !cachedCoachId) {
+          cachedCoachId = await resolveDefaultCoachId(client, explicitCoachId);
+        }
+        const resolvedCoach = cachedCoachId || DEFAULT_COACH_UUID;
+        const nextVal = getDefaultValueForRequiredClientColumn(col, currentPayload, resolvedCoach);
+        if (currentPayload[col] !== nextVal) {
+          currentPayload[col] = nextVal;
+          const retryRes = await executeWrite(currentPayload);
+          error = retryRes.error;
+          continue;
+        }
+      }
+    }
+
+    // 2. Handle missing column in target table (PGRST204 / 42703) by stripping ONLY that column
+    if (
+      error.code === 'PGRST204' ||
+      error.code === '42703' ||
+      lowerMsg.includes('could not find') ||
+      lowerMsg.includes('does not exist')
+    ) {
+      const missingCol = extractColumnFromPostgresError(msg);
+      if (missingCol && Object.prototype.hasOwnProperty.call(currentPayload, missingCol)) {
+        delete currentPayload[missingCol];
+        const retryRes = await executeWrite(currentPayload);
+        error = retryRes.error;
+        continue;
+      }
+    }
+
+    // 3. Handle incompatible foreign key on synthetic coach_id when nullable
+    if (
+      currentPayload.coach_id !== undefined &&
+      lowerMsg.includes('coach_id') &&
+      (error.code === '23503' || lowerMsg.includes('foreign key'))
+    ) {
+      delete currentPayload.coach_id;
+      const retryRes = await executeWrite(currentPayload);
+      error = retryRes.error;
+      continue;
+    }
+
+    break;
   }
 
   return { error };
@@ -1941,13 +2046,15 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Ensure public.clients.coach_id allows NULL values for direct admin provisioning
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'clients' AND column_name = 'coach_id'
-  ) THEN
-    ALTER TABLE public.clients ALTER COLUMN coach_id DROP NOT NULL;
-  END IF;
+  -- Ensure optional columns on public.clients allow NULL & have safe defaults for direct admin provisioning
+  FOREACH tbl IN ARRAY ARRAY['coach_id', 'height_cm', 'target_weight_kg', 'age', 'gender', 'phone', 'client_code', 'name_en'] LOOP
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'clients' AND column_name = tbl
+    ) THEN
+      EXECUTE format('ALTER TABLE public.clients ALTER COLUMN %I DROP NOT NULL', tbl);
+    END IF;
+  END LOOP;
 END $$;
 `;
 
@@ -2026,6 +2133,10 @@ ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_start_date DATE
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_end_date DATE;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS coach_id UUID;
 ALTER TABLE public.clients ALTER COLUMN coach_id DROP NOT NULL;
+ALTER TABLE public.clients ALTER COLUMN height_cm SET DEFAULT 175;
+ALTER TABLE public.clients ALTER COLUMN height_cm DROP NOT NULL;
+ALTER TABLE public.clients ALTER COLUMN target_weight_kg SET DEFAULT 70;
+ALTER TABLE public.clients ALTER COLUMN target_weight_kg DROP NOT NULL;
 
 ALTER TABLE public.clients DROP CONSTRAINT IF EXISTS clients_subscription_plan_check;
 ALTER TABLE public.clients
