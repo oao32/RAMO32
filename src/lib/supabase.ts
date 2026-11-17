@@ -113,6 +113,13 @@ export function formatSupabaseErrorMessage(error: unknown): string {
   ) {
     return 'تم حظر العملية بسبب سياسة أمان الصفوف (RLS) في Supabase. يرجى فتح تبويب (قاعدة البيانات و Supabase) ونسخ كود إصلاح RLS وتشغيله في Supabase SQL Editor، أو إضافة SUPABASE_SERVICE_ROLE_KEY في الخادم.';
   }
+  if (
+    rawMsg.includes('23502') ||
+    (rawMsg.toLowerCase().includes('coach_id') &&
+      (rawMsg.toLowerCase().includes('not-null') || rawMsg.toLowerCase().includes('null value')))
+  ) {
+    return 'فشل الحفظ بسبب قيد عدم ترك حقل coach_id فارغاً (NOT NULL) في جدول clients. يرجى تشغيل كود SQL من تبويب (قاعدة البيانات و Supabase) لإزالة قيد NOT NULL عن coach_id.';
+  }
   return rawMsg;
 }
 
@@ -691,6 +698,124 @@ export function normalizeSubscriptionPlan(raw?: string | null): SubscriptionPlan
   return 'standard';
 }
 
+export const DEFAULT_COACH_UUID = '00000000-0000-4000-8000-000000000001';
+
+export function isCoachIdConstraintError(error: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!error) return false;
+  const code = (error.code || '').trim();
+  const msg = (error.message || '').toLowerCase();
+  if (code === '23502' && (!msg || msg.includes('coach_id'))) return true;
+  return msg.includes('coach_id') && (msg.includes('not-null') || msg.includes('null value') || msg.includes('foreign key'));
+}
+
+/**
+ * Resolve a valid UUID for `coach_id` when `public.clients.coach_id` requires a non-null value.
+ * Prefers an explicitly supplied UUID, signed-in Supabase Auth user, an existing `coach_id` in `clients`/`coaches`,
+ * and falls back to DEFAULT_COACH_UUID.
+ */
+export async function resolveDefaultCoachId(
+  client: SupabaseClient,
+  explicitCoachId?: string | null
+): Promise<string> {
+  if (explicitCoachId && UUID_REGEX.test(explicitCoachId.trim())) {
+    return explicitCoachId.trim();
+  }
+
+  try {
+    const { data: authData } = await client.auth.getUser();
+    if (authData?.user?.id && UUID_REGEX.test(authData.user.id)) {
+      return authData.user.id;
+    }
+  } catch {
+    // ignore when using anon coach passcode mode
+  }
+
+  try {
+    const { data: existingWithCoach } = await client
+      .from('clients')
+      .select('coach_id')
+      .not('coach_id', 'is', null)
+      .limit(1)
+      .maybeSingle();
+    if (existingWithCoach && typeof existingWithCoach.coach_id === 'string' && UUID_REGEX.test(existingWithCoach.coach_id)) {
+      return existingWithCoach.coach_id;
+    }
+  } catch {
+    // ignore if coach_id column does not exist
+  }
+
+  try {
+    const { data: coachRow } = await client
+      .from('coaches')
+      .select('id')
+      .limit(1)
+      .maybeSingle();
+    if (coachRow && typeof coachRow.id === 'string' && UUID_REGEX.test(coachRow.id)) {
+      return coachRow.id;
+    }
+  } catch {
+    // ignore if coaches table does not exist
+  }
+
+  return DEFAULT_COACH_UUID;
+}
+
+/**
+ * Insert or update a row in `public.clients` safely:
+ * - Includes valid `coach_id` only if explicitly provided, otherwise omits it cleanly.
+ * - If DB enforces `coach_id NOT NULL` (23502), automatically resolves a valid/default `coach_id` and retries.
+ * - If DB does not have `coach_id` or hits a FK error on synthetic `coach_id`, omits it gracefully on retry.
+ */
+export async function writeClientRowSafely(
+  client: SupabaseClient,
+  payload: Record<string, unknown>,
+  existingRowId?: string | null,
+  explicitCoachId?: string | null
+): Promise<{ error: { code?: string; message: string } | null }> {
+  const cleanPayload: Record<string, unknown> = { ...payload };
+  if (explicitCoachId && UUID_REGEX.test(explicitCoachId.trim())) {
+    cleanPayload.coach_id = explicitCoachId.trim();
+  } else if (cleanPayload.coach_id === undefined || cleanPayload.coach_id === null || cleanPayload.coach_id === '') {
+    delete cleanPayload.coach_id;
+  }
+
+  const executeWrite = async (row: Record<string, unknown>) => {
+    if (existingRowId) {
+      const { id: _omit, ...upd } = row;
+      return client.from('clients').update(upd).eq('id', existingRowId);
+    }
+    return client.from('clients').insert(row);
+  };
+
+  let { error } = await executeWrite(cleanPayload);
+
+  // If `coach_id` triggered a NOT NULL constraint (23502), resolve a valid coach UUID and retry
+  if (
+    error &&
+    (error.code === '23502' ||
+      (error.message.toLowerCase().includes('coach_id') &&
+        (error.message.toLowerCase().includes('not-null') || error.message.toLowerCase().includes('null value'))))
+  ) {
+    const resolvedCoachId = await resolveDefaultCoachId(client, explicitCoachId);
+    const retryRes = await executeWrite({ ...cleanPayload, coach_id: resolvedCoachId });
+    error = retryRes.error;
+  }
+
+  // If `coach_id` was included but column is missing or has an incompatible FK when nullable, strip `coach_id` and retry
+  if (
+    error &&
+    cleanPayload.coach_id !== undefined &&
+    error.message.toLowerCase().includes('coach_id') &&
+    (error.code === 'PGRST204' || error.code === '42703' || error.code === '23503')
+  ) {
+    const { coach_id: _dropCoach, ...withoutCoach } = cleanPayload;
+    const retryRes = await executeWrite(withoutCoach);
+    error = retryRes.error;
+  }
+
+  return { error };
+}
+
 export interface SaveSubscriberPlanInput {
   id?: string;
   nameAr: string;
@@ -704,6 +829,7 @@ export interface SaveSubscriberPlanInput {
   status?: string;
   subscriptionStartDate?: string;
   subscriptionEndDate?: string;
+  coachId?: string | null;
 }
 
 /**
@@ -779,17 +905,9 @@ export async function saveSubscriberToSupabase(
       status: input.status || 'active',
     };
 
-    const writeClientRow = async (payload: Record<string, unknown>) => {
-      if (existingRowId) {
-        const { id: _omit, ...upd } = payload;
-        return client.from('clients').update(upd).eq('id', existingRowId);
-      }
-      return client.from('clients').insert(payload);
-    };
+    let { error } = await writeClientRowSafely(client, fullClientPayload, existingRowId, input.coachId);
 
-    let { error } = await writeClientRow(fullClientPayload);
-
-    // Adaptive fallback if columns haven't been added via SQL Editor yet
+    // Adaptive fallback if extended columns haven't been added via SQL Editor yet
     if (
       error &&
       (error.code === 'PGRST204' ||
@@ -812,7 +930,7 @@ export async function saveSubscriberToSupabase(
         package_type_en: packageTypeEn,
         status: input.status || 'active',
       };
-      const retryRes = await writeClientRow(fallbackPayload);
+      const retryRes = await writeClientRowSafely(client, fallbackPayload, existingRowId, input.coachId);
       error = retryRes.error;
     }
 
@@ -1822,6 +1940,14 @@ BEGIN
       EXECUTE format('GRANT ALL ON TABLE public.%I TO anon, authenticated, service_role', tbl);
     END IF;
   END LOOP;
+
+  -- Ensure public.clients.coach_id allows NULL values for direct admin provisioning
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'clients' AND column_name = 'coach_id'
+  ) THEN
+    ALTER TABLE public.clients ALTER COLUMN coach_id DROP NOT NULL;
+  END IF;
 END $$;
 `;
 
@@ -1898,6 +2024,8 @@ ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS inbody_file_url TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_plan TEXT NOT NULL DEFAULT 'standard';
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_start_date DATE;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_end_date DATE;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS coach_id UUID;
+ALTER TABLE public.clients ALTER COLUMN coach_id DROP NOT NULL;
 
 ALTER TABLE public.clients DROP CONSTRAINT IF EXISTS clients_subscription_plan_check;
 ALTER TABLE public.clients

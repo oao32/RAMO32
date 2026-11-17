@@ -1,5 +1,11 @@
 import { Role, SubscriptionPlanTier } from '../types';
-import { formatSupabaseErrorMessage, getSupabaseClient, normalizeSubscriptionPlan } from './supabase';
+import {
+  formatSupabaseErrorMessage,
+  getSupabaseClient,
+  isCoachIdConstraintError,
+  normalizeSubscriptionPlan,
+  writeClientRowSafely,
+} from './supabase';
 
 export interface UserCredentialRecord {
   id?: string;
@@ -560,6 +566,7 @@ export async function assignSubscriberPassword(params: {
     }
 
     const fullClientPayload: Record<string, unknown> = {
+      id: targetClientId,
       email: cleanEmail,
       name_ar: updatedRecord.clientName,
       name_en: updatedRecord.clientName,
@@ -578,17 +585,16 @@ export async function assignSubscriberPassword(params: {
       inbody_file_url: updatedRecord.inBodyFileUrl || null,
     };
 
-    const writeClientRow = async (payload: Record<string, unknown>) => {
-      if (clientExistsInDb) {
-        return supabase.from('clients').update(payload).eq('id', targetClientId);
-      }
-      return supabase.from('clients').insert({ id: targetClientId, ...payload });
-    };
-
-    let { error: clientsErr } = await writeClientRow(fullClientPayload);
+    const existingClientRowId = clientExistsInDb ? targetClientId : null;
+    let { error: clientsErr } = await writeClientRowSafely(
+      supabase,
+      fullClientPayload,
+      existingClientRowId
+    );
 
     if (clientsErr && isMissingColumnError(clientsErr)) {
       const corePayload: Record<string, unknown> = {
+        id: targetClientId,
         email: cleanEmail,
         name_ar: updatedRecord.clientName,
         name_en: updatedRecord.clientName,
@@ -598,12 +604,16 @@ export async function assignSubscriberPassword(params: {
         client_code: updatedRecord.clientCode,
         status: updatedRecord.status,
       };
-      const retryRes = await writeClientRow(corePayload);
+      const retryRes = await writeClientRowSafely(
+        supabase,
+        corePayload,
+        existingClientRowId
+      );
       clientsErr = retryRes.error;
     }
 
-    // If `clients` threw an RLS violation, fail visibly with the exact RLS fix instructions so tables stay in sync!
-    if (clientsErr && isRlsPolicyError(clientsErr)) {
+    // If `clients` threw an RLS or coach_id NOT NULL violation, fail visibly with actionable instructions
+    if (clientsErr && (isRlsPolicyError(clientsErr) || isCoachIdConstraintError(clientsErr))) {
       return {
         success: false,
         syncedToSupabase: false,

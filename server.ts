@@ -154,6 +154,9 @@ async function startServer() {
       const resolvedClientId =
         (existingClient && typeof existingClient.id === 'string' ? existingClient.id : '') || targetId;
 
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const DEFAULT_COACH_UUID = '00000000-0000-4000-8000-000000000001';
+
       const clientPayload: Record<string, unknown> = {
         ...(resolvedClientId ? { id: resolvedClientId } : {}),
         email: cleanEmail,
@@ -174,11 +177,67 @@ async function startServer() {
         inbody_file_url: record.inBodyFileUrl || null,
       };
 
-      if (existingClient?.id) {
-        const { id: _omit, ...updPayload } = clientPayload;
-        await adminSupabase.from('clients').update(updPayload).eq('id', existingClient.id);
-      } else {
-        await adminSupabase.from('clients').insert(clientPayload);
+      if (typeof record.coachId === 'string' && UUID_RE.test(record.coachId.trim())) {
+        clientPayload.coach_id = record.coachId.trim();
+      }
+
+      const writeAdminClient = async (payload: Record<string, unknown>) => {
+        if (existingClient?.id) {
+          const { id: _omit, ...updPayload } = payload;
+          return adminSupabase.from('clients').update(updPayload).eq('id', existingClient.id);
+        }
+        return adminSupabase.from('clients').insert(payload);
+      };
+
+      let { error: clientWriteErr } = await writeAdminClient(clientPayload);
+
+      if (
+        clientWriteErr &&
+        (clientWriteErr.code === '23502' ||
+          (clientWriteErr.message.toLowerCase().includes('coach_id') &&
+            (clientWriteErr.message.toLowerCase().includes('not-null') ||
+              clientWriteErr.message.toLowerCase().includes('null value'))))
+      ) {
+        let fallbackCoachId = DEFAULT_COACH_UUID;
+        const { data: coachRow } = await adminSupabase
+          .from('clients')
+          .select('coach_id')
+          .not('coach_id', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        if (coachRow && typeof coachRow.coach_id === 'string' && UUID_RE.test(coachRow.coach_id)) {
+          fallbackCoachId = coachRow.coach_id;
+        } else {
+          const { data: coachesTblRow } = await adminSupabase.from('coaches').select('id').limit(1).maybeSingle();
+          if (coachesTblRow && typeof coachesTblRow.id === 'string' && UUID_RE.test(coachesTblRow.id)) {
+            fallbackCoachId = coachesTblRow.id;
+          }
+        }
+        const retryCoach = await writeAdminClient({ ...clientPayload, coach_id: fallbackCoachId });
+        clientWriteErr = retryCoach.error;
+      }
+
+      if (
+        clientWriteErr &&
+        (clientWriteErr.code === 'PGRST204' ||
+          clientWriteErr.code === '42703' ||
+          clientWriteErr.message.toLowerCase().includes('column'))
+      ) {
+        const coreClientPayload: Record<string, unknown> = {
+          ...(resolvedClientId ? { id: resolvedClientId } : {}),
+          email: cleanEmail,
+          name_ar: clientName,
+          name_en: clientName,
+          package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
+          package_type_en: normalizedPlan,
+          phone: record.phone || null,
+          client_code: record.clientCode || cleanPass,
+          status: record.status || 'active',
+        };
+        if (clientPayload.coach_id) {
+          coreClientPayload.coach_id = clientPayload.coach_id;
+        }
+        await writeAdminClient(coreClientPayload);
       }
 
       await adminSupabase.from('workouts').upsert(
