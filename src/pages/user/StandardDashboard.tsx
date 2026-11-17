@@ -22,7 +22,13 @@ import { ClientNotesSection } from '../../components/ClientNotesSection';
 import { RestTimer } from '../../components/RestTimer';
 import { VideoModal } from '../../components/VideoModal';
 import { calculateSubscriptionDetails } from '../../lib/subscriptionUtils';
-import { syncNoteToSupabase, syncProfileToSupabase } from '../../lib/supabase';
+import {
+  getCanonicalClientKey,
+  loadClientWorkspaceFromSupabase,
+  syncNoteToSupabase,
+  syncProfileToSupabase,
+  syncWorkoutDaysToSupabase,
+} from '../../lib/supabase';
 import {
   Home,
   LogOut,
@@ -91,6 +97,52 @@ export const StandardDashboard: React.FC = () => {
     return [];
   });
 
+  // Hydrate full subscriber workspace from Supabase on mount
+  useEffect(() => {
+    let mounted = true;
+    const hydrateFromCloud = async () => {
+      let currentUser: { id?: string; email?: string; name?: string } | null = null;
+      try {
+        const raw = localStorage.getItem('oao_current_user');
+        if (raw) currentUser = JSON.parse(raw);
+      } catch {
+        currentUser = null;
+      }
+
+      const targetEmail = currentUser?.email || profile.email;
+      const targetId = currentUser?.id || profile.id;
+      if (!targetEmail && (!targetId || targetId === 'client_athlete')) return;
+
+      const workspace = await loadClientWorkspaceFromSupabase({
+        clientId: targetId,
+        email: targetEmail,
+        fallbackName: currentUser?.name || profile.name,
+        fallbackPlan: 'standard',
+      });
+      if (!mounted) return;
+
+      const nextProfile: ClientProfile = {
+        ...workspace.profile,
+        subscription_plan: 'standard',
+      };
+      setProfile(nextProfile);
+      setWorkoutDays(workspace.workoutDays);
+      setNotes(workspace.notes);
+      try {
+        localStorage.setItem('oao_client_profile', JSON.stringify(nextProfile));
+        localStorage.setItem('oao_workout_days', JSON.stringify(workspace.workoutDays));
+        localStorage.setItem('oao_client_notes', JSON.stringify(workspace.notes));
+      } catch {
+        // ignore
+      }
+    };
+
+    void hydrateFromCloud();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // Real-time synchronization for coach replies, profile updates, and workouts
   useEffect(() => {
     const syncLive = () => {
@@ -139,6 +191,8 @@ export const StandardDashboard: React.FC = () => {
   const handleUpdateWorkouts = (updatedDays: WorkoutDay[]) => {
     setWorkoutDays(updatedDays);
     localStorage.setItem('oao_workout_days', JSON.stringify(updatedDays));
+    const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
+    syncWorkoutDaysToSupabase(canonicalKey, updatedDays, profile.email).catch(() => {});
   };
 
   const handleAddNote = (newNote: Omit<ClientNote, 'id' | 'timestamp' | 'isResolved'>) => {
@@ -163,6 +217,12 @@ export const StandardDashboard: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.setItem('oao_session', 'guest');
+    localStorage.removeItem('oao_current_user');
+    localStorage.removeItem('oao_client_profile');
+    localStorage.removeItem('oao_workout_days');
+    localStorage.removeItem('oao_client_notes');
+    localStorage.removeItem('oao_streak_data');
+    localStorage.removeItem('oao_athlete_rank');
     navigate('/');
   };
 
@@ -340,6 +400,7 @@ export const StandardDashboard: React.FC = () => {
           isVIP={false}
           isLocked={profile.nutritionPlanLocked}
           subscriberEmail={profile.email}
+          clientId={profile.id}
         />
 
         {/* COACH NOTES & INQUIRIES */}

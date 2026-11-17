@@ -32,7 +32,14 @@ import { RestTimer } from '../../components/RestTimer';
 import { VideoModal } from '../../components/VideoModal';
 import { ShareableProgressCardModal } from '../../components/ShareableProgressCardModal';
 import { calculateSubscriptionDetails } from '../../lib/subscriptionUtils';
-import { syncNoteToSupabase, syncProfileToSupabase } from '../../lib/supabase';
+import {
+  getCanonicalClientKey,
+  loadClientWorkspaceFromSupabase,
+  syncAssessmentToSupabase,
+  syncNoteToSupabase,
+  syncProfileToSupabase,
+  syncWorkoutDaysToSupabase,
+} from '../../lib/supabase';
 import {
   Home,
   LogOut,
@@ -75,6 +82,56 @@ export const VipDashboard: React.FC = () => {
       subscription_plan: 'VIP',
     };
   });
+
+  // Hydrate full subscriber workspace from Supabase on mount
+  useEffect(() => {
+    let mounted = true;
+    const hydrateFromCloud = async () => {
+      let currentUser: { id?: string; email?: string; name?: string } | null = null;
+      try {
+        const raw = localStorage.getItem('oao_current_user');
+        if (raw) currentUser = JSON.parse(raw);
+      } catch {
+        currentUser = null;
+      }
+
+      const targetEmail = currentUser?.email || profile.email;
+      const targetId = currentUser?.id || profile.id;
+      if (!targetEmail && (!targetId || targetId === 'client_athlete')) return;
+
+      const workspace = await loadClientWorkspaceFromSupabase({
+        clientId: targetId,
+        email: targetEmail,
+        fallbackName: currentUser?.name || profile.name,
+        fallbackPlan: 'VIP',
+      });
+      if (!mounted) return;
+
+      const nextProfile: ClientProfile = {
+        ...workspace.profile,
+        subscription_plan: 'VIP',
+      };
+      setProfile(nextProfile);
+      setWorkoutDays(workspace.workoutDays);
+      setNotes(workspace.notes);
+      setStreakData(workspace.streakData);
+      setAthleteRank(workspace.athleteRank);
+      try {
+        localStorage.setItem('oao_client_profile', JSON.stringify(nextProfile));
+        localStorage.setItem('oao_workout_days', JSON.stringify(workspace.workoutDays));
+        localStorage.setItem('oao_client_notes', JSON.stringify(workspace.notes));
+        localStorage.setItem('oao_streak_data', JSON.stringify(workspace.streakData));
+        localStorage.setItem('oao_athlete_rank', JSON.stringify(workspace.athleteRank));
+      } catch {
+        // ignore
+      }
+    };
+
+    void hydrateFromCloud();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Real-time synchronization for coach replies, profile, workouts, streak & rank
   useEffect(() => {
@@ -191,6 +248,8 @@ export const VipDashboard: React.FC = () => {
   const handleUpdateWorkouts = (updatedDays: WorkoutDay[]) => {
     setWorkoutDays(updatedDays);
     localStorage.setItem('oao_workout_days', JSON.stringify(updatedDays));
+    const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
+    syncWorkoutDaysToSupabase(canonicalKey, updatedDays, profile.email).catch(() => {});
   };
 
   const handleAddNote = (newNote: Omit<ClientNote, 'id' | 'timestamp' | 'isResolved'>) => {
@@ -215,6 +274,12 @@ export const VipDashboard: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.setItem('oao_session', 'guest');
+    localStorage.removeItem('oao_current_user');
+    localStorage.removeItem('oao_client_profile');
+    localStorage.removeItem('oao_workout_days');
+    localStorage.removeItem('oao_client_notes');
+    localStorage.removeItem('oao_streak_data');
+    localStorage.removeItem('oao_athlete_rank');
     navigate('/');
   };
 
@@ -430,17 +495,43 @@ export const VipDashboard: React.FC = () => {
             badges={badges}
             athleteRank={athleteRank}
             onLogTodayWorkout={() => {
-              setStreakData((prev) => ({
-                ...prev,
-                currentStreak: prev.currentStreak + 1,
+              const nextStreak: StreakData = {
+                ...streakData,
+                currentStreak: streakData.currentStreak + 1,
+                longestStreak: Math.max(streakData.currentStreak + 1, streakData.longestStreak),
                 lastCompletedDate: new Date().toISOString().split('T')[0],
-              }));
+                totalWorkoutsCompleted: streakData.totalWorkoutsCompleted + 1,
+              };
+              setStreakData(nextStreak);
+              localStorage.setItem('oao_streak_data', JSON.stringify(nextStreak));
+              const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
+              syncAssessmentToSupabase(
+                canonicalKey,
+                {
+                  analysisData: profile.analysisData,
+                  streakData: nextStreak,
+                  athleteRank,
+                },
+                profile.email
+              ).catch(() => {});
             }}
             onUseStreakFreeze={() => {
-              setStreakData((prev) => ({
-                ...prev,
-                freezesRemaining: Math.max(0, prev.freezesRemaining - 1),
-              }));
+              const nextStreak: StreakData = {
+                ...streakData,
+                freezesRemaining: Math.max(0, streakData.freezesRemaining - 1),
+              };
+              setStreakData(nextStreak);
+              localStorage.setItem('oao_streak_data', JSON.stringify(nextStreak));
+              const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
+              syncAssessmentToSupabase(
+                canonicalKey,
+                {
+                  analysisData: profile.analysisData,
+                  streakData: nextStreak,
+                  athleteRank,
+                },
+                profile.email
+              ).catch(() => {});
             }}
             language={language}
             theme={theme}
@@ -455,6 +546,7 @@ export const VipDashboard: React.FC = () => {
           isVIP={true}
           isLocked={profile.nutritionPlanLocked}
           subscriberEmail={profile.email}
+          clientId={profile.id}
         />
 
         {/* DIRECT VIP NOTES & INQUIRIES WITH COACH */}

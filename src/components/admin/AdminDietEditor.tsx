@@ -21,6 +21,18 @@ import {
   UserCredentialRecord,
 } from '../../lib/authStore';
 import {
+  getCanonicalClientKey,
+  fetchNutritionPlanFromSupabase,
+  syncNutritionPlanToSupabase,
+  resetNutritionPlanInSupabase,
+  syncGlobalNutritionLockToSupabase,
+  fetchGlobalNutritionLockFromSupabase,
+} from '../../lib/supabase';
+import {
+  AdminTargetClientSelector,
+  getSubscriberSelectorKey,
+} from './AdminTargetClientSelector';
+import {
   Utensils,
   Plus,
   Trash2,
@@ -42,9 +54,23 @@ import {
 
 interface AdminDietEditorProps {
   language: 'ar' | 'en';
+  subscribers?: UserCredentialRecord[];
+  selectedClientKey?: string;
+  onSelectClient?: (key: string) => void;
+  targetClient?: UserCredentialRecord | null;
+  isLoadingClient?: boolean;
+  onRefreshSubscribers?: () => void;
 }
 
-export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) => {
+export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
+  language,
+  subscribers: propSubscribers,
+  selectedClientKey: propSelectedClientKey,
+  onSelectClient: propOnSelectClient,
+  targetClient: propTargetClient,
+  isLoadingClient = false,
+  onRefreshSubscribers,
+}) => {
   const [tier, setTier] = useState<'standard' | 'VIP'>('standard');
   const [categories, setCategories] = useState<MealCategory[]>(() =>
     getSavedDietCategories('standard')
@@ -53,10 +79,34 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
     'breakfast' | 'lunch' | 'dinner' | 'snacks'
   >('breakfast');
 
-  // Subscribers list for per-subscriber nutrition lock
-  const [subscribers, setSubscribers] = useState<UserCredentialRecord[]>(() =>
+  // Subscribers list (uses parent list when passed, otherwise self-fetches from Supabase)
+  const [internalSubscribers, setInternalSubscribers] = useState<UserCredentialRecord[]>(() =>
     getAllSubscribersWithCredentials()
   );
+  const [internalSelectedKey, setInternalSelectedKey] = useState<string>('');
+  const [loadingClientDiet, setLoadingClientDiet] = useState(false);
+
+  const subscribers = propSubscribers ?? internalSubscribers;
+  const selectedClientKey =
+    propSelectedClientKey !== undefined ? propSelectedClientKey : internalSelectedKey;
+
+  const activeTargetClient: UserCredentialRecord | null =
+    propTargetClient !== undefined
+      ? propTargetClient
+      : subscribers.find(
+          (s) =>
+            getSubscriberSelectorKey(s) === selectedClientKey ||
+            s.email.toLowerCase() === selectedClientKey.toLowerCase()
+        ) || null;
+
+  const handleSelectTargetClient = (key: string) => {
+    if (propOnSelectClient) {
+      propOnSelectClient(key);
+    } else {
+      setInternalSelectedKey(key);
+    }
+  };
+
   const [confirmReset, setConfirmReset] = useState(false);
 
   // Interactive Global Nutrition Plan Lock / Hide Toggle
@@ -69,21 +119,63 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
   });
 
   useEffect(() => {
-    fetchSubscribersFromSupabase().then(setSubscribers);
-    const syncSubs = () => setSubscribers(getAllSubscribersWithCredentials());
+    fetchGlobalNutritionLockFromSupabase().then(setIsNutritionLocked);
+    if (!propSubscribers) {
+      fetchSubscribersFromSupabase().then((subs) => {
+        setInternalSubscribers(subs);
+        if (!internalSelectedKey && subs.length > 0) {
+          const firstActive = subs.find((s) => s.status !== 'suspended') || subs[0];
+          setInternalSelectedKey(getSubscriberSelectorKey(firstActive));
+        }
+      });
+    }
+    const syncSubs = () => {
+      if (!propSubscribers) {
+        setInternalSubscribers(getAllSubscribersWithCredentials());
+      }
+    };
     window.addEventListener('oao_credentials_updated', syncSubs);
     window.addEventListener('oao_nutrition_lock_updated', syncSubs);
     return () => {
       window.removeEventListener('oao_credentials_updated', syncSubs);
       window.removeEventListener('oao_nutrition_lock_updated', syncSubs);
     };
-  }, []);
+  }, [propSubscribers]);
 
-  const handleToggleNutritionLock = () => {
+  // Align tier & fetch client-specific cloud meal plan whenever target subscriber changes
+  useEffect(() => {
+    let cancelled = false;
+    if (activeTargetClient) {
+      const targetTier = activeTargetClient.plan === 'VIP' ? 'VIP' : 'standard';
+      setTier(targetTier);
+      setLoadingClientDiet(true);
+      fetchNutritionPlanFromSupabase(
+        activeTargetClient.id,
+        activeTargetClient.email,
+        targetTier
+      )
+        .then((cloudCats) => {
+          if (!cancelled && Array.isArray(cloudCats) && cloudCats.length > 0) {
+            setCategories(cloudCats);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingClientDiet(false);
+        });
+    } else {
+      setCategories(getSavedDietCategories(tier));
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTargetClient?.id, activeTargetClient?.email]);
+
+  const handleToggleNutritionLock = async () => {
     const nextVal = !isNutritionLocked;
     setIsNutritionLocked(nextVal);
     try {
       localStorage.setItem('oao_nutrition_locked', String(nextVal));
+      await syncGlobalNutritionLockToSupabase(nextVal);
       window.dispatchEvent(new CustomEvent('oao_nutrition_lock_updated', { detail: { global: nextVal } }));
       window.dispatchEvent(new Event('storage'));
     } catch (e) {
@@ -91,19 +183,21 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
     }
     setSaveMessage(
       nextVal
-        ? '🔒 تم تعليق وإخفاء الخطة الغذائية عن جميع المتدربين'
-        : '🔓 تم إتاحة وعرض الخطة الغذائية لجميع المتدربين'
+        ? '🔒 تم تعليق وإخفاء الخطة الغذائية عن جميع المتدربين ومزامنته سحابياً'
+        : '🔓 تم إتاحة وعرض الخطة الغذائية لجميع المتدربين ومزامنته سحابياً'
     );
     setTimeout(() => setSaveMessage(null), 3000);
   };
 
   const handleTogglePerSubscriberLock = (user: UserCredentialRecord) => {
     const nextLocked = toggleSubscriberNutritionLock(user.email, !user.nutritionPlanLocked);
-    setSubscribers(getAllSubscribersWithCredentials());
+    if (!propSubscribers) {
+      setInternalSubscribers(getAllSubscribersWithCredentials());
+    }
     setSaveMessage(
       nextLocked
-        ? `🔒 تم إخفاء وقفل النظام الغذائي للمشترك (${user.clientName})`
-        : `🔓 تم إتاحة النظام الغذائي للمشترك (${user.clientName})`
+        ? `🔒 تم إخفاء وقفل النظام الغذائي للمشترك (${user.clientName}) وحفظه في السحابة`
+        : `🔓 تم إتاحة النظام الغذائي للمشترك (${user.clientName}) وحفظه في السحابة`
     );
     setTimeout(() => setSaveMessage(null), 3000);
   };
@@ -131,10 +225,20 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
   // Success message
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
-  // Load categories whenever tier changes
-  useEffect(() => {
-    setCategories(getSavedDietCategories(tier));
-  }, [tier]);
+  // Load defaults when manually toggling tier (when no client override or switching tier preview)
+  const handleManualTierSwitch = (nextTier: 'standard' | 'VIP') => {
+    setTier(nextTier);
+    if (activeTargetClient) {
+      const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
+      fetchNutritionPlanFromSupabase(canonicalKey, activeTargetClient.email, nextTier).then(
+        (cats) => {
+          if (Array.isArray(cats) && cats.length > 0) setCategories(cats);
+        }
+      );
+    } else {
+      setCategories(getSavedDietCategories(nextTier));
+    }
+  };
 
   const activeCategory = categories.find((c) => c.key === activeCategoryKey) || categories[0];
 
@@ -236,9 +340,18 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
 
     setCategories(updatedCategories);
     saveDietCategories(tier, updatedCategories);
+    if (activeTargetClient) {
+      const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
+      void syncNutritionPlanToSupabase(canonicalKey, updatedCategories, tier, activeTargetClient.email);
+      window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: updatedCategories } }));
+    }
     setIsMealModalOpen(false);
-    setSaveMessage('تم حفظ الوجبة وتحديث الماكروز بنجاح!');
-    setTimeout(() => setSaveMessage(null), 2500);
+    setSaveMessage(
+      activeTargetClient
+        ? `تم حفظ الوجبة ومزامنتها في حساب (${activeTargetClient.clientName}) عبر Supabase بنجاح!`
+        : 'تم حفظ الوجبة وتحديث الماكروز بنجاح!'
+    );
+    setTimeout(() => setSaveMessage(null), 3000);
   };
 
   // Delete meal
@@ -255,21 +368,39 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
 
     setCategories(updatedCategories);
     saveDietCategories(tier, updatedCategories);
-    setSaveMessage('تم حذف الوجبة بنجاح!');
+    if (activeTargetClient) {
+      const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
+      void syncNutritionPlanToSupabase(canonicalKey, updatedCategories, tier, activeTargetClient.email);
+      window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: updatedCategories } }));
+    }
+    setSaveMessage(
+      activeTargetClient
+        ? `تم حذف الوجبة وتحديث حساب (${activeTargetClient.clientName}) سحابياً!`
+        : 'تم حذف الوجبة بنجاح!'
+    );
     setTimeout(() => setSaveMessage(null), 2500);
   };
 
   // Reset to default (with inline UI confirmation)
-  const handleResetToDefaults = () => {
+  const handleResetToDefaults = async () => {
     if (!confirmReset) {
       setConfirmReset(true);
       setTimeout(() => setConfirmReset(false), 4000);
       return;
     }
-    const defaults = resetDietCategories(tier);
+    let defaults = resetDietCategories(tier);
+    if (activeTargetClient) {
+      const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
+      defaults = await resetNutritionPlanInSupabase(canonicalKey, tier, activeTargetClient.email);
+      window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: defaults } }));
+    }
     setCategories(defaults);
     setConfirmReset(false);
-    setSaveMessage('تم استرجاع قائمة الوجبات الافتراضية بنجاح.');
+    setSaveMessage(
+      activeTargetClient
+        ? `تم استرجاع الوجبات الافتراضية للمشترك (${activeTargetClient.clientName}) ومزامنتها سحابياً.`
+        : 'تم استرجاع قائمة الوجبات الافتراضية بنجاح.'
+    );
     setTimeout(() => setSaveMessage(null), 2500);
   };
 
@@ -307,10 +438,19 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
     if (tmpl.categories && tmpl.categories.length > 0) {
       setCategories(tmpl.categories);
       saveDietCategories(tier, tmpl.categories);
+      if (activeTargetClient) {
+        const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
+        void syncNutritionPlanToSupabase(canonicalKey, tmpl.categories, tier, activeTargetClient.email);
+        window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: tmpl.categories } }));
+      }
     }
     setIsApplyTemplateModalOpen(false);
-    setSaveMessage(`تم تطبيق القالب (${tmpl.nameAr}) بنجاح!`);
-    setTimeout(() => setSaveMessage(null), 2500);
+    setSaveMessage(
+      activeTargetClient
+        ? `تم تطبيق القالب (${tmpl.nameAr}) على حساب (${activeTargetClient.clientName}) ومزامنته في Supabase بنجاح!`
+        : `تم تطبيق القالب (${tmpl.nameAr}) بنجاح!`
+    );
+    setTimeout(() => setSaveMessage(null), 3000);
   };
 
   return (
@@ -355,7 +495,7 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
           {/* Tier switcher */}
           <div className="flex items-center gap-1.5 p-1 bg-black/50 border border-white/10 rounded-2xl">
             <button
-              onClick={() => setTier('standard')}
+              onClick={() => handleManualTierSwitch('standard')}
               className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 tier === 'standard'
                   ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-md'
@@ -365,7 +505,7 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
               الباقة القياسية (Standard)
             </button>
             <button
-              onClick={() => setTier('VIP')}
+              onClick={() => handleManualTierSwitch('VIP')}
               className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 tier === 'VIP'
                   ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md'
@@ -391,6 +531,20 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
           </button>
         </div>
       </div>
+
+      {/* Prominent Target Client Selector */}
+      <AdminTargetClientSelector
+        subscribers={subscribers}
+        selectedClientKey={selectedClientKey}
+        onSelectClient={handleSelectTargetClient}
+        onRefreshSubscribers={
+          onRefreshSubscribers ||
+          (() => {
+            fetchSubscribersFromSupabase().then(setInternalSubscribers);
+          })
+        }
+        isLoadingClient={isLoadingClient || loadingClientDiet}
+      />
 
       {/* Per-Subscriber Nutrition Access Lock Controls */}
       <div className="bg-[#0B132B]/80 p-5 rounded-3xl border border-white/10 space-y-3">
@@ -672,6 +826,7 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({ language }) =>
                 </h3>
                 <p className="text-xs text-orange-400 font-bold">
                   {activeCategory.titleAr} ({tier === 'VIP' ? 'VIP' : 'Standard'})
+                  {activeTargetClient ? ` — للمشترك: ${activeTargetClient.clientName}` : ''}
                 </p>
               </div>
             </div>

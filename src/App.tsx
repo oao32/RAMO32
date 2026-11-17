@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { StandardDashboard } from './pages/user/StandardDashboard';
 import { VipDashboard } from './pages/user/VipDashboard';
@@ -94,8 +94,12 @@ const ALL_PLANS: Record<'standard' | 'platinum', PlanDetails> = {
   },
 };
 import {
+  getCanonicalClientKey,
+  loadClientWorkspaceFromSupabase,
+  syncAssessmentToSupabase,
   syncProfileToSupabase,
   syncNoteToSupabase,
+  syncWorkoutDaysToSupabase,
   normalizeSubscriptionPlan,
 } from './lib/supabase';
 import {
@@ -197,6 +201,55 @@ function MainPortal() {
     }
     return [];
   });
+
+  const hydrateClientWorkspace = useCallback(
+    async (params: {
+      clientId?: string | null;
+      email?: string | null;
+      fallbackName?: string;
+      fallbackPlan?: SubscriptionPlanTier;
+    }) => {
+      const workspace = await loadClientWorkspaceFromSupabase(params);
+      setProfile(workspace.profile);
+      setWorkoutDays(workspace.workoutDays);
+      setNotes(workspace.notes);
+      setStreakData(workspace.streakData);
+      setAthleteRank(workspace.athleteRank);
+
+      try {
+        localStorage.setItem('oao_client_profile', JSON.stringify(workspace.profile));
+        localStorage.setItem('oao_workout_days', JSON.stringify(workspace.workoutDays));
+        localStorage.setItem('oao_client_notes', JSON.stringify(workspace.notes));
+        localStorage.setItem('oao_streak_data', JSON.stringify(workspace.streakData));
+        localStorage.setItem('oao_athlete_rank', JSON.stringify(workspace.athleteRank));
+      } catch {
+        // ignore
+      }
+    },
+    []
+  );
+
+  // Hydrate live workspace from Supabase when a subscriber session is active on mount
+  useEffect(() => {
+    if (userSession !== 'client') return;
+    let currentUser: { id?: string; email?: string; name?: string; plan?: SubscriptionPlanTier } | null = null;
+    try {
+      const raw = localStorage.getItem('oao_current_user');
+      if (raw) currentUser = JSON.parse(raw);
+    } catch {
+      currentUser = null;
+    }
+    const targetEmail = currentUser?.email || profile.email;
+    const targetId = currentUser?.id || profile.id;
+    if (!targetEmail && (!targetId || targetId === 'client_athlete')) return;
+
+    void hydrateClientWorkspace({
+      clientId: targetId,
+      email: targetEmail,
+      fallbackName: currentUser?.name || profile.name,
+      fallbackPlan: currentUser?.plan || normalizeSubscriptionPlan(profile.subscription_plan),
+    });
+  }, []);
 
   // Real-time synchronization for coach replies, athlete inquiries, profile updates, and login triggers
   useEffect(() => {
@@ -351,6 +404,8 @@ function MainPortal() {
   const handleUpdateWorkouts = (newDays: WorkoutDay[]) => {
     setWorkoutDays(newDays);
     localStorage.setItem('oao_workout_days', JSON.stringify(newDays));
+    const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
+    void syncWorkoutDaysToSupabase(canonicalKey, newDays, profile.email);
   };
 
   // Auto-Save Water
@@ -428,6 +483,17 @@ function MainPortal() {
     };
     handleUpdateAthleteRank(updatedRank);
 
+    const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
+    void syncAssessmentToSupabase(
+      canonicalKey,
+      {
+        analysisData: profile.analysisData,
+        streakData: newStreakData,
+        athleteRank: updatedRank,
+      },
+      profile.email
+    );
+
     // Update Badges Progress & Unlocks
     const updatedBadges = badges.map((b) => {
       if (b.id === 'badge_unbreakable' && newStreakCount >= 30) {
@@ -456,6 +522,16 @@ function MainPortal() {
       freezesRemaining: streakData.freezesRemaining - 1,
     };
     handleUpdateStreakData(updatedStreakData);
+    const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
+    void syncAssessmentToSupabase(
+      canonicalKey,
+      {
+        analysisData: profile.analysisData,
+        streakData: updatedStreakData,
+        athleteRank,
+      },
+      profile.email
+    );
   };
 
   // Auto-Save Notes
@@ -586,6 +662,12 @@ function MainPortal() {
   const handleLogout = () => {
     setUserSession('guest');
     localStorage.setItem('oao_session', 'guest');
+    localStorage.removeItem('oao_current_user');
+    localStorage.removeItem('oao_client_profile');
+    localStorage.removeItem('oao_workout_days');
+    localStorage.removeItem('oao_client_notes');
+    localStorage.removeItem('oao_streak_data');
+    localStorage.removeItem('oao_athlete_rank');
     setShowPlansForAthlete(false);
   };
 
@@ -593,7 +675,8 @@ function MainPortal() {
     role: Role,
     userEmail?: string,
     userName?: string,
-    subscriptionPlan?: SubscriptionPlanTier
+    subscriptionPlan?: SubscriptionPlanTier,
+    clientId?: string
   ) => {
     if (role === 'admin') {
       setUserSession('admin');
@@ -602,16 +685,51 @@ function MainPortal() {
     } else {
       setUserSession('client');
       localStorage.setItem('oao_session', 'client');
-      const nextPlan = normalizeSubscriptionPlan(subscriptionPlan || profile.subscription_plan);
+      const nextPlan = normalizeSubscriptionPlan(subscriptionPlan || 'standard');
+      const resolvedId = getCanonicalClientKey(clientId, userEmail);
       const todayIso = getTodayIsoString();
-      handleUpdateProfile({
-        ...profile,
-        name: userName && userName.trim() ? userName.trim() : profile.name,
-        email: userEmail || profile.email,
+
+      try {
+        localStorage.removeItem('oao_client_profile');
+        localStorage.removeItem('oao_workout_days');
+        localStorage.removeItem('oao_client_notes');
+        localStorage.removeItem('oao_streak_data');
+        localStorage.removeItem('oao_athlete_rank');
+        localStorage.setItem(
+          'oao_current_user',
+          JSON.stringify({
+            id: resolvedId,
+            email: userEmail || '',
+            name: userName || INITIAL_CLIENT_PROFILE.name,
+            plan: nextPlan,
+            role: 'client',
+          })
+        );
+      } catch {
+        // ignore
+      }
+
+      const baselineProfile: ClientProfile = {
+        ...INITIAL_CLIENT_PROFILE,
+        id: resolvedId,
+        name: userName && userName.trim() ? userName.trim() : INITIAL_CLIENT_PROFILE.name,
+        nameEn: userName && userName.trim() ? userName.trim() : INITIAL_CLIENT_PROFILE.nameEn,
+        email: userEmail || '',
         subscription_plan: nextPlan,
-        subscriptionStartDate: profile.subscriptionStartDate || todayIso,
-        subscriptionEndDate:
-          profile.subscriptionEndDate || addDaysToDate(todayIso, profile.subscriptionDaysLeft || 60),
+        subscriptionStartDate: todayIso,
+        subscriptionEndDate: addDaysToDate(todayIso, 60),
+      };
+      setProfile(baselineProfile);
+      setWorkoutDays(INITIAL_WORKOUT_DAYS);
+      setNotes([]);
+      setStreakData(INITIAL_STREAK_DATA);
+      setAthleteRank(INITIAL_ATHLETE_RANK);
+
+      void hydrateClientWorkspace({
+        clientId: resolvedId,
+        email: userEmail,
+        fallbackName: userName,
+        fallbackPlan: nextPlan,
       });
     }
   };
@@ -1277,6 +1395,7 @@ function MainPortal() {
               isVIP={isClientVIP}
               isLocked={profile.nutritionPlanLocked}
               subscriberEmail={profile.email}
+              clientId={profile.id}
             />
 
             {/* DIRECT NOTES & INQUIRIES WITH COACH */}

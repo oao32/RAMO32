@@ -20,10 +20,29 @@ function getGenAIClient() {
   });
 }
 
+function resolvePort(): number {
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--port' && args[i + 1]) {
+      const parsed = Number(args[i + 1]);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    if (args[i].startsWith('--port=')) {
+      const parsed = Number(args[i].split('=')[1]);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+  }
+  if (process.env.NODE_ENV === 'production') {
+    const envPort = Number(process.env.PORT);
+    if (Number.isFinite(envPort) && envPort > 0) return envPort;
+  }
+  return 3000;
+}
+
 async function startServer() {
   const app = express();
   const httpServer = http.createServer(app);
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = resolvePort();
 
   app.use(express.json({ limit: '2mb' }));
 
@@ -321,6 +340,10 @@ async function startServer() {
       appType: 'spa',
     });
 
+    vitePromise.catch((err) => {
+      console.error('Vite dev server initialization error:', err);
+    });
+
     app.use(async (req, res, next) => {
       try {
         const vite = await vitePromise;
@@ -337,9 +360,17 @@ async function startServer() {
     });
   }
 
+  httpServer.on('error', (err) => {
+    console.error(`Server failed to bind on port ${PORT}:`, err);
+    process.exit(1);
+  });
+
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`OAO Training Portal Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error('Fatal server startup error:', err);
+  process.exit(1);
+});

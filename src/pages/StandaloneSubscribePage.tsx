@@ -461,7 +461,7 @@ export const StandaloneSubscribePage: React.FC = () => {
     try {
       const generatedCode = `OAO-${resolvedPlanTier === 'VIP' ? 'VIP' : 'STD'}-${Math.floor(100 + Math.random() * 900)}`;
       const generatedPass = `OAO-${resolvedPlanTier === 'VIP' ? 'VIP' : 'STD'}-${Math.floor(1000 + Math.random() * 9000)}`;
-      await assignSubscriberPassword({
+      const assignRes = await assignSubscriberPassword({
         email: cleanEmail,
         password: generatedPass,
         clientName: cleanFullName,
@@ -476,16 +476,15 @@ export const StandaloneSubscribePage: React.FC = () => {
         status: 'active',
       });
 
-      const existingProfileRaw = localStorage.getItem('oao_client_profile');
-      const baseProfile = existingProfileRaw
-        ? { ...INITIAL_CLIENT_PROFILE, ...JSON.parse(existingProfileRaw) }
-        : INITIAL_CLIENT_PROFILE;
+      const canonicalId = assignRes.record?.id || cleanEmail;
       const updatedProfile = {
-        ...baseProfile,
+        ...INITIAL_CLIENT_PROFILE,
+        id: canonicalId,
         name: cleanFullName,
         nameEn: cleanFullName,
         email: cleanEmail,
         phone: phoneWhatsapp.trim(),
+        clientCode: assignRes.record?.clientCode || generatedCode,
         age: Number(age) || undefined,
         bloodType,
         visualGoal,
@@ -496,6 +495,16 @@ export const StandaloneSubscribePage: React.FC = () => {
         subscriptionDaysLeft: currentDurationInfo.days,
       };
       localStorage.setItem('oao_client_profile', JSON.stringify(updatedProfile));
+      localStorage.setItem(
+        'oao_current_user',
+        JSON.stringify({
+          id: canonicalId,
+          email: cleanEmail,
+          name: cleanFullName,
+          plan: resolvedPlanTier,
+          role: 'client',
+        })
+      );
       window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
       await syncProfileToSupabase(updatedProfile);
     } catch (authErr) {

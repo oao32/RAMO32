@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ClientProfile,
   ComprehensiveAnalysisData,
@@ -9,7 +9,13 @@ import {
   INITIAL_STREAK_DATA,
   INITIAL_ATHLETE_RANK,
 } from '../../data/initialData';
-import { syncProfileToSupabase } from '../../lib/supabase';
+import {
+  getCanonicalClientKey,
+  syncClientProfileToSupabase,
+  syncAssessmentToSupabase,
+} from '../../lib/supabase';
+import { UserCredentialRecord } from '../../lib/authStore';
+import { AdminTargetClientSelector } from './AdminTargetClientSelector';
 import {
   Activity,
   Sparkles,
@@ -31,81 +37,96 @@ interface AdminAssessmentEditorProps {
   profile: ClientProfile;
   onUpdateProfile: (updated: ClientProfile) => void;
   language: 'ar' | 'en';
+  subscribers?: UserCredentialRecord[];
+  selectedClientKey?: string;
+  onSelectClient?: (key: string) => void;
+  targetClient?: UserCredentialRecord | null;
+  isLoadingClient?: boolean;
+  onRefreshSubscribers?: () => void;
 }
+
+const buildDefaultAnalysisData = (): ComprehensiveAnalysisData => ({
+  muscleAnalysis: {
+    strengthsTitleAr: 'نقاط القوة والكتلة المكتسبة',
+    strengthsItems: [
+      { labelAr: 'عضلات الظهر والمجنص', valueAr: 'ممتاز (V-Taper واضح)' },
+      { labelAr: 'الصدر الأوسط والسفلي', valueAr: 'كثافة جيدة جداً' },
+    ],
+    focusTitleAr: 'التركيز الأساسي في الخطة الحالية',
+    focusItems: [
+      'تكثيف تمارين الصدر العلوي (Incline Angle 30°) لسد الفجوة العلوية.',
+      'الرأس الجانبي للكتف بحجم تدريبي 14-16 جلسة أسبوعية لتوسيع العرض.',
+      'الرأس الطويل للترايسبس لزيادة سماكة الذراع من الخلف.',
+    ],
+  },
+  nutritionEngineering: {
+    goalTitleAr: 'الهدف: تنشيف ذكي مع الحفاظ على القوة العضلية',
+    preWorkoutNotesAr: '• وجبة قبل التمرين: 40 جم كارب معقد + 30 جم بروتين سريع قبل التمرين بـ 90 دقيقة.',
+    postWorkoutNotesAr: '• وجبة بعد التمرين: 50 جم كارب سريع (موز/أرز أبيض) + 35 جم واي بروتين.',
+  },
+  trainingProtocol: {
+    splitNameAr: 'Push / Pull / Legs / Rest / Upper Body Split',
+    overloadNotesAr: 'عند تحقيق الحد الأقصى للتكرارات المستهدفة (مثال: 12 تكرار) في جلستين متتاليتين، يتم زيادة الوزن بمقدار 2.5 كجم إلى 5 كجم تلقائياً.',
+    rpeNotesAr: 'جميع الجولات الأساسية تُنفّذ عند RIR 1-2 (أي يتبقى تكرار أو تكراران قبل الفشل العضلي التام) لحماية الجهاز العصبي والاستشفاء السريع.',
+  },
+  recoveryFramework: {
+    sleepNotesAr: '7.5 إلى 8.5 ساعات نوم متواصل في غرفة مظلمة وباردة لتحفيز هرمون النمو البنائي (GH) وتقليل الكورتيزول.',
+    supplementItems: [
+      '• كرياتين مونوهيدرات: 5 جم',
+      '• أوميغا 3 عالي EPA: 2000 ملغ',
+      '• مغنيسيوم جلايسينات: 400 ملغ',
+      '• فيتامين D3 + K2: 5000 وحدة',
+    ],
+  },
+  customCoachNotes: 'المتدرب ملتزم ولديه استجابة عصبية ممتازة للأوزان الحرة.',
+});
 
 export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
   profile,
   onUpdateProfile,
   language,
+  subscribers,
+  selectedClientKey = '',
+  onSelectClient,
+  targetClient,
+  isLoadingClient = false,
+  onRefreshSubscribers,
 }) => {
   // Analysis Data state
-  const [analysisData, setAnalysisData] = useState<ComprehensiveAnalysisData>(() => {
-    return (
-      profile.analysisData || {
-        muscleAnalysis: {
-          strengthsTitleAr: 'نقاط القوة والكتلة المكتسبة',
-          strengthsItems: [
-            { labelAr: 'عضلات الظهر والمجنص', valueAr: 'ممتاز (V-Taper واضح)' },
-            { labelAr: 'الصدر الأوسط والسفلي', valueAr: 'كثافة جيدة جداً' },
-          ],
-          focusTitleAr: 'التركيز الأساسي في الخطة الحالية',
-          focusItems: [
-            'تكثيف تمارين الصدر العلوي (Incline Angle 30°) لسد الفجوة العلوية.',
-            'الرأس الجانبي للكتف بحجم تدريبي 14-16 جلسة أسبوعية لتوسيع العرض.',
-            'الرأس الطويل للترايسبس لزيادة سماكة الذراع من الخلف.',
-          ],
-        },
-        nutritionEngineering: {
-          goalTitleAr: 'الهدف: تنشيف ذكي مع الحفاظ على القوة العضلية',
-          preWorkoutNotesAr: '• وجبة قبل التمرين: 40 جم كارب معقد + 30 جم بروتين سريع قبل التمرين بـ 90 دقيقة.',
-          postWorkoutNotesAr: '• وجبة بعد التمرين: 50 جم كارب سريع (موز/أرز أبيض) + 35 جم واي بروتين.',
-        },
-        trainingProtocol: {
-          splitNameAr: 'Push / Pull / Legs / Rest / Upper Body Split',
-          overloadNotesAr: 'عند تحقيق الحد الأقصى للتكرارات المستهدفة (مثال: 12 تكرار) في جلستين متتاليتين، يتم زيادة الوزن بمقدار 2.5 كجم إلى 5 كجم تلقائياً.',
-          rpeNotesAr: 'جميع الجولات الأساسية تُنفّذ عند RIR 1-2 (أي يتبقى تكرار أو تكراران قبل الفشل العضلي التام) لحماية الجهاز العصبي والاستشفاء السريع.',
-        },
-        recoveryFramework: {
-          sleepNotesAr: '7.5 إلى 8.5 ساعات نوم متواصل في غرفة مظلمة وباردة لتحفيز هرمون النمو البنائي (GH) وتقليل الكورتيزول.',
-          supplementItems: [
-            '• كرياتين مونوهيدرات: 5 جم',
-            '• أوميغا 3 عالي EPA: 2000 ملغ',
-            '• مغنيسيوم جلايسينات: 400 ملغ',
-            '• فيتامين D3 + K2: 5000 وحدة',
-          ],
-        },
-        customCoachNotes: 'المتدرب ملتزم ولديه استجابة عصبية ممتازة للأوزان الحرة.',
-      }
-    );
-  });
+  const [analysisData, setAnalysisData] = useState<ComprehensiveAnalysisData>(
+    () => profile.analysisData || buildDefaultAnalysisData()
+  );
 
   // Streak & Rank State
-  const [streakData, setStreakData] = useState<StreakData>(() => {
-    try {
-      const saved = localStorage.getItem('oao_streak_data');
-      return saved ? JSON.parse(saved) : profile.streakData || INITIAL_STREAK_DATA;
-    } catch {
-      return INITIAL_STREAK_DATA;
-    }
-  });
+  const [streakData, setStreakData] = useState<StreakData>(
+    () => profile.streakData || INITIAL_STREAK_DATA
+  );
 
-  const [athleteRank, setAthleteRank] = useState<AthleteRank>(() => {
-    try {
-      const saved = localStorage.getItem('oao_athlete_rank');
-      return saved ? JSON.parse(saved) : profile.athleteRank || INITIAL_ATHLETE_RANK;
-    } catch {
-      return INITIAL_ATHLETE_RANK;
-    }
-  });
+  const [athleteRank, setAthleteRank] = useState<AthleteRank>(
+    () => profile.athleteRank || INITIAL_ATHLETE_RANK
+  );
 
   const [savedNotice, setSavedNotice] = useState(false);
 
+  // Re-hydrate editor fields automatically whenever the selected target subscriber's profile changes
+  useEffect(() => {
+    setAnalysisData(profile.analysisData || buildDefaultAnalysisData());
+    setStreakData(profile.streakData || INITIAL_STREAK_DATA);
+    setAthleteRank(profile.athleteRank || INITIAL_ATHLETE_RANK);
+  }, [profile.id, profile.email, profile.analysisData, profile.streakData, profile.athleteRank]);
+
   // Form field helpers
-  const handleSaveAll = (e: React.FormEvent) => {
+  const handleSaveAll = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const canonicalKey = getCanonicalClientKey(
+      targetClient?.id || profile.id,
+      targetClient?.email || profile.email
+    );
 
     const updatedProfile: ClientProfile = {
       ...profile,
+      id: canonicalKey || profile.id,
       analysisData,
       streakData,
       athleteRank,
@@ -113,12 +134,19 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
 
     onUpdateProfile(updatedProfile);
 
-    // Also mirror to global storage keys & sync to Supabase
+    // Persist locally and sync straight to target client's Supabase assessment & profile records
     localStorage.setItem('oao_client_profile', JSON.stringify(updatedProfile));
     localStorage.setItem('oao_streak_data', JSON.stringify(streakData));
     localStorage.setItem('oao_athlete_rank', JSON.stringify(athleteRank));
 
-    syncProfileToSupabase(updatedProfile).catch(() => {});
+    await Promise.all([
+      syncAssessmentToSupabase(
+        canonicalKey,
+        { analysisData, streakData, athleteRank },
+        updatedProfile.email
+      ),
+      syncClientProfileToSupabase(canonicalKey, updatedProfile),
+    ]);
 
     window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
     window.dispatchEvent(new CustomEvent('oao_streak_updated', { detail: streakData }));
@@ -238,6 +266,16 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
           </button>
         </div>
       </div>
+
+      {subscribers && onSelectClient && (
+        <AdminTargetClientSelector
+          subscribers={subscribers}
+          selectedClientKey={selectedClientKey}
+          onSelectClient={onSelectClient}
+          onRefreshSubscribers={onRefreshSubscribers}
+          isLoadingClient={isLoadingClient}
+        />
+      )}
 
       {/* 1. التحليل المقطعي والبنية العضلية */}
       <div className="p-6 rounded-3xl bg-[#0B132B]/90 border border-white/10 space-y-4">

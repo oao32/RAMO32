@@ -177,6 +177,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     if (!editingSubscriber || !editEmail.trim() || !editName.trim()) return;
 
     await assignSubscriberPassword({
+      id: editingSubscriber.id,
       email: editEmail.trim(),
       password: editPassword.trim() || editingSubscriber.password || 'OAO-2026',
       clientName: editName.trim(),
@@ -261,6 +262,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     if (!resetModalUser || !newPasswordVal.trim()) return;
 
     await assignSubscriberPassword({
+      id: resetModalUser.id,
       email: resetModalUser.email,
       password: newPasswordVal.trim(),
       clientName: resetModalUser.clientName,
@@ -442,7 +444,14 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                       )}
                     </div>
                   </td>
-                  <td className="p-3.5 font-mono text-slate-300">{user.email}</td>
+                  <td className="p-3.5 font-mono text-slate-300">
+                    <div>{user.email}</div>
+                    {user.clientCode && (
+                      <div className="text-[10px] text-amber-400/90 mt-0.5">
+                        {user.clientCode}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-3.5">
                     {user.plan === 'VIP' ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40 font-bold">

@@ -2,13 +2,28 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   AIGenerationLog,
   AIPlanType,
+  AthleteRank,
   ClientNote,
   ClientProfile,
+  ComprehensiveAnalysisData,
   GeneratedAIPlanResponse,
+  StreakData,
   SubscriptionAgreement,
   SubscriptionPlanTier,
   WorkoutDay,
 } from '../types';
+import {
+  INITIAL_ATHLETE_RANK,
+  INITIAL_CLIENT_PROFILE,
+  INITIAL_STREAK_DATA,
+  INITIAL_WORKOUT_DAYS,
+} from '../data/initialData';
+import {
+  MealCategory,
+  STANDARD_DIET_CATEGORIES,
+  VIP_PLATINUM_DIET_CATEGORIES,
+  getDietPlanCategories,
+} from '../data/nutrition/dietPlanData';
 
 // Read exclusively from environment variables (No hardcoded credentials)
 export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string) || '';
@@ -19,10 +34,42 @@ const STORAGE_KEYS = {
   SUPABASE_KEY: 'oao_supabase_anon_key',
   PROFILE_PREFIX: 'oao_profile_',
   WORKOUTS_PREFIX: 'oao_workouts_',
+  DIET_PREFIX: 'oao_diet_client_',
+  ASSESSMENT_PREFIX: 'oao_assessment_',
   NOTES: 'oao_notes',
   WATER: 'oao_water_',
   AI_LOGS: 'oao_ai_generation_logs',
 };
+
+const LEGACY_PLACEHOLDER_IDS = new Set(['client_abdulrahman', 'client_001', 'client_athlete', 'global']);
+
+export function getCanonicalClientKey(clientId?: string | null, email?: string | null): string {
+  const cleanId = (clientId || '').trim();
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (cleanId && !LEGACY_PLACEHOLDER_IDS.has(cleanId)) {
+    return cleanId;
+  }
+  if (cleanEmail) {
+    return cleanEmail;
+  }
+  return cleanId || 'global';
+}
+
+export function buildCandidateClientKeys(clientId?: string | null, email?: string | null): string[] {
+  const keys = new Set<string>();
+  const cleanId = (clientId || '').trim();
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (cleanId && !LEGACY_PLACEHOLDER_IDS.has(cleanId)) {
+    keys.add(cleanId);
+  }
+  if (cleanEmail) {
+    keys.add(cleanEmail);
+  }
+  if (keys.size === 0 && cleanId) {
+    keys.add(cleanId);
+  }
+  return Array.from(keys);
+}
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -599,10 +646,12 @@ export async function syncNoteToSupabase(note: ClientNote): Promise<boolean> {
   const client = getSupabaseClient();
   if (!client) return false;
   try {
-    const { error } = await client.from('notes').upsert({
+    const canonicalClientId = getCanonicalClientKey(note.clientId, note.clientEmail);
+    const fullPayload: Record<string, unknown> = {
       id: note.id,
-      client_id: note.clientId,
+      client_id: canonicalClientId,
       client_name: note.clientName,
+      client_email: note.clientEmail ? note.clientEmail.trim().toLowerCase() : null,
       subject: note.subject,
       category: note.category,
       message: note.message,
@@ -610,11 +659,80 @@ export async function syncNoteToSupabase(note: ClientNote): Promise<boolean> {
       reply: note.reply || null,
       reply_timestamp: note.replyTimestamp || null,
       is_resolved: note.isResolved,
-    });
+    };
+
+    let { error } = await client.from('notes').upsert(fullPayload, { onConflict: 'id' });
+    if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message.includes('client_email'))) {
+      const { client_email: _omit, ...corePayload } = fullPayload;
+      const retry = await client.from('notes').upsert(corePayload, { onConflict: 'id' });
+      error = retry.error;
+    }
     return !error;
   } catch (err) {
     console.warn('Supabase sync note error:', err);
     return false;
+  }
+}
+
+export async function fetchNotesFromSupabase(filter?: {
+  clientId?: string;
+  clientEmail?: string;
+  clientName?: string;
+}): Promise<ClientNote[]> {
+  let localNotes: ClientNote[] = [];
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('oao_client_notes');
+      localNotes = raw ? (JSON.parse(raw) as ClientNote[]) : [];
+    } catch {
+      localNotes = [];
+    }
+  }
+
+  const client = getSupabaseClient();
+  if (!client) return localNotes;
+
+  try {
+    const { data, error } = await client
+      .from('notes')
+      .select('*')
+      .order('id', { ascending: false });
+
+    if (error || !data) return localNotes;
+
+    const mapped: ClientNote[] = data.map((row: Record<string, unknown>) => ({
+      id: String(row.id),
+      clientId: row.client_id ? String(row.client_id) : 'client_athlete',
+      clientName: String(row.client_name || 'مشترك'),
+      clientEmail: row.client_email ? String(row.client_email).trim().toLowerCase() : undefined,
+      subject: String(row.subject || ''),
+      category: (row.category as ClientNote['category']) || 'general',
+      message: String(row.message || ''),
+      timestamp: String(row.timestamp || ''),
+      reply: row.reply ? String(row.reply) : undefined,
+      replyTimestamp: row.reply_timestamp ? String(row.reply_timestamp) : undefined,
+      isResolved: Boolean(row.is_resolved),
+    }));
+
+    if (filter && (filter.clientId || filter.clientEmail || filter.clientName)) {
+      const candidates = buildCandidateClientKeys(filter.clientId, filter.clientEmail);
+      const cleanEmail = (filter.clientEmail || '').trim().toLowerCase();
+      const cleanName = (filter.clientName || '').trim().toLowerCase();
+      const filtered = mapped.filter((n) => {
+        if (n.clientId && candidates.includes(n.clientId)) return true;
+        if (cleanEmail && n.clientEmail && n.clientEmail.trim().toLowerCase() === cleanEmail) return true;
+        if (cleanName && n.clientName && n.clientName.trim().toLowerCase() === cleanName) return true;
+        return false;
+      });
+      return filtered;
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('oao_client_notes', JSON.stringify(mapped));
+    }
+    return mapped;
+  } catch {
+    return localNotes;
   }
 }
 
@@ -657,20 +775,21 @@ export interface SaveSubscriberPlanInput {
  */
 export async function saveSubscriberToSupabase(
   input: SaveSubscriberPlanInput
-): Promise<{ synced: boolean; subscriptionPlan: SubscriptionPlanTier; error?: string }> {
+): Promise<{ synced: boolean; subscriptionPlan: SubscriptionPlanTier; id?: string; error?: string }> {
   const normalizedPlan = normalizeSubscriptionPlan(input.subscriptionPlan);
   const packageTypeAr =
     normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)';
   const packageTypeEn = normalizedPlan; // 'VIP' | 'standard'
+  const cleanEmail = input.email ? input.email.trim().toLowerCase() : undefined;
 
   // Mirror email -> plan mapping locally so returning logins always resolve immediately even offline
-  if (typeof window !== 'undefined' && input.email) {
+  if (typeof window !== 'undefined' && cleanEmail) {
     try {
       const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
       const mapObj: Record<string, { plan: SubscriptionPlanTier; nameAr: string; startDate?: string; endDate?: string; status?: string }> = mapRaw
         ? JSON.parse(mapRaw)
         : {};
-      mapObj[input.email.trim().toLowerCase()] = {
+      mapObj[cleanEmail] = {
         plan: normalizedPlan,
         nameAr: input.nameAr,
         startDate: input.subscriptionStartDate,
@@ -697,11 +816,13 @@ export async function saveSubscriberToSupabase(
     let existingUuid: string | null =
       input.id && UUID_REGEX.test(input.id) ? input.id : null;
 
-    if (!existingUuid && input.email) {
+    if (!existingUuid && cleanEmail) {
       const { data: found } = await client
         .from('clients')
         .select('id')
-        .eq('email', input.email.trim())
+        .ilike('email', cleanEmail)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (found && typeof found.id === 'string') {
         existingUuid = found.id;
@@ -716,7 +837,7 @@ export async function saveSubscriberToSupabase(
       client_code: clientCode,
       name_ar: input.nameAr,
       name_en: input.nameEn || input.nameAr,
-      email: input.email || null,
+      email: cleanEmail || null,
       phone: input.phone || null,
       height_cm: input.heightCm ?? 175,
       target_weight_kg: input.targetWeightKg ?? 70,
@@ -739,14 +860,15 @@ export async function saveSubscriberToSupabase(
         error.code === '42703' ||
         error.message.includes('subscription_plan') ||
         error.message.includes('subscription_start_date') ||
-        error.message.includes('subscription_end_date'))
+        error.message.includes('subscription_end_date') ||
+        error.message.includes('column'))
     ) {
       const fallbackPayload: Record<string, unknown> = {
         id: rowId,
         client_code: clientCode,
         name_ar: input.nameAr,
         name_en: input.nameEn || input.nameAr,
-        email: input.email || null,
+        email: cleanEmail || null,
         phone: input.phone || null,
         height_cm: input.heightCm ?? 175,
         target_weight_kg: input.targetWeightKg ?? 70,
@@ -761,10 +883,10 @@ export async function saveSubscriberToSupabase(
     }
 
     if (error) {
-      return { synced: false, subscriptionPlan: normalizedPlan, error: error.message };
+      return { synced: false, subscriptionPlan: normalizedPlan, id: rowId, error: error.message };
     }
 
-    return { synced: true, subscriptionPlan: normalizedPlan };
+    return { synced: true, subscriptionPlan: normalizedPlan, id: rowId };
   } catch (err) {
     return {
       synced: false,
@@ -889,6 +1011,15 @@ export async function fetchSubscriberPlanFromSupabase(
 // Sync profile stats & subscription_plan ('standard' | 'VIP') to Supabase
 export async function syncProfileToSupabase(profile: ClientProfile): Promise<boolean> {
   const normalizedPlan = normalizeSubscriptionPlan(profile.subscription_plan);
+  const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
+
+  if (typeof window !== 'undefined' && canonicalKey) {
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.PROFILE_PREFIX}${canonicalKey}`, JSON.stringify(profile));
+    } catch {
+      // ignore
+    }
+  }
 
   // 1. Sync to live `public.clients` table
   const clientRes = await saveSubscriberToSupabase({
@@ -906,12 +1037,16 @@ export async function syncProfileToSupabase(profile: ClientProfile): Promise<boo
     subscriptionEndDate: profile.subscriptionEndDate,
   });
 
-  // 2. Also sync to `public.profiles` if created by SQL schema
+  const resolvedId = clientRes.id || canonicalKey;
   const client = getSupabaseClient();
   if (!client) return clientRes.synced;
+
+  let profilesSynced = false;
+  let extSynced = false;
+
   try {
     const { error } = await client.from('profiles').upsert({
-      id: profile.id,
+      id: resolvedId,
       name: profile.name,
       subscription_plan: normalizedPlan,
       weight: profile.weight,
@@ -923,9 +1058,214 @@ export async function syncProfileToSupabase(profile: ClientProfile): Promise<boo
       daily_water_current: profile.dailyWaterCurrent,
       updated_at: new Date().toISOString(),
     });
-    return clientRes.synced || !error;
+    profilesSynced = !error;
   } catch {
-    return clientRes.synced;
+    profilesSynced = false;
+  }
+
+  // 3. Persist full extended profile JSONB in `public.workouts` (`day_key = 'profile_ext'`) for 100% cross-device fidelity
+  try {
+    const { error } = await client.from('workouts').upsert(
+      {
+        id: `profile_ext_${resolvedId}`,
+        client_id: resolvedId,
+        day_key: 'profile_ext',
+        workout_data: {
+          ...profile,
+          id: resolvedId,
+          subscription_plan: normalizedPlan,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    extSynced = !error;
+  } catch {
+    extSynced = false;
+  }
+
+  return clientRes.synced || profilesSynced || extSynced;
+}
+
+export async function syncClientProfileToSupabase(
+  clientKey: string,
+  profile: ClientProfile
+): Promise<boolean> {
+  const canonicalKey = getCanonicalClientKey(clientKey || profile.id, profile.email);
+  return syncProfileToSupabase({
+    ...profile,
+    id: canonicalKey,
+  });
+}
+
+export async function fetchClientProfileFromSupabase(
+  clientId?: string | null,
+  email?: string | null,
+  fallback?: Partial<ClientProfile>
+): Promise<ClientProfile> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const candidates = buildCandidateClientKeys(clientId, cleanEmail);
+  const canonicalKey = getCanonicalClientKey(clientId, cleanEmail);
+
+  let localMirror: Partial<ClientProfile> = {};
+  if (typeof window !== 'undefined' && canonicalKey) {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.PROFILE_PREFIX}${canonicalKey}`);
+      if (raw) localMirror = JSON.parse(raw) as Partial<ClientProfile>;
+    } catch {
+      // ignore
+    }
+  }
+
+  const baseProfile: ClientProfile = {
+    ...INITIAL_CLIENT_PROFILE,
+    ...localMirror,
+    ...fallback,
+    id: canonicalKey || INITIAL_CLIENT_PROFILE.id,
+    email: cleanEmail || fallback?.email || localMirror.email || INITIAL_CLIENT_PROFILE.email,
+    subscription_plan: normalizeSubscriptionPlan(
+      fallback?.subscription_plan || localMirror.subscription_plan || INITIAL_CLIENT_PROFILE.subscription_plan
+    ),
+  };
+
+  const client = getSupabaseClient();
+  if (!client || candidates.length === 0) {
+    return baseProfile;
+  }
+
+  try {
+    // Query clients, profiles, and extended profile JSONB in parallel
+    const [clientsRes, profilesRes, extRes, authRes] = await Promise.all([
+      cleanEmail
+        ? client
+            .from('clients')
+            .select('*')
+            .ilike('email', cleanEmail)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        : client
+            .from('clients')
+            .select('*')
+            .in('id', candidates)
+            .limit(1)
+            .maybeSingle(),
+      client
+        .from('profiles')
+        .select('*')
+        .in('id', candidates)
+        .limit(1)
+        .maybeSingle(),
+      client
+        .from('workouts')
+        .select('*')
+        .eq('day_key', 'profile_ext')
+        .in('client_id', candidates)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      cleanEmail
+        ? client
+            .from('workouts')
+            .select('*')
+            .eq('id', `auth_${cleanEmail}`)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+
+    const merged: ClientProfile = { ...baseProfile };
+
+    if (!clientsRes.error && clientsRes.data) {
+      const row = clientsRes.data as Record<string, unknown>;
+      if (row.id) merged.id = String(row.id);
+      if (row.name_ar) merged.name = String(row.name_ar);
+      if (row.name_en) merged.nameEn = String(row.name_en);
+      if (row.email) merged.email = String(row.email).trim().toLowerCase();
+      if (row.phone) merged.phone = String(row.phone);
+      if (row.client_code) merged.clientCode = String(row.client_code);
+      if (row.height_cm) merged.height = Number(row.height_cm);
+      if (row.target_weight_kg) merged.targetWeight = Number(row.target_weight_kg);
+      if (row.subscription_plan || row.package_type_en) {
+        merged.subscription_plan = normalizeSubscriptionPlan(
+          String(row.subscription_plan || row.package_type_en)
+        );
+      }
+      if (row.status) {
+        merged.subscriptionStatus = row.status as ClientProfile['subscriptionStatus'];
+      }
+      if (row.subscription_start_date) {
+        merged.subscriptionStartDate = String(row.subscription_start_date);
+      }
+      if (row.subscription_end_date) {
+        merged.subscriptionEndDate = String(row.subscription_end_date);
+      }
+      if (row.age !== null && row.age !== undefined) merged.age = Number(row.age);
+      if (row.blood_type) merged.bloodType = String(row.blood_type);
+      if (row.visual_goal) merged.visualGoal = String(row.visual_goal);
+      if (row.nutrition_plan_locked !== undefined) {
+        merged.nutritionPlanLocked = Boolean(row.nutrition_plan_locked);
+      }
+      if (row.inbody_filename) merged.inBodyFileName = String(row.inbody_filename);
+      if (row.inbody_file_url) merged.inBodyFileUrl = String(row.inbody_file_url);
+      if (row.assigned_password) merged.assignedPassword = String(row.assigned_password);
+    }
+
+    if (!authRes.error && authRes.data && (authRes.data as Record<string, unknown>).workout_data) {
+      const authData = (authRes.data as Record<string, unknown>).workout_data as Record<string, unknown>;
+      if (authData.clientName && !clientsRes.data) merged.name = String(authData.clientName);
+      if (authData.plan) merged.subscription_plan = normalizeSubscriptionPlan(String(authData.plan));
+      if (authData.nutritionPlanLocked !== undefined) {
+        merged.nutritionPlanLocked = Boolean(authData.nutritionPlanLocked);
+      }
+      if (authData.visualGoal && !merged.visualGoal) merged.visualGoal = String(authData.visualGoal);
+      if (authData.age && !merged.age) merged.age = Number(authData.age);
+      if (authData.bloodType && !merged.bloodType) merged.bloodType = String(authData.bloodType);
+      if (authData.password) merged.assignedPassword = String(authData.password);
+    }
+
+    if (!profilesRes.error && profilesRes.data) {
+      const p = profilesRes.data as Record<string, unknown>;
+      if (p.weight !== null && p.weight !== undefined) merged.weight = Number(p.weight);
+      if (p.height !== null && p.height !== undefined) merged.height = Number(p.height);
+      if (p.muscle_mass !== null && p.muscle_mass !== undefined) merged.muscleMass = Number(p.muscle_mass);
+      if (p.body_fat !== null && p.body_fat !== undefined) merged.bodyFat = Number(p.body_fat);
+      if (p.target_weight !== null && p.target_weight !== undefined) merged.targetWeight = Number(p.target_weight);
+      if (p.daily_calories !== null && p.daily_calories !== undefined) merged.dailyCalories = Number(p.daily_calories);
+      if (p.daily_water_current !== null && p.daily_water_current !== undefined) merged.dailyWaterCurrent = Number(p.daily_water_current);
+    }
+
+    if (!extRes.error && extRes.data && (extRes.data as Record<string, unknown>).workout_data) {
+      const ext = (extRes.data as Record<string, unknown>).workout_data as Partial<ClientProfile>;
+      if (ext.weight !== undefined) merged.weight = ext.weight;
+      if (ext.height !== undefined) merged.height = ext.height;
+      if (ext.muscleMass !== undefined) merged.muscleMass = ext.muscleMass;
+      if (ext.bodyFat !== undefined) merged.bodyFat = ext.bodyFat;
+      if (ext.targetWeight !== undefined) merged.targetWeight = ext.targetWeight;
+      if (ext.dailyWaterGoal !== undefined) merged.dailyWaterGoal = ext.dailyWaterGoal;
+      if (ext.dailyWaterCurrent !== undefined) merged.dailyWaterCurrent = ext.dailyWaterCurrent;
+      if (ext.dailyCalories !== undefined) merged.dailyCalories = ext.dailyCalories;
+      if (ext.macros) merged.macros = ext.macros;
+      if (ext.analysisData) merged.analysisData = ext.analysisData;
+      if (ext.streakData) merged.streakData = ext.streakData;
+      if (ext.athleteRank) merged.athleteRank = ext.athleteRank;
+      if (ext.visualGoal) merged.visualGoal = ext.visualGoal;
+      if (ext.age !== undefined) merged.age = ext.age;
+      if (ext.bloodType) merged.bloodType = ext.bloodType;
+      if (ext.subscriptionStartDate) merged.subscriptionStartDate = ext.subscriptionStartDate;
+      if (ext.subscriptionEndDate) merged.subscriptionEndDate = ext.subscriptionEndDate;
+    }
+
+    if (typeof window !== 'undefined' && merged.id) {
+      try {
+        localStorage.setItem(`${STORAGE_KEYS.PROFILE_PREFIX}${merged.id}`, JSON.stringify(merged));
+      } catch {
+        // ignore
+      }
+    }
+
+    return merged;
+  } catch {
+    return baseProfile;
   }
 }
 
@@ -1061,16 +1401,11 @@ export async function fetchDeclarationsFromSupabase(): Promise<SubscriptionAgree
       completedTimestamp: row.completed_timestamp ? String(row.completed_timestamp) : undefined,
     }));
 
-    const remoteIds = new Set(remoteDecls.map((r) => r.id));
-    const merged = [
-      ...remoteDecls,
-      ...localDecls.filter((l) => !remoteIds.has(l.id)),
-    ];
-
+    // Authoritative Supabase declarations list (replaces local cache so deleted cloud rows do not reappear)
     if (typeof window !== 'undefined') {
-      localStorage.setItem('oao_client_declarations', JSON.stringify(merged));
+      localStorage.setItem('oao_client_declarations', JSON.stringify(remoteDecls));
     }
-    return merged;
+    return remoteDecls;
   } catch {
     return localDecls;
   }
@@ -1118,18 +1453,28 @@ export async function deleteNoteFromSupabase(noteId: string): Promise<boolean> {
 }
 
 /**
- * Sync workout days to Supabase `workouts` table
+ * Sync workout days to Supabase `workouts` table scoped to target client key
  */
 export async function syncWorkoutDaysToSupabase(
   clientId: string,
-  days: WorkoutDay[]
+  days: WorkoutDay[],
+  email?: string
 ): Promise<boolean> {
+  const canonicalKey = getCanonicalClientKey(clientId, email);
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.WORKOUTS_PREFIX}${canonicalKey}`, JSON.stringify(days));
+    } catch {
+      // ignore
+    }
+  }
+
   const client = getSupabaseClient();
   if (!client) return false;
   try {
     const payload = {
-      id: `workouts_${clientId || 'global'}`,
-      client_id: clientId || 'global',
+      id: `workouts_${canonicalKey}`,
+      client_id: canonicalKey,
       day_key: 'all_days',
       workout_data: days,
       updated_at: new Date().toISOString(),
@@ -1139,6 +1484,411 @@ export async function syncWorkoutDaysToSupabase(
   } catch {
     return false;
   }
+}
+
+export async function fetchWorkoutDaysFromSupabase(
+  clientId?: string | null,
+  email?: string | null
+): Promise<WorkoutDay[]> {
+  const candidates = buildCandidateClientKeys(clientId, email);
+  const canonicalKey = getCanonicalClientKey(clientId, email);
+
+  let localFallback: WorkoutDay[] | null = null;
+  if (typeof window !== 'undefined' && canonicalKey) {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.WORKOUTS_PREFIX}${canonicalKey}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) localFallback = parsed;
+      }
+    } catch {
+      localFallback = null;
+    }
+  }
+
+  const client = getSupabaseClient();
+  if (client && candidates.length > 0) {
+    try {
+      const { data, error } = await client
+        .from('workouts')
+        .select('workout_data, updated_at')
+        .eq('day_key', 'all_days')
+        .in('client_id', candidates)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data && Array.isArray((data as Record<string, unknown>).workout_data)) {
+        const cloudDays = (data as Record<string, unknown>).workout_data as WorkoutDay[];
+        if (cloudDays.length > 0) {
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(`${STORAGE_KEYS.WORKOUTS_PREFIX}${canonicalKey}`, JSON.stringify(cloudDays));
+            } catch {
+              // ignore
+            }
+          }
+          return cloudDays;
+        }
+      }
+    } catch {
+      // fallback below
+    }
+  }
+
+  return localFallback || JSON.parse(JSON.stringify(INITIAL_WORKOUT_DAYS));
+}
+
+/**
+ * Sync & fetch per-client nutrition plan (`day_key = 'nutrition_plan'`) in Supabase `public.workouts`
+ */
+export async function syncNutritionPlanToSupabase(
+  clientKey: string,
+  categories: MealCategory[],
+  tier: SubscriptionPlanTier = 'standard',
+  email?: string
+): Promise<boolean> {
+  const canonicalKey = getCanonicalClientKey(clientKey, email);
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.DIET_PREFIX}${canonicalKey}`, JSON.stringify(categories));
+    } catch {
+      // ignore
+    }
+  }
+
+  const client = getSupabaseClient();
+  if (!client) return false;
+  try {
+    const payload = {
+      id: `nutrition_${canonicalKey}`,
+      client_id: canonicalKey,
+      day_key: 'nutrition_plan',
+      workout_data: {
+        tier,
+        categories,
+        updatedAt: new Date().toISOString(),
+      },
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await client.from('workouts').upsert(payload, { onConflict: 'id' });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function resetNutritionPlanInSupabase(
+  clientKey: string,
+  tier: SubscriptionPlanTier = 'standard',
+  email?: string
+): Promise<MealCategory[]> {
+  const canonicalKey = getCanonicalClientKey(clientKey, email);
+  const defaults = tier === 'VIP' ? VIP_PLATINUM_DIET_CATEGORIES : STANDARD_DIET_CATEGORIES;
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(`${STORAGE_KEYS.DIET_PREFIX}${canonicalKey}`);
+    } catch {
+      // ignore
+    }
+  }
+
+  const client = getSupabaseClient();
+  if (client && canonicalKey) {
+    try {
+      await client.from('workouts').delete().eq('id', `nutrition_${canonicalKey}`);
+    } catch {
+      // ignore
+    }
+  }
+
+  return JSON.parse(JSON.stringify(defaults));
+}
+
+export async function fetchNutritionPlanFromSupabase(
+  clientId?: string | null,
+  email?: string | null,
+  tier: SubscriptionPlanTier = 'standard'
+): Promise<MealCategory[]> {
+  const candidates = buildCandidateClientKeys(clientId, email);
+  const canonicalKey = getCanonicalClientKey(clientId, email);
+
+  const client = getSupabaseClient();
+  if (client && candidates.length > 0) {
+    try {
+      const { data, error } = await client
+        .from('workouts')
+        .select('workout_data, updated_at')
+        .eq('day_key', 'nutrition_plan')
+        .in('client_id', candidates)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data) {
+        const rawData = (data as Record<string, unknown>).workout_data as
+          | { categories?: MealCategory[] }
+          | MealCategory[]
+          | undefined;
+        const cloudCategories = Array.isArray(rawData)
+          ? rawData
+          : rawData?.categories;
+        if (Array.isArray(cloudCategories) && cloudCategories.length > 0) {
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(`${STORAGE_KEYS.DIET_PREFIX}${canonicalKey}`, JSON.stringify(cloudCategories));
+            } catch {
+              // ignore
+            }
+          }
+          return cloudCategories;
+        }
+      }
+    } catch {
+      // fallback below
+    }
+  }
+
+  if (typeof window !== 'undefined' && canonicalKey) {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.DIET_PREFIX}${canonicalKey}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  return getDietPlanCategories(tier);
+}
+
+/**
+ * Sync & fetch global nutrition lock setting in Supabase
+ */
+export async function syncGlobalNutritionLockToSupabase(locked: boolean): Promise<boolean> {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('oao_nutrition_locked', String(locked));
+    } catch {
+      // ignore
+    }
+  }
+  const client = getSupabaseClient();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('workouts').upsert(
+      {
+        id: 'global_nutrition_lock',
+        client_id: 'global_settings',
+        day_key: 'nutrition_lock',
+        workout_data: { locked, updatedAt: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchGlobalNutritionLockFromSupabase(): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('workouts')
+        .select('workout_data')
+        .eq('id', 'global_nutrition_lock')
+        .maybeSingle();
+      if (!error && data && (data as Record<string, unknown>).workout_data) {
+        const locked = Boolean(((data as Record<string, unknown>).workout_data as { locked?: boolean }).locked);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('oao_nutrition_locked', String(locked));
+        }
+        return locked;
+      }
+    } catch {
+      // fallback
+    }
+  }
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('oao_nutrition_locked') === 'true';
+  }
+  return false;
+}
+
+/**
+ * Sync & fetch per-client Dynamic Assessment, Streak & Athlete Rank (`day_key = 'assessment_bundle'`)
+ */
+export interface ClientAssessmentBundle {
+  analysisData?: ComprehensiveAnalysisData;
+  streakData: StreakData;
+  athleteRank: AthleteRank;
+}
+
+export async function syncAssessmentToSupabase(
+  clientKey: string,
+  bundle: ClientAssessmentBundle,
+  email?: string
+): Promise<boolean> {
+  const canonicalKey = getCanonicalClientKey(clientKey, email);
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.ASSESSMENT_PREFIX}${canonicalKey}`, JSON.stringify(bundle));
+    } catch {
+      // ignore
+    }
+  }
+
+  const client = getSupabaseClient();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('workouts').upsert(
+      {
+        id: `assessment_${canonicalKey}`,
+        client_id: canonicalKey,
+        day_key: 'assessment_bundle',
+        workout_data: bundle,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchAssessmentFromSupabase(
+  clientId?: string | null,
+  email?: string | null
+): Promise<ClientAssessmentBundle> {
+  const candidates = buildCandidateClientKeys(clientId, email);
+  const canonicalKey = getCanonicalClientKey(clientId, email);
+
+  const client = getSupabaseClient();
+  if (client && candidates.length > 0) {
+    try {
+      const { data, error } = await client
+        .from('workouts')
+        .select('workout_data, updated_at')
+        .eq('day_key', 'assessment_bundle')
+        .in('client_id', candidates)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data && (data as Record<string, unknown>).workout_data) {
+        const w = (data as Record<string, unknown>).workout_data as Partial<ClientAssessmentBundle>;
+        const resolved: ClientAssessmentBundle = {
+          analysisData: w.analysisData,
+          streakData: w.streakData || INITIAL_STREAK_DATA,
+          athleteRank: w.athleteRank || INITIAL_ATHLETE_RANK,
+        };
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`${STORAGE_KEYS.ASSESSMENT_PREFIX}${canonicalKey}`, JSON.stringify(resolved));
+          } catch {
+            // ignore
+          }
+        }
+        return resolved;
+      }
+    } catch {
+      // fallback below
+    }
+  }
+
+  if (typeof window !== 'undefined' && canonicalKey) {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.ASSESSMENT_PREFIX}${canonicalKey}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<ClientAssessmentBundle>;
+        return {
+          analysisData: parsed.analysisData,
+          streakData: parsed.streakData || INITIAL_STREAK_DATA,
+          athleteRank: parsed.athleteRank || INITIAL_ATHLETE_RANK,
+        };
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  return {
+    analysisData: undefined,
+    streakData: JSON.parse(JSON.stringify(INITIAL_STREAK_DATA)),
+    athleteRank: JSON.parse(JSON.stringify(INITIAL_ATHLETE_RANK)),
+  };
+}
+
+/**
+ * Hydrate a subscriber's full workspace (profile, workouts, nutrition, lock state, assessment, notes) from Supabase
+ */
+export async function loadClientWorkspaceFromSupabase(params: {
+  clientId?: string | null;
+  email?: string | null;
+  fallbackName?: string;
+  fallbackPlan?: SubscriptionPlanTier;
+}): Promise<{
+  profile: ClientProfile;
+  workoutDays: WorkoutDay[];
+  nutritionCategories: MealCategory[];
+  isNutritionLocked: boolean;
+  analysisData?: ComprehensiveAnalysisData;
+  streakData: StreakData;
+  athleteRank: AthleteRank;
+  notes: ClientNote[];
+}> {
+  const profile = await fetchClientProfileFromSupabase(params.clientId, params.email, {
+    name: params.fallbackName,
+    nameEn: params.fallbackName,
+    subscription_plan: params.fallbackPlan,
+  });
+
+  const resolvedId = profile.id || params.clientId || undefined;
+  const resolvedEmail = profile.email || params.email || undefined;
+  const resolvedTier = normalizeSubscriptionPlan(profile.subscription_plan || params.fallbackPlan);
+
+  const [workoutDays, nutritionCategories, globalLocked, assessment, notes] = await Promise.all([
+    fetchWorkoutDaysFromSupabase(resolvedId, resolvedEmail),
+    fetchNutritionPlanFromSupabase(resolvedId, resolvedEmail, resolvedTier),
+    fetchGlobalNutritionLockFromSupabase(),
+    fetchAssessmentFromSupabase(resolvedId, resolvedEmail),
+    fetchNotesFromSupabase({
+      clientId: resolvedId,
+      clientEmail: resolvedEmail,
+      clientName: profile.name,
+    }),
+  ]);
+
+  const analysisData = assessment.analysisData || profile.analysisData;
+  const streakData = assessment.streakData || profile.streakData || INITIAL_STREAK_DATA;
+  const athleteRank = assessment.athleteRank || profile.athleteRank || INITIAL_ATHLETE_RANK;
+
+  const hydratedProfile: ClientProfile = {
+    ...profile,
+    subscription_plan: resolvedTier,
+    nutritionPlanLocked: Boolean(profile.nutritionPlanLocked || globalLocked),
+    analysisData,
+    streakData,
+    athleteRank,
+  };
+
+  return {
+    profile: hydratedProfile,
+    workoutDays,
+    nutritionCategories,
+    isNutritionLocked: Boolean(hydratedProfile.nutritionPlanLocked),
+    analysisData,
+    streakData,
+    athleteRank,
+    notes,
+  };
 }
 
 // Ready-to-copy SQL Schema for Coach/Admin including `clients.subscription_plan`, `declarations`, `workouts`, `notes` & RLS policies
@@ -1283,6 +2033,7 @@ CREATE TABLE IF NOT EXISTS public.notes (
   id TEXT PRIMARY KEY,
   client_id TEXT,
   client_name TEXT NOT NULL,
+  client_email TEXT,
   subject TEXT,
   category TEXT DEFAULT 'general',
   message TEXT NOT NULL,
@@ -1291,6 +2042,8 @@ CREATE TABLE IF NOT EXISTS public.notes (
   reply_timestamp TEXT,
   is_resolved BOOLEAN DEFAULT false
 );
+
+ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS client_email TEXT;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.workouts ENABLE ROW LEVEL SECURITY;

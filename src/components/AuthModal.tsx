@@ -75,7 +75,8 @@ interface AuthModalProps {
     role: Role,
     userEmail?: string,
     userName?: string,
-    subscriptionPlan?: SubscriptionPlanTier
+    subscriptionPlan?: SubscriptionPlanTier,
+    clientId?: string
   ) => void;
   language: Language;
   initialRole?: Role;
@@ -142,6 +143,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         return;
       }
 
+      try {
+        localStorage.setItem(
+          'oao_current_user',
+          JSON.stringify({
+            id: authResult.id || authResult.email,
+            email: authResult.email,
+            name: authResult.name,
+            plan: authResult.plan,
+            role: authResult.role,
+          })
+        );
+      } catch {
+        // ignore storage errors
+      }
+
       setSuccessNotice(
         language === 'ar'
           ? `تم التحقق بنجاح! أهلاً بك يا ${authResult.name} (${authResult.plan === 'VIP' ? 'عضوية VIP' : 'الباقة القياسية'})`
@@ -150,7 +166,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       setTimeout(() => {
         setIsLoading(false);
-        onSuccess(authResult.role, authResult.email, authResult.name, authResult.plan);
+        onSuccess(
+          authResult.role,
+          authResult.email,
+          authResult.name,
+          authResult.plan,
+          authResult.id || authResult.email
+        );
         if (authResult.role === 'admin') {
           navigate('/admin');
         } else if (authResult.plan === 'VIP') {
@@ -177,9 +199,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsLoading(true);
 
-    // 1. Check authenticateUser first
+    // 1. Check authenticateUser first (live Supabase + assigned passwords + declarations)
     const authByCode = await authenticateUser(cleanCode);
     if (authByCode.success) {
+      try {
+        localStorage.setItem(
+          'oao_current_user',
+          JSON.stringify({
+            id: authByCode.id || authByCode.email,
+            email: authByCode.email,
+            name: authByCode.name,
+            plan: authByCode.plan,
+            role: authByCode.role,
+          })
+        );
+      } catch {
+        // ignore
+      }
       setSuccessNotice(
         language === 'ar'
           ? `تم التحقق بنجاح! أهلاً بك يا ${authByCode.name} (${authByCode.plan === 'VIP' ? 'عضوية VIP' : 'الباقة القياسية'})`
@@ -187,7 +223,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       );
       setTimeout(() => {
         setIsLoading(false);
-        onSuccess(authByCode.role, authByCode.email, authByCode.name, authByCode.plan);
+        onSuccess(
+          authByCode.role,
+          authByCode.email,
+          authByCode.name,
+          authByCode.plan,
+          authByCode.id || authByCode.email
+        );
         if (authByCode.role === 'admin') {
           navigate('/admin');
         } else if (authByCode.plan === 'VIP') {
@@ -197,6 +239,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
         onClose();
       }, 400);
+      return;
+    }
+
+    // Check if account exists in database but is suspended / invalid
+    if (authByCode.error && authByCode.error.includes('تعليق')) {
+      setIsLoading(false);
+      setErrorMsg(authByCode.error);
       return;
     }
 
@@ -251,6 +300,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const resolvedEmail: string =
       matchedEntry?.email || localContractMatch?.email || `${cleanCode.toLowerCase()}@oao.athlete`;
 
+    const resolvedId: string = resolvedEmail.trim().toLowerCase();
+
+    try {
+      localStorage.setItem(
+        'oao_current_user',
+        JSON.stringify({
+          id: resolvedId,
+          email: resolvedEmail,
+          name: resolvedName,
+          plan: resolvedPlan,
+          role: resolvedRole,
+        })
+      );
+    } catch {
+      // ignore
+    }
+
     setSuccessNotice(
       language === 'ar'
         ? `تم التحقق بنجاح! أهلاً بك يا بطل (${resolvedPlan === 'VIP' ? 'عضوية VIP' : 'الباقة القياسية'})`
@@ -259,7 +325,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setTimeout(() => {
       setIsLoading(false);
-      onSuccess(resolvedRole, resolvedEmail, resolvedName, resolvedPlan);
+      onSuccess(resolvedRole, resolvedEmail, resolvedName, resolvedPlan, resolvedId);
       if (resolvedRole === 'admin') {
         navigate('/admin');
       } else if (resolvedPlan === 'VIP') {

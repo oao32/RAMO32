@@ -5,7 +5,11 @@ import {
   MealCategory,
   DietMealItem,
 } from '../../data/nutrition/dietPlanData';
-import { isSubscriberNutritionLocked } from '../../lib/authStore';
+import {
+  isSubscriberNutritionLocked,
+  fetchSubscriberNutritionLockFromSupabase,
+} from '../../lib/authStore';
+import { fetchNutritionPlanFromSupabase } from '../../lib/supabase';
 import {
   Utensils,
   Flame,
@@ -27,6 +31,7 @@ interface AthleteDietPlanSectionProps {
   isVIP?: boolean;
   isLocked?: boolean;
   subscriberEmail?: string;
+  clientId?: string;
 }
 
 export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
@@ -34,42 +39,71 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
   isVIP = false,
   isLocked = false,
   subscriberEmail,
+  clientId,
 }) => {
-  // Check global or per-subscriber lock setting reactively
+  // Check global or per-subscriber lock setting reactively (fast local + Supabase authoritative)
   const [storedLocked, setStoredLocked] = useState<boolean>(() =>
     isSubscriberNutritionLocked(subscriberEmail)
   );
-
-  useEffect(() => {
-    const syncLock = () => {
-      setStoredLocked(isSubscriberNutritionLocked(subscriberEmail));
-    };
-    syncLock();
-    window.addEventListener('oao_nutrition_lock_updated', syncLock);
-    window.addEventListener('oao_credentials_updated', syncLock);
-    window.addEventListener('oao_profile_updated', syncLock);
-    window.addEventListener('storage', syncLock);
-    return () => {
-      window.removeEventListener('oao_nutrition_lock_updated', syncLock);
-      window.removeEventListener('oao_credentials_updated', syncLock);
-      window.removeEventListener('oao_profile_updated', syncLock);
-      window.removeEventListener('storage', syncLock);
-    };
-  }, [subscriberEmail]);
-
-  const isNutritionLocked = Boolean(isLocked || storedLocked);
 
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<'breakfast' | 'lunch' | 'dinner' | 'snacks'>('breakfast');
   const [selectedMealIndex, setSelectedMealIndex] = useState<number>(0);
   const [viewMode, setViewMode] = useState<'featured' | 'grid'>('featured');
 
-  const categories: MealCategory[] = getDietPlanCategories(isVIP ? 'VIP' : 'standard');
+  const [categories, setCategories] = useState<MealCategory[]>(() =>
+    getDietPlanCategories(isVIP ? 'VIP' : 'standard')
+  );
+
+  useEffect(() => {
+    let active = true;
+    const tier = isVIP ? 'VIP' : 'standard';
+
+    const syncFromCloud = async () => {
+      setStoredLocked(isSubscriberNutritionLocked(subscriberEmail));
+      const [cloudLocked, cloudCategories] = await Promise.all([
+        fetchSubscriberNutritionLockFromSupabase(clientId, subscriberEmail),
+        fetchNutritionPlanFromSupabase(clientId, subscriberEmail, tier),
+      ]);
+      if (!active) return;
+      setStoredLocked(cloudLocked);
+      if (Array.isArray(cloudCategories) && cloudCategories.length > 0) {
+        setCategories(cloudCategories);
+      }
+    };
+
+    void syncFromCloud();
+
+    const handleReactiveSync = () => {
+      void syncFromCloud();
+    };
+
+    window.addEventListener('oao_diet_updated', handleReactiveSync);
+    window.addEventListener('oao_nutrition_lock_updated', handleReactiveSync);
+    window.addEventListener('oao_credentials_updated', handleReactiveSync);
+    window.addEventListener('oao_profile_updated', handleReactiveSync);
+    window.addEventListener('storage', handleReactiveSync);
+    return () => {
+      active = false;
+      window.removeEventListener('oao_diet_updated', handleReactiveSync);
+      window.removeEventListener('oao_nutrition_lock_updated', handleReactiveSync);
+      window.removeEventListener('oao_credentials_updated', handleReactiveSync);
+      window.removeEventListener('oao_profile_updated', handleReactiveSync);
+      window.removeEventListener('storage', handleReactiveSync);
+    };
+  }, [clientId, subscriberEmail, isVIP]);
+
+  const isNutritionLocked = Boolean(isLocked || storedLocked);
 
   const activeCategory: MealCategory =
     categories.find((c) => c.key === selectedCategoryKey) || categories[0];
 
+  const safeMealIndex =
+    activeCategory.meals.length > 0 && selectedMealIndex < activeCategory.meals.length
+      ? selectedMealIndex
+      : 0;
+
   const currentMeal: DietMealItem =
-    activeCategory.meals[selectedMealIndex] || activeCategory.meals[0];
+    activeCategory.meals[safeMealIndex] || activeCategory.meals[0];
 
   const handleSelectCategory = (key: 'breakfast' | 'lunch' | 'dinner' | 'snacks') => {
     setSelectedCategoryKey(key);
@@ -77,10 +111,12 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
   };
 
   const handleNextMeal = () => {
+    if (activeCategory.meals.length === 0) return;
     setSelectedMealIndex((prev) => (prev + 1) % activeCategory.meals.length);
   };
 
   const handlePrevMeal = () => {
+    if (activeCategory.meals.length === 0) return;
     setSelectedMealIndex((prev) => (prev - 1 + activeCategory.meals.length) % activeCategory.meals.length);
   };
 
@@ -210,7 +246,7 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
           <div className="flex items-center justify-between gap-2 overflow-x-auto pb-2 scrollbar-none">
             <div className="flex items-center gap-1.5 min-w-max">
               {activeCategory.meals.map((meal, idx) => {
-                const isCurrent = idx === selectedMealIndex;
+                const isCurrent = idx === safeMealIndex;
                 return (
                   <button
                     key={meal.id}
@@ -251,7 +287,7 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <span className="px-3 py-0.5 rounded-full bg-orange-500/20 border border-orange-500/40 text-orange-400 font-mono font-bold text-xs">
-                    {language === 'ar' ? `الخيار رقم ${selectedMealIndex + 1} من ${activeCategory.itemCount}` : `Option ${selectedMealIndex + 1} of ${activeCategory.itemCount}`}
+                    {language === 'ar' ? `الخيار رقم ${safeMealIndex + 1} من ${activeCategory.meals.length}` : `Option ${safeMealIndex + 1} of ${activeCategory.meals.length}`}
                   </span>
                   {currentMeal.tagsAr.map((tag, tIdx) => (
                     <span
