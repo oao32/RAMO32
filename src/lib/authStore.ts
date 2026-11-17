@@ -1,5 +1,5 @@
 import { Role, SubscriptionPlanTier } from '../types';
-import { getSupabaseClient, normalizeSubscriptionPlan } from './supabase';
+import { formatSupabaseErrorMessage, getSupabaseClient, normalizeSubscriptionPlan } from './supabase';
 
 export interface UserCredentialRecord {
   id?: string;
@@ -130,6 +130,12 @@ function isMissingColumnError(err: { code?: string; message?: string } | null | 
   if (!err) return false;
   const msg = (err.message || '').toLowerCase();
   return err.code === 'PGRST204' || err.code === '42703' || msg.includes('column');
+}
+
+function isRlsPolicyError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  return err.code === '42501' || msg.includes('row-level security') || msg.includes('violates row-level security policy');
 }
 
 function mapSubscribersRowToRecord(row: Record<string, unknown>): UserCredentialRecord | null {
@@ -415,7 +421,38 @@ export async function assignSubscriberPassword(params: {
   };
 
   try {
-    // 1. Insert / Update directly into central `public.subscribers` table
+    // 0. If running behind server.ts with SUPABASE_SERVICE_ROLE_KEY, sync via Service Role endpoint (bypasses RLS)
+    if (typeof window !== 'undefined') {
+      try {
+        const proxyRes = await fetch('/api/admin/subscribers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ record: updatedRecord }),
+        });
+        if (proxyRes.ok) {
+          const proxyJson = (await proxyRes.json()) as { success?: boolean; id?: string };
+          if (proxyJson.success) {
+            if (proxyJson.id) updatedRecord.id = proxyJson.id;
+            updatedRecord.syncedToSupabase = true;
+            const latest = [...subscribersMemoryCache];
+            const idx = latest.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+            if (idx >= 0) latest[idx] = updatedRecord;
+            else latest.unshift(updatedRecord);
+            saveSubscribersList(latest);
+            return { success: true, syncedToSupabase: true, record: updatedRecord };
+          }
+        } else if (proxyRes.status !== 501 && proxyRes.status !== 404) {
+          const errJson = (await proxyRes.json().catch(() => ({}))) as { error?: string; fallbackToClient?: boolean };
+          if (!errJson.fallbackToClient && errJson.error) {
+            return { success: false, syncedToSupabase: false, error: formatSupabaseErrorMessage(errJson.error) };
+          }
+        }
+      } catch {
+        // Static hosting or offline proxy -> proceed directly via Supabase client
+      }
+    }
+
+    // 1. Insert / Update directly into central `public.subscribers` table (avoid `.select()` after write & `.upsert()` to minimize RLS surface)
     let targetSubscriberId = resolvedId;
     let subscribersTableMissing = false;
     let subscribersSynced = false;
@@ -461,44 +498,31 @@ export async function assignSubscriberPassword(params: {
         let res = await supabase
           .from('subscribers')
           .update(fullSubPayload)
-          .eq('id', existingSub.id)
-          .select('id')
-          .maybeSingle();
+          .eq('id', existingSub.id);
 
         if (res.error && isMissingColumnError(res.error)) {
           res = await supabase
             .from('subscribers')
             .update(coreSubPayload)
-            .eq('id', existingSub.id)
-            .select('id')
-            .maybeSingle();
+            .eq('id', existingSub.id);
         }
         subscribersErr = res.error;
         subscribersSynced = !res.error;
       } else {
         let res = await supabase
           .from('subscribers')
-          .insert({ id: targetSubscriberId, ...fullSubPayload })
-          .select('id')
-          .maybeSingle();
+          .insert({ id: targetSubscriberId, ...fullSubPayload });
 
         if (res.error && isMissingColumnError(res.error)) {
           res = await supabase
             .from('subscribers')
-            .insert(coreSubPayload)
-            .select('id')
-            .maybeSingle();
+            .insert(coreSubPayload);
         } else if (res.error && res.error.message.toLowerCase().includes('uuid')) {
           res = await supabase
             .from('subscribers')
-            .insert(fullSubPayload)
-            .select('id')
-            .maybeSingle();
+            .insert(fullSubPayload);
         }
 
-        if (!res.error && res.data && res.data.id !== undefined && res.data.id !== null) {
-          targetSubscriberId = String(res.data.id);
-        }
         subscribersErr = res.error;
         subscribersSynced = !res.error;
       }
@@ -513,11 +537,13 @@ export async function assignSubscriberPassword(params: {
       return {
         success: false,
         syncedToSupabase: false,
-        error: `تعذر حفظ المشترك في جدول subscribers: ${subscribersErr.message}`,
+        error: isRlsPolicyError(subscribersErr)
+          ? formatSupabaseErrorMessage(subscribersErr)
+          : `تعذر حفظ المشترك في جدول subscribers: ${formatSupabaseErrorMessage(subscribersErr)}`,
       };
     }
 
-    // 2. Keep linked `public.clients` table synchronized
+    // 2. Keep linked `public.clients` table synchronized (explicit insert vs update to avoid upsert dual-RLS check)
     let targetClientId = UUID_REGEX.test(targetSubscriberId) ? targetSubscriberId : resolvedId;
     const { data: existingClient } = await supabase
       .from('clients')
@@ -527,13 +553,13 @@ export async function assignSubscriberPassword(params: {
       .limit(1)
       .maybeSingle();
 
+    const clientExistsInDb = Boolean(existingClient && typeof existingClient.id === 'string');
     if (existingClient && typeof existingClient.id === 'string') {
       targetClientId = existingClient.id;
       updatedRecord.id = targetClientId;
     }
 
     const fullClientPayload: Record<string, unknown> = {
-      id: targetClientId,
       email: cleanEmail,
       name_ar: updatedRecord.clientName,
       name_en: updatedRecord.clientName,
@@ -552,13 +578,17 @@ export async function assignSubscriberPassword(params: {
       inbody_file_url: updatedRecord.inBodyFileUrl || null,
     };
 
-    let { error: clientsErr } = await supabase
-      .from('clients')
-      .upsert(fullClientPayload, { onConflict: 'id' });
+    const writeClientRow = async (payload: Record<string, unknown>) => {
+      if (clientExistsInDb) {
+        return supabase.from('clients').update(payload).eq('id', targetClientId);
+      }
+      return supabase.from('clients').insert({ id: targetClientId, ...payload });
+    };
+
+    let { error: clientsErr } = await writeClientRow(fullClientPayload);
 
     if (clientsErr && isMissingColumnError(clientsErr)) {
-      const corePayload = {
-        id: targetClientId,
+      const corePayload: Record<string, unknown> = {
         email: cleanEmail,
         name_ar: updatedRecord.clientName,
         name_en: updatedRecord.clientName,
@@ -568,37 +598,51 @@ export async function assignSubscriberPassword(params: {
         client_code: updatedRecord.clientCode,
         status: updatedRecord.status,
       };
-      const retryRes = await supabase
-        .from('clients')
-        .upsert(corePayload, { onConflict: 'id' });
+      const retryRes = await writeClientRow(corePayload);
       clientsErr = retryRes.error;
     }
 
-    // 3. Mirror full subscriber auth bundle into `workouts` (`day_key = 'client_auth'`)
-    const { error: mirrorErr } = await supabase.from('workouts').upsert(
-      {
-        id: `auth_${cleanEmail}`,
-        client_id: targetClientId,
-        day_key: 'client_auth',
-        workout_data: {
-          ...updatedRecord,
-          syncedToSupabase: true,
-        },
-        updated_at: nowIso,
-      },
-      { onConflict: 'id' }
-    );
-
-    const syncedToSupabase = subscribersSynced || (!clientsErr && !mirrorErr);
-    if (!syncedToSupabase) {
+    // If `clients` threw an RLS violation, fail visibly with the exact RLS fix instructions so tables stay in sync!
+    if (clientsErr && isRlsPolicyError(clientsErr)) {
       return {
         success: false,
         syncedToSupabase: false,
-        error:
-          subscribersErr?.message ||
-          clientsErr?.message ||
-          mirrorErr?.message ||
-          'تعذر حفظ الحساب في قاعدة البيانات السحابية Supabase.',
+        error: formatSupabaseErrorMessage(clientsErr),
+      };
+    }
+
+    // 3. Mirror full subscriber auth bundle into `workouts` (`day_key = 'client_auth'`)
+    const authMirrorId = `auth_${cleanEmail}`;
+    const { data: existingAuthRow } = await supabase
+      .from('workouts')
+      .select('id')
+      .eq('id', authMirrorId)
+      .limit(1)
+      .maybeSingle();
+
+    const authMirrorPayload = {
+      client_id: targetClientId,
+      day_key: 'client_auth',
+      workout_data: {
+        ...updatedRecord,
+        syncedToSupabase: true,
+      },
+      updated_at: nowIso,
+    };
+
+    const { error: mirrorErr } = existingAuthRow
+      ? await supabase.from('workouts').update(authMirrorPayload).eq('id', authMirrorId)
+      : await supabase.from('workouts').insert({ id: authMirrorId, ...authMirrorPayload });
+
+    const syncedToSupabase = subscribersSynced || (!clientsErr && !mirrorErr);
+    if (!syncedToSupabase) {
+      const rawErr = subscribersErr || clientsErr || mirrorErr;
+      return {
+        success: false,
+        syncedToSupabase: false,
+        error: rawErr
+          ? formatSupabaseErrorMessage(rawErr)
+          : 'تعذر حفظ الحساب في قاعدة البيانات السحابية Supabase.',
       };
     }
 
@@ -615,7 +659,7 @@ export async function assignSubscriberPassword(params: {
     return {
       success: false,
       syncedToSupabase: false,
-      error: syncErr instanceof Error ? syncErr.message : 'حدث خطأ أثناء المزامنة مع Supabase.',
+      error: formatSupabaseErrorMessage(syncErr),
     };
   }
 }
@@ -626,6 +670,23 @@ export async function assignSubscriberPassword(params: {
 export async function deleteSubscriberRecord(email: string): Promise<boolean> {
   const cleanEmail = email.trim().toLowerCase();
   const targetUser = subscribersMemoryCache.find((u) => u.email.toLowerCase() === cleanEmail);
+
+  if (typeof window !== 'undefined') {
+    try {
+      const proxyRes = await fetch('/api/admin/subscribers', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, id: targetUser?.id }),
+      });
+      if (proxyRes.ok) {
+        const filtered = subscribersMemoryCache.filter((u) => u.email.toLowerCase() !== cleanEmail);
+        saveSubscribersList(filtered);
+        return true;
+      }
+    } catch {
+      // fall through to direct Supabase client
+    }
+  }
 
   const supabase = getSupabaseClient();
   if (!supabase) return false;
@@ -685,26 +746,37 @@ export function toggleSubscriberStatus(email: string): 'active' | 'suspended' {
   saveSubscribersList(all);
 
   const supabase = getSupabaseClient();
-  if (supabase) {
-    void (async () => {
-      try {
-        await supabase.from('subscribers').update({ status: newStatus }).ilike('email', cleanEmail);
-        await supabase.from('clients').update({ status: newStatus }).ilike('email', cleanEmail);
-        await supabase.from('workouts').upsert(
-          {
-            id: `auth_${cleanEmail}`,
-            client_id: updatedRec.id || cleanEmail,
-            day_key: 'client_auth',
-            workout_data: updatedRec,
-            updated_at: updatedRec.updatedAt,
-          },
-          { onConflict: 'id' }
-        );
-      } catch {
-        // ignore
+  void (async () => {
+    try {
+      if (typeof window !== 'undefined') {
+        const proxyRes = await fetch('/api/admin/subscribers/flags', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, status: newStatus, updatedRecord: updatedRec }),
+        });
+        if (proxyRes.ok) return;
       }
-    })();
-  }
+    } catch {
+      // fall through
+    }
+    if (!supabase) return;
+    try {
+      await supabase.from('subscribers').update({ status: newStatus }).ilike('email', cleanEmail);
+      await supabase.from('clients').update({ status: newStatus }).ilike('email', cleanEmail);
+      await supabase.from('workouts').upsert(
+        {
+          id: `auth_${cleanEmail}`,
+          client_id: updatedRec.id || cleanEmail,
+          day_key: 'client_auth',
+          workout_data: updatedRec,
+          updated_at: updatedRec.updatedAt,
+        },
+        { onConflict: 'id' }
+      );
+    } catch {
+      // ignore
+    }
+  })();
 
   return newStatus;
 }
@@ -735,32 +807,43 @@ export function toggleSubscriberNutritionLock(email: string, locked?: boolean): 
   }
 
   const supabase = getSupabaseClient();
-  if (supabase) {
-    void (async () => {
-      try {
-        await supabase
-          .from('subscribers')
-          .update({ nutrition_plan_locked: newVal })
-          .ilike('email', cleanEmail);
-        await supabase
-          .from('clients')
-          .update({ nutrition_plan_locked: newVal })
-          .ilike('email', cleanEmail);
-        await supabase.from('workouts').upsert(
-          {
-            id: `auth_${cleanEmail}`,
-            client_id: updatedRec.id || cleanEmail,
-            day_key: 'client_auth',
-            workout_data: updatedRec,
-            updated_at: updatedRec.updatedAt,
-          },
-          { onConflict: 'id' }
-        );
-      } catch {
-        // ignore
+  void (async () => {
+    try {
+      if (typeof window !== 'undefined') {
+        const proxyRes = await fetch('/api/admin/subscribers/flags', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, nutritionPlanLocked: newVal, updatedRecord: updatedRec }),
+        });
+        if (proxyRes.ok) return;
       }
-    })();
-  }
+    } catch {
+      // fall through
+    }
+    if (!supabase) return;
+    try {
+      await supabase
+        .from('subscribers')
+        .update({ nutrition_plan_locked: newVal })
+        .ilike('email', cleanEmail);
+      await supabase
+        .from('clients')
+        .update({ nutrition_plan_locked: newVal })
+        .ilike('email', cleanEmail);
+      await supabase.from('workouts').upsert(
+        {
+          id: `auth_${cleanEmail}`,
+          client_id: updatedRec.id || cleanEmail,
+          day_key: 'client_auth',
+          workout_data: updatedRec,
+          updated_at: updatedRec.updatedAt,
+        },
+        { onConflict: 'id' }
+      );
+    } catch {
+      // ignore
+    }
+  })();
 
   return newVal;
 }

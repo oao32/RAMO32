@@ -106,6 +106,13 @@ export function formatSupabaseErrorMessage(error: unknown): string {
   if (rawMsg.includes('relation') && rawMsg.includes('does not exist')) {
     return 'الجدول غير موجود في قاعدة بيانات Supabase. يرجى تشغيل استعلام SQL الموجود في لوحة التحكم.';
   }
+  if (
+    rawMsg.toLowerCase().includes('row-level security') ||
+    rawMsg.includes('42501') ||
+    rawMsg.toLowerCase().includes('violates row-level security policy')
+  ) {
+    return 'تم حظر العملية بسبب سياسة أمان الصفوف (RLS) في Supabase. يرجى فتح تبويب (قاعدة البيانات و Supabase) ونسخ كود إصلاح RLS وتشغيله في Supabase SQL Editor، أو إضافة SUPABASE_SERVICE_ROLE_KEY في الخادم.';
+  }
   return rawMsg;
 }
 
@@ -739,7 +746,20 @@ export async function saveSubscriberToSupabase(
       }
     }
 
-    const rowId = existingUuid || generateUUID();
+    let existingRowId: string | null = existingUuid;
+    if (existingRowId) {
+      const { data: verifyExisting } = await client
+        .from('clients')
+        .select('id')
+        .eq('id', existingRowId)
+        .limit(1)
+        .maybeSingle();
+      if (!verifyExisting) {
+        existingRowId = null;
+      }
+    }
+
+    const rowId = existingRowId || existingUuid || generateUUID();
 
     // Primary payload including `subscription_plan` ('standard' | 'VIP') and subscription duration
     const fullClientPayload: Record<string, unknown> = {
@@ -759,9 +779,15 @@ export async function saveSubscriberToSupabase(
       status: input.status || 'active',
     };
 
-    let { error } = await client
-      .from('clients')
-      .upsert(fullClientPayload, { onConflict: 'id' });
+    const writeClientRow = async (payload: Record<string, unknown>) => {
+      if (existingRowId) {
+        const { id: _omit, ...upd } = payload;
+        return client.from('clients').update(upd).eq('id', existingRowId);
+      }
+      return client.from('clients').insert(payload);
+    };
+
+    let { error } = await writeClientRow(fullClientPayload);
 
     // Adaptive fallback if columns haven't been added via SQL Editor yet
     if (
@@ -786,14 +812,17 @@ export async function saveSubscriberToSupabase(
         package_type_en: packageTypeEn,
         status: input.status || 'active',
       };
-      const retryRes = await client
-        .from('clients')
-        .upsert(fallbackPayload, { onConflict: 'id' });
+      const retryRes = await writeClientRow(fallbackPayload);
       error = retryRes.error;
     }
 
     if (error) {
-      return { synced: false, subscriptionPlan: normalizedPlan, id: rowId, error: error.message };
+      return {
+        synced: false,
+        subscriptionPlan: normalizedPlan,
+        id: rowId,
+        error: formatSupabaseErrorMessage(error),
+      };
     }
 
     return { synced: true, subscriptionPlan: normalizedPlan, id: rowId };
@@ -1759,9 +1788,46 @@ export async function loadClientWorkspaceFromSupabase(params: {
   };
 }
 
-// Ready-to-copy SQL Schema for Coach/Admin including `subscribers`, `clients`, `declarations`, `workouts`, `notes` & RLS policies
+export const SUPABASE_RLS_FIX_SQL = `-- OAO RLS FIX SCRIPT (إصلاح سياسات الأمان RLS لجميع الجداول الإدارية)
+-- شغّل هذا الكود في Supabase SQL Editor لإزالة قيود الإدخال والتعديل من لوحة التحكم:
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+
+DO $$
+DECLARE
+  pol RECORD;
+  tbl TEXT;
+  admin_tables TEXT[] := ARRAY[
+    'subscribers',
+    'clients',
+    'declarations',
+    'ai_generation_logs',
+    'profiles',
+    'workouts',
+    'notes'
+  ];
+BEGIN
+  FOREACH tbl IN ARRAY admin_tables LOOP
+    IF EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = tbl
+    ) THEN
+      FOR pol IN
+        SELECT policyname FROM pg_policies
+        WHERE schemaname = 'public' AND tablename = tbl
+      LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', pol.policyname, tbl);
+      END LOOP;
+
+      EXECUTE format('ALTER TABLE public.%I DISABLE ROW LEVEL SECURITY', tbl);
+      EXECUTE format('GRANT ALL ON TABLE public.%I TO anon, authenticated, service_role', tbl);
+    END IF;
+  END LOOP;
+END $$;
+`;
+
+// Ready-to-copy SQL Schema for Coach/Admin including `subscribers`, `clients`, `declarations`, `workouts`, `notes` & RLS fix
 export const SUPABASE_SQL_SCHEMA = `-- OAO - OWN AURA OUTCOME TRAINING PORTAL DATABASE SCHEMA
--- شغّل هذا الكود في Supabase SQL Editor لضبط الجداول وتفعيل الصلاحيات الكاملة:
+-- شغّل هذا الكود في Supabase SQL Editor لضبط الجداول وتفعيل الصلاحيات الكاملة وإصلاح RLS:
 
 -- 0. جدول المشتركين المركزي وبيانات الدخول (subscribers)
 CREATE TABLE IF NOT EXISTS public.subscribers (
@@ -1794,11 +1860,6 @@ ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'act
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS nutrition_plan_locked BOOLEAN DEFAULT false;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS inbody_filename TEXT;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS inbody_file_url TEXT;
-
-ALTER TABLE public.subscribers ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public access to subscribers" ON public.subscribers;
-CREATE POLICY "Allow public access to subscribers"
-  ON public.subscribers FOR ALL USING (true) WITH CHECK (true);
 
 -- 1. جدول المشتركين التفصيلي (clients)
 CREATE TABLE IF NOT EXISTS public.clients (
@@ -1843,11 +1904,6 @@ ALTER TABLE public.clients
   ADD CONSTRAINT clients_subscription_plan_check
   CHECK (subscription_plan IN ('standard', 'VIP'));
 
-ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public access to clients" ON public.clients;
-CREATE POLICY "Allow public access to clients"
-  ON public.clients FOR ALL USING (true) WITH CHECK (true);
-
 -- 2. جدول الإقرارات والعقود الرقمية (declarations)
 CREATE TABLE IF NOT EXISTS public.declarations (
   id TEXT PRIMARY KEY,
@@ -1882,11 +1938,6 @@ CREATE TABLE IF NOT EXISTS public.declarations (
   completed_timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
-ALTER TABLE public.declarations ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public access to declarations" ON public.declarations;
-CREATE POLICY "Allow public access to declarations"
-  ON public.declarations FOR ALL USING (true) WITH CHECK (true);
-
 -- 3. جدول سجلات الذكاء الاصطناعي (ai_generation_logs)
 CREATE TABLE IF NOT EXISTS public.ai_generation_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1904,11 +1955,6 @@ CREATE TABLE IF NOT EXISTS public.ai_generation_logs (
 
 ALTER TABLE public.ai_generation_logs ADD COLUMN IF NOT EXISTS plan_type TEXT DEFAULT 'workout';
 ALTER TABLE public.ai_generation_logs ADD COLUMN IF NOT EXISTS ai_output TEXT;
-
-ALTER TABLE public.ai_generation_logs ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public access to ai_generation_logs" ON public.ai_generation_logs;
-CREATE POLICY "Allow public access to ai_generation_logs"
-  ON public.ai_generation_logs FOR ALL USING (true) WITH CHECK (true);
 
 -- 4. جدول الملفات الحيوية الإضافي (profiles)
 CREATE TABLE IF NOT EXISTS public.profiles (
@@ -1950,17 +1996,7 @@ CREATE TABLE IF NOT EXISTS public.notes (
 
 ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS client_email TEXT;
 
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.workouts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notes ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Allow public read-write for demo/athletes" ON public.profiles;
-CREATE POLICY "Allow public read-write for demo/athletes" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public read-write for workouts" ON public.workouts;
-CREATE POLICY "Allow public read-write for workouts" ON public.workouts FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public read-write for notes" ON public.notes;
-CREATE POLICY "Allow public read-write for notes" ON public.notes FOR ALL USING (true) WITH CHECK (true);
+-- 6. فتح صلاحيات الإدخال والتعديل وإيقاف RLS المقيد للجداول الإدارية
+${SUPABASE_RLS_FIX_SQL}
 `;
 

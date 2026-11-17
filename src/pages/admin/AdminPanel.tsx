@@ -22,6 +22,7 @@ import {
   saveSupabaseConfig,
   testSupabaseConnection,
   SUPABASE_SQL_SCHEMA,
+  SUPABASE_RLS_FIX_SQL,
   fetchAILogs,
   fetchDeclarationsFromSupabase,
   fetchNotesFromSupabase,
@@ -163,6 +164,7 @@ export const AdminPanel: React.FC = () => {
   });
   const [savedConfigMessage, setSavedConfigMessage] = useState(false);
   const [copiedSchema, setCopiedSchema] = useState(false);
+  const [copiedRlsFix, setCopiedRlsFix] = useState(false);
   const [aiLogs, setAiLogs] = useState<AIGenerationLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
@@ -1556,13 +1558,13 @@ export const AdminPanel: React.FC = () => {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-lg font-black text-white">الوضع المحلي المباشر نشط (Active Local Storage Mode)</h2>
+                      <h2 className="text-lg font-black text-white">المزامنة السحابية المباشرة عبر Supabase (Cloud-Only Database Sync)</h2>
                       <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-mono font-bold">
-                        100% OPERATIONAL
+                        CLOUD SYNC ACTIVE
                       </span>
                     </div>
                     <p className="text-xs text-slate-300 mt-0.5">
-                      جميع أقسام المنصة (المشتركون، التمارين، الأنظمة الغذائية، مؤشر BMI، الاستفسارات، والإقرارات والعقود) تعمل وتُحفظ محلياً وفورياً 100% دون انقطاع.
+                      جميع بيانات المنصة (حسابات المشتركين، التمارين، الأنظمة الغذائية، التقييمات، مؤشرات الجسم، والاستفسارات) تقرأ وتُحفظ مباشرة في جداول Supabase السحابية. إذا ظهر خطأ أمان الصفوف (RLS 42501)، استخدم زر &laquo;نسخ كود إصلاح RLS للجداول&raquo; أدناه وشغّله في Supabase SQL Editor.
                     </p>
                   </div>
                 </div>
@@ -1575,10 +1577,10 @@ export const AdminPanel: React.FC = () => {
                 <div>
                   <h3 className="text-xl font-black text-white flex items-center gap-2">
                     <Database className="w-5 h-5 text-orange-400" />
-                    <span>إعدادات ربط Supabase السحابي (اختياري)</span>
+                    <span>إعدادات ربط قاعدة البيانات السحابية Supabase &amp; سياسات RLS</span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    إذا أردت مزامنة بيانات المشتركين سحابياً بين أجهزة متعددة، أدخل رابط مشروعك ومفتاح anon العام هنا أو في ملف <span className="text-orange-400 font-mono">.env</span>.
+                    اربط مشروعك عبر <span className="text-orange-400 font-mono">.env</span> أو أدخل رابط المشروع ومفتاح <span className="text-orange-400 font-mono">anon</span> هنا. في حال وجود قيود Row Level Security على جدول <span className="text-orange-400 font-mono">clients</span> أو <span className="text-orange-400 font-mono">subscribers</span>، انسخ كود إصلاح RLS ونفذه مرة واحدة في لوحة Supabase.
                   </p>
                 </div>
 
@@ -1610,14 +1612,14 @@ export const AdminPanel: React.FC = () => {
                     connStatus.success
                       ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
                       : connStatus.isLocalMode
-                      ? 'bg-blue-500/15 border-blue-500/50 text-blue-200 shadow-[0_0_20px_rgba(59,130,246,0.15)]'
+                      ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
                       : 'bg-red-500/15 border-red-500/50 text-red-300'
                   }`}
                 >
                   {connStatus.success ? (
                     <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
                   ) : connStatus.isLocalMode ? (
-                    <ShieldCheck className="w-5 h-5 shrink-0 text-blue-400 mt-0.5" />
+                    <AlertCircle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
                   ) : (
                     <AlertCircle className="w-5 h-5 shrink-0 text-red-400 mt-0.5" />
                   )}
@@ -1625,7 +1627,7 @@ export const AdminPanel: React.FC = () => {
                     <span className="block leading-relaxed">{connStatus.message}</span>
                     {connStatus.isLocalMode && (
                       <p className="text-[11px] text-slate-300 font-normal">
-                        تنويه: لا تقلق! منصة OAO مصممة للعمل 100% في وضع عدم الاتصال (Offline First). يمكنك استخدام المنصة وإدارتها بالكامل دون ربط Supabase، أو ربطه لاحقاً في أي وقت.
+                        ملاحظة: يجب إدخال بيانات مشروع Supabase صالحة (Project URL و Anon Key) لحفظ واسترجاع بيانات المشتركين سحابياً عبر الأجهزة.
                       </p>
                     )}
                   </div>
@@ -1689,18 +1691,32 @@ export const AdminPanel: React.FC = () => {
                   )}
                 </div>
 
-                {/* Copy SQL Schema Button */}
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
-                    setCopiedSchema(true);
-                    setTimeout(() => setCopiedSchema(false), 3000);
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-slate-200 text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
-                >
-                  <Copy className="w-3.5 h-3.5 text-orange-400" />
-                  <span>{copiedSchema ? 'تم نسخ كود SQL بنجاح!' : 'نسخ كود SQL لتهيئة الجداول'}</span>
-                </button>
+                {/* Copy SQL Schema & RLS Fix Buttons */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(SUPABASE_RLS_FIX_SQL);
+                      setCopiedRlsFix(true);
+                      setTimeout(() => setCopiedRlsFix(false), 3000);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{copiedRlsFix ? 'تم نسخ كود إصلاح RLS بنجاح!' : 'نسخ كود إصلاح RLS للجداول'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
+                      setCopiedSchema(true);
+                      setTimeout(() => setCopiedSchema(false), 3000);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-slate-200 text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-orange-400" />
+                    <span>{copiedSchema ? 'تم نسخ كود SQL بنجاح!' : 'نسخ كود SQL لتهيئة الجداول'}</span>
+                  </button>
+                </div>
               </div>
             </div>
 

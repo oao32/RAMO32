@@ -5,9 +5,19 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+function getServiceSupabaseClient(): SupabaseClient | null {
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (!url || !serviceKey || !url.startsWith('http')) return null;
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
 
 function getGenAIClient() {
   return new GoogleGenAI({
@@ -48,7 +58,232 @@ async function startServer() {
 
   // Health check endpoint
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', model: 'gemini-3.8-flash' });
+    res.json({
+      status: 'ok',
+      model: 'gemini-3.8-flash',
+      supabaseAdminProxy: Boolean(getServiceSupabaseClient()),
+    });
+  });
+
+  // Server-side Admin Subscriber CRUD (uses Service Role key when configured to bypass RLS)
+  app.post('/api/admin/subscribers', async (req, res) => {
+    const adminSupabase = getServiceSupabaseClient();
+    if (!adminSupabase) {
+      res.status(501).json({ fallbackToClient: true, error: 'SUPABASE_SERVICE_ROLE_KEY not configured' });
+      return;
+    }
+
+    try {
+      const record = req.body?.record;
+      if (!record || !record.email || !record.password) {
+        res.status(400).json({ error: 'Missing required subscriber email or passcode' });
+        return;
+      }
+
+      const cleanEmail = String(record.email).trim().toLowerCase();
+      const cleanPass = String(record.password).trim();
+      const normalizedPlan = record.plan === 'VIP' ? 'VIP' : 'standard';
+      const nowIso = new Date().toISOString();
+      const clientName = String(record.clientName || 'مشترك').trim();
+
+      const fullSubPayload: Record<string, unknown> = {
+        name: clientName,
+        email: cleanEmail,
+        passcode: cleanPass,
+        client_code: record.clientCode || cleanPass,
+        tier: normalizedPlan,
+        goals: record.visualGoal || null,
+        phone: record.phone || null,
+        age: record.age ?? null,
+        blood_type: record.bloodType || null,
+        status: record.status || 'active',
+        nutrition_plan_locked: Boolean(record.nutritionPlanLocked),
+        inbody_filename: record.inBodyFileName || null,
+        inbody_file_url: record.inBodyFileUrl || null,
+        updated_at: nowIso,
+      };
+
+      const { data: existingSub } = await adminSupabase
+        .from('subscribers')
+        .select('id')
+        .ilike('email', cleanEmail)
+        .limit(1)
+        .maybeSingle();
+
+      let targetId = String(record.id || '');
+      if (existingSub && existingSub.id !== undefined) {
+        targetId = String(existingSub.id);
+        const { error: subUpdErr } = await adminSupabase
+          .from('subscribers')
+          .update(fullSubPayload)
+          .eq('id', existingSub.id);
+        if (subUpdErr && subUpdErr.message.toLowerCase().includes('column')) {
+          await adminSupabase
+            .from('subscribers')
+            .update({
+              name: clientName,
+              email: cleanEmail,
+              passcode: cleanPass,
+              tier: normalizedPlan,
+              goals: record.visualGoal || null,
+            })
+            .eq('id', existingSub.id);
+        }
+      } else {
+        const { error: subInsErr } = await adminSupabase
+          .from('subscribers')
+          .insert({ ...(targetId ? { id: targetId } : {}), ...fullSubPayload });
+        if (subInsErr && subInsErr.message.toLowerCase().includes('column')) {
+          await adminSupabase.from('subscribers').insert({
+            name: clientName,
+            email: cleanEmail,
+            passcode: cleanPass,
+            tier: normalizedPlan,
+            goals: record.visualGoal || null,
+          });
+        }
+      }
+
+      const { data: existingClient } = await adminSupabase
+        .from('clients')
+        .select('id')
+        .ilike('email', cleanEmail)
+        .limit(1)
+        .maybeSingle();
+
+      const resolvedClientId =
+        (existingClient && typeof existingClient.id === 'string' ? existingClient.id : '') || targetId;
+
+      const clientPayload: Record<string, unknown> = {
+        ...(resolvedClientId ? { id: resolvedClientId } : {}),
+        email: cleanEmail,
+        name_ar: clientName,
+        name_en: clientName,
+        subscription_plan: normalizedPlan,
+        package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
+        package_type_en: normalizedPlan,
+        phone: record.phone || null,
+        client_code: record.clientCode || cleanPass,
+        status: record.status || 'active',
+        assigned_password: cleanPass,
+        age: record.age ?? null,
+        blood_type: record.bloodType || null,
+        visual_goal: record.visualGoal || null,
+        nutrition_plan_locked: Boolean(record.nutritionPlanLocked),
+        inbody_filename: record.inBodyFileName || null,
+        inbody_file_url: record.inBodyFileUrl || null,
+      };
+
+      if (existingClient?.id) {
+        const { id: _omit, ...updPayload } = clientPayload;
+        await adminSupabase.from('clients').update(updPayload).eq('id', existingClient.id);
+      } else {
+        await adminSupabase.from('clients').insert(clientPayload);
+      }
+
+      await adminSupabase.from('workouts').upsert(
+        {
+          id: `auth_${cleanEmail}`,
+          client_id: resolvedClientId || cleanEmail,
+          day_key: 'client_auth',
+          workout_data: { ...record, id: resolvedClientId || record.id, syncedToSupabase: true },
+          updated_at: nowIso,
+        },
+        { onConflict: 'id' }
+      );
+
+      res.json({ success: true, id: resolvedClientId || targetId });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Service role subscriber sync failed',
+      });
+    }
+  });
+
+  app.patch('/api/admin/subscribers/flags', async (req, res) => {
+    const adminSupabase = getServiceSupabaseClient();
+    if (!adminSupabase) {
+      res.status(501).json({ fallbackToClient: true });
+      return;
+    }
+
+    try {
+      const { email, status, nutritionPlanLocked, updatedRecord } = req.body || {};
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      if (!cleanEmail) {
+        res.status(400).json({ error: 'Missing email' });
+        return;
+      }
+
+      const updatesSub: Record<string, unknown> = {};
+      const updatesClient: Record<string, unknown> = {};
+      if (status !== undefined) {
+        updatesSub.status = status;
+        updatesClient.status = status;
+      }
+      if (nutritionPlanLocked !== undefined) {
+        updatesSub.nutrition_plan_locked = Boolean(nutritionPlanLocked);
+        updatesClient.nutrition_plan_locked = Boolean(nutritionPlanLocked);
+      }
+
+      await Promise.all([
+        adminSupabase.from('subscribers').update(updatesSub).ilike('email', cleanEmail),
+        adminSupabase.from('clients').update(updatesClient).ilike('email', cleanEmail),
+        updatedRecord
+          ? adminSupabase.from('workouts').upsert(
+              {
+                id: `auth_${cleanEmail}`,
+                client_id: updatedRecord.id || cleanEmail,
+                day_key: 'client_auth',
+                workout_data: updatedRecord,
+                updated_at: updatedRecord.updatedAt || new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            )
+          : Promise.resolve(),
+      ]);
+
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Update flags failed' });
+    }
+  });
+
+  app.delete('/api/admin/subscribers', async (req, res) => {
+    const adminSupabase = getServiceSupabaseClient();
+    if (!adminSupabase) {
+      res.status(501).json({ fallbackToClient: true });
+      return;
+    }
+
+    try {
+      const cleanEmail = String(req.body?.email || '').trim().toLowerCase();
+      const candidateId = req.body?.id ? String(req.body.id) : undefined;
+      if (!cleanEmail) {
+        res.status(400).json({ error: 'Missing email' });
+        return;
+      }
+
+      await Promise.all([
+        adminSupabase.from('subscribers').delete().ilike('email', cleanEmail),
+        adminSupabase.from('clients').delete().ilike('email', cleanEmail),
+        adminSupabase.from('declarations').delete().ilike('email', cleanEmail),
+        adminSupabase.from('workouts').delete().eq('id', `auth_${cleanEmail}`),
+      ]);
+
+      const keys = [candidateId, cleanEmail].filter((k): k is string => Boolean(k));
+      for (const k of keys) {
+        await Promise.all([
+          adminSupabase.from('workouts').delete().eq('client_id', k),
+          adminSupabase.from('notes').delete().eq('client_id', k),
+          adminSupabase.from('profiles').delete().eq('id', k),
+        ]);
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Delete failed' });
+    }
   });
 
   // AI Workout & Nutrition Plan Generation Endpoint
