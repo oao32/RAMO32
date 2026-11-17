@@ -1,5 +1,6 @@
 import { WorkoutDay } from '../types';
 import { MealCategory } from '../data/nutrition/dietPlanData';
+import { getSupabaseClient } from './supabase';
 
 export interface WorkoutTemplate {
   id: string;
@@ -27,11 +28,6 @@ export interface MealPlanTemplate {
   categories: MealCategory[];
 }
 
-const STORAGE_KEYS = {
-  WORKOUT_TEMPLATES: 'oao_workout_templates',
-  MEAL_TEMPLATES: 'oao_meal_templates',
-};
-
 // Default pre-seeded Workout Templates
 export const DEFAULT_WORKOUT_TEMPLATES: WorkoutTemplate[] = [
   {
@@ -41,7 +37,7 @@ export const DEFAULT_WORKOUT_TEMPLATES: WorkoutTemplate[] = [
     category: 'hypertrophy',
     descriptionAr: 'خطة تدريبية متكاملة لزيادة الكتلة العضلية مع توازن الضغط العصبي والاستشفاء.',
     createdAt: '2026-11-01T00:00:00.000Z',
-    workoutDays: [], // populated dynamically from initial workout days
+    workoutDays: [],
   },
   {
     id: 'wt_chest_focus',
@@ -62,51 +58,6 @@ export const DEFAULT_WORKOUT_TEMPLATES: WorkoutTemplate[] = [
     workoutDays: [],
   },
 ];
-
-export function getWorkoutTemplates(): WorkoutTemplate[] {
-  if (typeof window === 'undefined') return DEFAULT_WORKOUT_TEMPLATES;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.WORKOUT_TEMPLATES);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.WORKOUT_TEMPLATES, JSON.stringify(DEFAULT_WORKOUT_TEMPLATES));
-      return DEFAULT_WORKOUT_TEMPLATES;
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_WORKOUT_TEMPLATES;
-  } catch {
-    return DEFAULT_WORKOUT_TEMPLATES;
-  }
-}
-
-export function saveWorkoutTemplate(template: WorkoutTemplate): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const existing = getWorkoutTemplates();
-    const idx = existing.findIndex((t) => t.id === template.id);
-    if (idx >= 0) {
-      existing[idx] = template;
-    } else {
-      existing.unshift(template);
-    }
-    localStorage.setItem(STORAGE_KEYS.WORKOUT_TEMPLATES, JSON.stringify(existing));
-    window.dispatchEvent(new CustomEvent('oao_workout_templates_updated', { detail: existing }));
-    window.dispatchEvent(new Event('storage'));
-  } catch (err) {
-    console.warn('Failed to save workout template:', err);
-  }
-}
-
-export function deleteWorkoutTemplate(templateId: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const existing = getWorkoutTemplates().filter((t) => t.id !== templateId);
-    localStorage.setItem(STORAGE_KEYS.WORKOUT_TEMPLATES, JSON.stringify(existing));
-    window.dispatchEvent(new CustomEvent('oao_workout_templates_updated', { detail: existing }));
-    window.dispatchEvent(new Event('storage'));
-  } catch (err) {
-    console.warn('Failed to delete workout template:', err);
-  }
-}
 
 // Default pre-seeded Meal Plan Templates
 export const DEFAULT_MEAL_TEMPLATES: MealPlanTemplate[] = [
@@ -145,47 +96,171 @@ export const DEFAULT_MEAL_TEMPLATES: MealPlanTemplate[] = [
   },
 ];
 
+// Ephemeral in-memory caches synced directly with Supabase (Zero localStorage)
+let workoutTemplatesMemoryCache: WorkoutTemplate[] = JSON.parse(JSON.stringify(DEFAULT_WORKOUT_TEMPLATES));
+let mealTemplatesMemoryCache: MealPlanTemplate[] = JSON.parse(JSON.stringify(DEFAULT_MEAL_TEMPLATES));
+
+const WORKOUT_TEMPLATES_ROW_ID = 'admin_workout_templates';
+const MEAL_TEMPLATES_ROW_ID = 'admin_meal_templates';
+
+export function getWorkoutTemplates(): WorkoutTemplate[] {
+  return workoutTemplatesMemoryCache;
+}
+
+export async function fetchWorkoutTemplatesFromSupabase(): Promise<WorkoutTemplate[]> {
+  const client = getSupabaseClient();
+  if (!client) return workoutTemplatesMemoryCache;
+
+  try {
+    const { data, error } = await client
+      .from('workouts')
+      .select('workout_data')
+      .eq('id', WORKOUT_TEMPLATES_ROW_ID)
+      .maybeSingle();
+
+    if (!error && data && Array.isArray((data as Record<string, unknown>).workout_data)) {
+      const list = (data as Record<string, unknown>).workout_data as WorkoutTemplate[];
+      if (list.length > 0) {
+        workoutTemplatesMemoryCache = list;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('oao_workout_templates_updated', { detail: list }));
+        }
+        return list;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch workout templates from Supabase:', err);
+  }
+  return workoutTemplatesMemoryCache;
+}
+
+async function persistWorkoutTemplatesToSupabase(list: WorkoutTemplate[]): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client.from('workouts').upsert(
+      {
+        id: WORKOUT_TEMPLATES_ROW_ID,
+        client_id: 'admin_config',
+        day_key: 'workout_templates',
+        workout_data: list,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    return !error;
+  } catch (err) {
+    console.warn('Failed to persist workout templates to Supabase:', err);
+    return false;
+  }
+}
+
+export async function saveWorkoutTemplate(template: WorkoutTemplate): Promise<void> {
+  const existing = [...workoutTemplatesMemoryCache];
+  const idx = existing.findIndex((t) => t.id === template.id);
+  if (idx >= 0) {
+    existing[idx] = template;
+  } else {
+    existing.unshift(template);
+  }
+  workoutTemplatesMemoryCache = existing;
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('oao_workout_templates_updated', { detail: existing }));
+  }
+
+  await persistWorkoutTemplatesToSupabase(existing);
+}
+
+export async function deleteWorkoutTemplate(templateId: string): Promise<void> {
+  const existing = workoutTemplatesMemoryCache.filter((t) => t.id !== templateId);
+  workoutTemplatesMemoryCache = existing;
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('oao_workout_templates_updated', { detail: existing }));
+  }
+
+  await persistWorkoutTemplatesToSupabase(existing);
+}
+
 export function getMealPlanTemplates(): MealPlanTemplate[] {
-  if (typeof window === 'undefined') return DEFAULT_MEAL_TEMPLATES;
+  return mealTemplatesMemoryCache;
+}
+
+export async function fetchMealPlanTemplatesFromSupabase(): Promise<MealPlanTemplate[]> {
+  const client = getSupabaseClient();
+  if (!client) return mealTemplatesMemoryCache;
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.MEAL_TEMPLATES);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.MEAL_TEMPLATES, JSON.stringify(DEFAULT_MEAL_TEMPLATES));
-      return DEFAULT_MEAL_TEMPLATES;
+    const { data, error } = await client
+      .from('workouts')
+      .select('workout_data')
+      .eq('id', MEAL_TEMPLATES_ROW_ID)
+      .maybeSingle();
+
+    if (!error && data && Array.isArray((data as Record<string, unknown>).workout_data)) {
+      const list = (data as Record<string, unknown>).workout_data as MealPlanTemplate[];
+      if (list.length > 0) {
+        mealTemplatesMemoryCache = list;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('oao_meal_templates_updated', { detail: list }));
+        }
+        return list;
+      }
     }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_MEAL_TEMPLATES;
-  } catch {
-    return DEFAULT_MEAL_TEMPLATES;
+  } catch (err) {
+    console.warn('Failed to fetch meal plan templates from Supabase:', err);
+  }
+  return mealTemplatesMemoryCache;
+}
+
+async function persistMealTemplatesToSupabase(list: MealPlanTemplate[]): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client.from('workouts').upsert(
+      {
+        id: MEAL_TEMPLATES_ROW_ID,
+        client_id: 'admin_config',
+        day_key: 'meal_templates',
+        workout_data: list,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    return !error;
+  } catch (err) {
+    console.warn('Failed to persist meal plan templates to Supabase:', err);
+    return false;
   }
 }
 
-export function saveMealPlanTemplate(template: MealPlanTemplate): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const existing = getMealPlanTemplates();
-    const idx = existing.findIndex((t) => t.id === template.id);
-    if (idx >= 0) {
-      existing[idx] = template;
-    } else {
-      existing.unshift(template);
-    }
-    localStorage.setItem(STORAGE_KEYS.MEAL_TEMPLATES, JSON.stringify(existing));
-    window.dispatchEvent(new CustomEvent('oao_meal_templates_updated', { detail: existing }));
-    window.dispatchEvent(new Event('storage'));
-  } catch (err) {
-    console.warn('Failed to save meal plan template:', err);
+export async function saveMealPlanTemplate(template: MealPlanTemplate): Promise<void> {
+  const existing = [...mealTemplatesMemoryCache];
+  const idx = existing.findIndex((t) => t.id === template.id);
+  if (idx >= 0) {
+    existing[idx] = template;
+  } else {
+    existing.unshift(template);
   }
+  mealTemplatesMemoryCache = existing;
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('oao_meal_templates_updated', { detail: existing }));
+  }
+
+  await persistMealTemplatesToSupabase(existing);
 }
 
-export function deleteMealPlanTemplate(templateId: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const existing = getMealPlanTemplates().filter((t) => t.id !== templateId);
-    localStorage.setItem(STORAGE_KEYS.MEAL_TEMPLATES, JSON.stringify(existing));
+export async function deleteMealPlanTemplate(templateId: string): Promise<void> {
+  const existing = mealTemplatesMemoryCache.filter((t) => t.id !== templateId);
+  mealTemplatesMemoryCache = existing;
+
+  if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('oao_meal_templates_updated', { detail: existing }));
-    window.dispatchEvent(new Event('storage'));
-  } catch (err) {
-    console.warn('Failed to delete meal plan template:', err);
   }
+
+  await persistMealTemplatesToSupabase(existing);
 }

@@ -3,6 +3,7 @@ import {
   AIGenerationLog,
   AIPlanType,
   AthleteRank,
+  Badge,
   ClientNote,
   ClientProfile,
   ComprehensiveAnalysisData,
@@ -14,6 +15,7 @@ import {
 } from '../types';
 import {
   INITIAL_ATHLETE_RANK,
+  INITIAL_BADGES,
   INITIAL_CLIENT_PROFILE,
   INITIAL_STREAK_DATA,
   INITIAL_WORKOUT_DAYS,
@@ -22,24 +24,14 @@ import {
   MealCategory,
   STANDARD_DIET_CATEGORIES,
   VIP_PLATINUM_DIET_CATEGORIES,
-  getDietPlanCategories,
+  saveDietCategories,
 } from '../data/nutrition/dietPlanData';
 
 // Read exclusively from environment variables (No hardcoded credentials)
 export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string) || '';
 export const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '';
 
-const STORAGE_KEYS = {
-  SUPABASE_URL: 'oao_supabase_url',
-  SUPABASE_KEY: 'oao_supabase_anon_key',
-  PROFILE_PREFIX: 'oao_profile_',
-  WORKOUTS_PREFIX: 'oao_workouts_',
-  DIET_PREFIX: 'oao_diet_client_',
-  ASSESSMENT_PREFIX: 'oao_assessment_',
-  NOTES: 'oao_notes',
-  WATER: 'oao_water_',
-  AI_LOGS: 'oao_ai_generation_logs',
-};
+let runtimeSupabaseConfig: { url?: string; key?: string } = {};
 
 const LEGACY_PLACEHOLDER_IDS = new Set(['client_abdulrahman', 'client_001', 'client_athlete', 'global']);
 
@@ -120,25 +112,21 @@ export function formatSupabaseErrorMessage(error: unknown): string {
 let cachedClient: SupabaseClient | null = null;
 
 export function getSupabaseConfig(): { url: string; key: string } {
-  const storedUrl =
-    typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.SUPABASE_URL) : null;
-  const storedKey =
-    typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.SUPABASE_KEY) : null;
-
   const url =
-    (storedUrl && storedUrl.startsWith('http') ? storedUrl.trim() : '') ||
-    ((import.meta.env.VITE_SUPABASE_URL as string) || '').trim();
+    (runtimeSupabaseConfig.url && runtimeSupabaseConfig.url.startsWith('http')
+      ? runtimeSupabaseConfig.url.trim()
+      : '') || ((import.meta.env.VITE_SUPABASE_URL as string) || '').trim();
 
   const key =
-    (storedKey && storedKey.trim().length > 10 ? storedKey.trim() : '') ||
-    ((import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '').trim();
+    (runtimeSupabaseConfig.key && runtimeSupabaseConfig.key.trim().length > 10
+      ? runtimeSupabaseConfig.key.trim()
+      : '') || ((import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '').trim();
 
   return { url, key };
 }
 
 export function saveSupabaseConfig(url: string, key: string) {
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_URL, url.trim());
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_KEY, key.trim());
+  runtimeSupabaseConfig = { url: url.trim(), key: key.trim() };
   cachedClient = null;
 }
 
@@ -189,39 +177,6 @@ export interface SaveAILogResult {
   error?: string;
 }
 
-function getLocalAILogs(): AIGenerationLog[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.AI_LOGS);
-    return raw ? (JSON.parse(raw) as AIGenerationLog[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveLocalAILogRecord(record: AIGenerationLog) {
-  if (typeof window === 'undefined') return;
-  try {
-    const current = getLocalAILogs();
-    const existingIndex = current.findIndex((item) => item.id === record.id);
-    let updated: AIGenerationLog[];
-    if (existingIndex >= 0) {
-      updated = [...current];
-      updated[existingIndex] = record;
-    } else {
-      updated = [record, ...current].slice(0, 50);
-    }
-    localStorage.setItem(STORAGE_KEYS.AI_LOGS, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('oao-ai-logs-updated', { detail: updated }));
-  } catch (err) {
-    console.warn('Failed to persist local AI log mirror:', err);
-  }
-}
-
-/**
- * saveAILog: Automatically creates or updates records in `ai_generation_logs`
- * whenever a workout or nutrition plan is generated for a subscriber.
- */
 export async function saveAILog(input: SaveAILogInput): Promise<SaveAILogResult> {
   const nowIso = new Date().toISOString();
   const recordId = input.id && UUID_REGEX.test(input.id) ? input.id : generateUUID();
@@ -230,7 +185,7 @@ export async function saveAILog(input: SaveAILogInput): Promise<SaveAILogResult>
   const completionTokens = input.completionTokens ?? 0;
   const totalTokens = input.totalTokens ?? promptTokens + completionTokens;
 
-  const baseLocalRecord: AIGenerationLog = {
+  const baseRecord: AIGenerationLog = {
     id: recordId,
     created_at: nowIso,
     updated_at: nowIso,
@@ -250,11 +205,10 @@ export async function saveAILog(input: SaveAILogInput): Promise<SaveAILogResult>
 
   const client = getSupabaseClient();
   if (!client) {
-    saveLocalAILogRecord(baseLocalRecord);
     return {
       success: false,
       syncedToSupabase: false,
-      log: baseLocalRecord,
+      log: baseRecord,
       error: 'Supabase client is not initialized.',
     };
   }
@@ -326,27 +280,28 @@ export async function saveAILog(input: SaveAILogInput): Promise<SaveAILogResult>
           ? 'يتطلب تفعيل صلاحية RLS للجدول ai_generation_logs في Supabase SQL Editor'
           : error.message;
 
-      const fallbackRecord: AIGenerationLog = {
-        ...baseLocalRecord,
+      const failedRecord: AIGenerationLog = {
+        ...baseRecord,
         synced_to_supabase: false,
         supabase_status_note: statusNote,
       };
-      saveLocalAILogRecord(fallbackRecord);
       return {
         success: false,
         syncedToSupabase: false,
-        log: fallbackRecord,
+        log: failedRecord,
         error: error.message,
       };
     }
 
     const syncedRecord: AIGenerationLog = {
-      ...baseLocalRecord,
+      ...baseRecord,
       id: (data && typeof data.id === 'string' ? data.id : recordId),
       created_at: (data && typeof data.created_at === 'string' ? data.created_at : nowIso),
       synced_to_supabase: true,
     };
-    saveLocalAILogRecord(syncedRecord);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('oao-ai-logs-updated', { detail: [syncedRecord] }));
+    }
 
     return {
       success: true,
@@ -355,16 +310,15 @@ export async function saveAILog(input: SaveAILogInput): Promise<SaveAILogResult>
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown Supabase error';
-    const fallbackRecord: AIGenerationLog = {
-      ...baseLocalRecord,
+    const failedRecord: AIGenerationLog = {
+      ...baseRecord,
       synced_to_supabase: false,
       supabase_status_note: message,
     };
-    saveLocalAILogRecord(fallbackRecord);
     return {
       success: false,
       syncedToSupabase: false,
-      log: fallbackRecord,
+      log: failedRecord,
       error: message,
     };
   }
@@ -378,12 +332,11 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Fetch AI generation logs from Supabase `ai_generation_logs` merged with local history.
+ * Fetch AI generation logs exclusively from Supabase `ai_generation_logs`.
  */
 export async function fetchAILogs(): Promise<AIGenerationLog[]> {
-  const localLogs = getLocalAILogs();
   const client = getSupabaseClient();
-  if (!client) return localLogs;
+  if (!client) return [];
 
   try {
     const { data, error } = await client
@@ -393,10 +346,10 @@ export async function fetchAILogs(): Promise<AIGenerationLog[]> {
       .limit(30);
 
     if (error || !data) {
-      return localLogs;
+      return [];
     }
 
-    const remoteLogs: AIGenerationLog[] = data.map((row: Record<string, unknown>) => {
+    return data.map((row: Record<string, unknown>) => {
       let parsedEnvelope: Record<string, unknown> | null = null;
       const rawPrompt = typeof row.prompt_input === 'string' ? row.prompt_input : '';
       if (rawPrompt.trim().startsWith('{')) {
@@ -440,17 +393,8 @@ export async function fetchAILogs(): Promise<AIGenerationLog[]> {
         synced_to_supabase: true,
       };
     });
-
-    // Merge remote logs with any unsynced local logs
-    const remoteIds = new Set(remoteLogs.map((r) => r.id));
-    const merged = [
-      ...remoteLogs,
-      ...localLogs.filter((l) => !remoteIds.has(l.id)),
-    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-    return merged;
   } catch {
-    return localLogs;
+    return [];
   }
 }
 
@@ -606,9 +550,9 @@ export async function testSupabaseConnection(
     if (!cleanUrl || !cleanKey || cleanUrl.includes('your-project-id') || !cleanUrl.startsWith('http')) {
       return {
         success: false,
-        isLocalMode: true,
+        isLocalMode: false,
         message:
-          'قاعدة البيانات تعمل حالياً في الوضع المحلي المباشر (Local Storage Mode) بنجاح 100%. لم يتم إدخال بيانات Supabase في ملف .env أو في الحقول أدناه. الربط السحابي اختياري بالكامل.',
+          'لم يتم ضبط بيانات الربط السحابي (VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY). يعتمد النظام كلياً على قاعدة بيانات Supabase السحابية لحفظ جميع البيانات.',
       };
     }
 
@@ -679,18 +623,8 @@ export async function fetchNotesFromSupabase(filter?: {
   clientEmail?: string;
   clientName?: string;
 }): Promise<ClientNote[]> {
-  let localNotes: ClientNote[] = [];
-  if (typeof window !== 'undefined') {
-    try {
-      const raw = localStorage.getItem('oao_client_notes');
-      localNotes = raw ? (JSON.parse(raw) as ClientNote[]) : [];
-    } catch {
-      localNotes = [];
-    }
-  }
-
   const client = getSupabaseClient();
-  if (!client) return localNotes;
+  if (!client) return [];
 
   try {
     const { data, error } = await client
@@ -698,7 +632,7 @@ export async function fetchNotesFromSupabase(filter?: {
       .select('*')
       .order('id', { ascending: false });
 
-    if (error || !data) return localNotes;
+    if (error || !data) return [];
 
     const mapped: ClientNote[] = data.map((row: Record<string, unknown>) => ({
       id: String(row.id),
@@ -718,21 +652,17 @@ export async function fetchNotesFromSupabase(filter?: {
       const candidates = buildCandidateClientKeys(filter.clientId, filter.clientEmail);
       const cleanEmail = (filter.clientEmail || '').trim().toLowerCase();
       const cleanName = (filter.clientName || '').trim().toLowerCase();
-      const filtered = mapped.filter((n) => {
+      return mapped.filter((n) => {
         if (n.clientId && candidates.includes(n.clientId)) return true;
         if (cleanEmail && n.clientEmail && n.clientEmail.trim().toLowerCase() === cleanEmail) return true;
         if (cleanName && n.clientName && n.clientName.trim().toLowerCase() === cleanName) return true;
         return false;
       });
-      return filtered;
     }
 
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('oao_client_notes', JSON.stringify(mapped));
-    }
     return mapped;
   } catch {
-    return localNotes;
+    return [];
   }
 }
 
@@ -781,26 +711,6 @@ export async function saveSubscriberToSupabase(
     normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)';
   const packageTypeEn = normalizedPlan; // 'VIP' | 'standard'
   const cleanEmail = input.email ? input.email.trim().toLowerCase() : undefined;
-
-  // Mirror email -> plan mapping locally so returning logins always resolve immediately even offline
-  if (typeof window !== 'undefined' && cleanEmail) {
-    try {
-      const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
-      const mapObj: Record<string, { plan: SubscriptionPlanTier; nameAr: string; startDate?: string; endDate?: string; status?: string }> = mapRaw
-        ? JSON.parse(mapRaw)
-        : {};
-      mapObj[cleanEmail] = {
-        plan: normalizedPlan,
-        nameAr: input.nameAr,
-        startDate: input.subscriptionStartDate,
-        endDate: input.subscriptionEndDate,
-        status: input.status,
-      };
-      localStorage.setItem('oao_subscriber_plans_map', JSON.stringify(mapObj));
-    } catch {
-      // ignore storage errors
-    }
-  }
 
   const client = getSupabaseClient();
   if (!client) {
@@ -949,77 +859,17 @@ export async function fetchSubscriberPlanFromSupabase(
         return { plan: resolvedPlan, nameAr, status, startDate, endDate };
       }
     } catch {
-      // fallback to local lookup
-    }
-  }
-
-  if (typeof window !== 'undefined') {
-    try {
-      const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
-      if (mapRaw) {
-        const mapObj = JSON.parse(mapRaw) as Record<
-          string,
-          {
-            plan: SubscriptionPlanTier;
-            nameAr?: string;
-            status?: string;
-            startDate?: string;
-            endDate?: string;
-          }
-        >;
-        if (mapObj[cleanEmail]) {
-          return {
-            plan: normalizeSubscriptionPlan(mapObj[cleanEmail].plan),
-            nameAr: mapObj[cleanEmail].nameAr,
-            status: mapObj[cleanEmail].status,
-            startDate: mapObj[cleanEmail].startDate,
-            endDate: mapObj[cleanEmail].endDate,
-          };
-        }
-      }
-
-      const declRaw = localStorage.getItem('oao_client_declarations');
-      if (declRaw) {
-        const decls = JSON.parse(declRaw) as Array<Record<string, unknown>>;
-        const matched = [...decls]
-          .reverse()
-          .find(
-            (d) =>
-              typeof d.email === 'string' && d.email.trim().toLowerCase() === cleanEmail
-          );
-        if (matched) {
-          const rawPlan =
-            (matched.subscription_plan as string | undefined) ||
-            (matched.planId as string | undefined);
-          return {
-            plan: normalizeSubscriptionPlan(rawPlan),
-            nameAr: typeof matched.fullName === 'string' ? matched.fullName : undefined,
-            status: typeof matched.status === 'string' ? matched.status : undefined,
-            startDate: typeof matched.startDate === 'string' ? matched.startDate : undefined,
-            endDate: typeof matched.endDate === 'string' ? matched.endDate : undefined,
-          };
-        }
-      }
-    } catch {
-      // ignore
+      return null;
     }
   }
 
   return null;
 }
 
-// Sync profile stats & subscription_plan ('standard' | 'VIP') to Supabase
+// Sync profile stats & subscription_plan ('standard' | 'VIP') exclusively to Supabase
 export async function syncProfileToSupabase(profile: ClientProfile): Promise<boolean> {
   const normalizedPlan = normalizeSubscriptionPlan(profile.subscription_plan);
   const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
-
-  if (typeof window !== 'undefined' && canonicalKey) {
-    try {
-      localStorage.setItem(`${STORAGE_KEYS.PROFILE_PREFIX}${canonicalKey}`, JSON.stringify(profile));
-    } catch {
-      // ignore
-    }
-  }
 
   // 1. Sync to live `public.clients` table
   const clientRes = await saveSubscriberToSupabase({
@@ -1107,24 +957,13 @@ export async function fetchClientProfileFromSupabase(
   const candidates = buildCandidateClientKeys(clientId, cleanEmail);
   const canonicalKey = getCanonicalClientKey(clientId, cleanEmail);
 
-  let localMirror: Partial<ClientProfile> = {};
-  if (typeof window !== 'undefined' && canonicalKey) {
-    try {
-      const raw = localStorage.getItem(`${STORAGE_KEYS.PROFILE_PREFIX}${canonicalKey}`);
-      if (raw) localMirror = JSON.parse(raw) as Partial<ClientProfile>;
-    } catch {
-      // ignore
-    }
-  }
-
   const baseProfile: ClientProfile = {
     ...INITIAL_CLIENT_PROFILE,
-    ...localMirror,
     ...fallback,
     id: canonicalKey || INITIAL_CLIENT_PROFILE.id,
-    email: cleanEmail || fallback?.email || localMirror.email || INITIAL_CLIENT_PROFILE.email,
+    email: cleanEmail || fallback?.email || INITIAL_CLIENT_PROFILE.email,
     subscription_plan: normalizeSubscriptionPlan(
-      fallback?.subscription_plan || localMirror.subscription_plan || INITIAL_CLIENT_PROFILE.subscription_plan
+      fallback?.subscription_plan || INITIAL_CLIENT_PROFILE.subscription_plan
     ),
   };
 
@@ -1134,8 +973,21 @@ export async function fetchClientProfileFromSupabase(
   }
 
   try {
-    // Query clients, profiles, and extended profile JSONB in parallel
-    const [clientsRes, profilesRes, extRes, authRes] = await Promise.all([
+    // Query subscribers, clients, profiles, and extended profile JSONB in parallel
+    const [subscribersRes, clientsRes, profilesRes, extRes, authRes] = await Promise.all([
+      cleanEmail
+        ? client
+            .from('subscribers')
+            .select('*')
+            .ilike('email', cleanEmail)
+            .limit(1)
+            .maybeSingle()
+        : client
+            .from('subscribers')
+            .select('*')
+            .in('id', candidates)
+            .limit(1)
+            .maybeSingle(),
       cleanEmail
         ? client
             .from('clients')
@@ -1175,22 +1027,45 @@ export async function fetchClientProfileFromSupabase(
 
     const merged: ClientProfile = { ...baseProfile };
 
+    if (!subscribersRes.error && subscribersRes.data) {
+      const sRow = subscribersRes.data as Record<string, unknown>;
+      if (sRow.id) merged.id = String(sRow.id);
+      if (sRow.name) {
+        merged.name = String(sRow.name);
+        merged.nameEn = String(sRow.name);
+      }
+      if (sRow.email) merged.email = String(sRow.email).trim().toLowerCase();
+      if (sRow.phone) merged.phone = String(sRow.phone);
+      if (sRow.client_code) merged.clientCode = String(sRow.client_code);
+      if (sRow.tier) merged.subscription_plan = normalizeSubscriptionPlan(String(sRow.tier));
+      if (sRow.goals) merged.visualGoal = String(sRow.goals);
+      if (sRow.status) merged.subscriptionStatus = sRow.status as ClientProfile['subscriptionStatus'];
+      if (sRow.age !== null && sRow.age !== undefined) merged.age = Number(sRow.age);
+      if (sRow.blood_type) merged.bloodType = String(sRow.blood_type);
+      if (sRow.nutrition_plan_locked !== undefined) {
+        merged.nutritionPlanLocked = Boolean(sRow.nutrition_plan_locked);
+      }
+      if (sRow.inbody_filename) merged.inBodyFileName = String(sRow.inbody_filename);
+      if (sRow.inbody_file_url) merged.inBodyFileUrl = String(sRow.inbody_file_url);
+      if (sRow.passcode) merged.assignedPassword = String(sRow.passcode);
+    }
+
     if (!clientsRes.error && clientsRes.data) {
       const row = clientsRes.data as Record<string, unknown>;
-      if (row.id) merged.id = String(row.id);
-      if (row.name_ar) merged.name = String(row.name_ar);
-      if (row.name_en) merged.nameEn = String(row.name_en);
+      if (row.id && !subscribersRes.data) merged.id = String(row.id);
+      if (row.name_ar && !subscribersRes.data) merged.name = String(row.name_ar);
+      if (row.name_en && !subscribersRes.data) merged.nameEn = String(row.name_en);
       if (row.email) merged.email = String(row.email).trim().toLowerCase();
-      if (row.phone) merged.phone = String(row.phone);
-      if (row.client_code) merged.clientCode = String(row.client_code);
+      if (row.phone && !merged.phone) merged.phone = String(row.phone);
+      if (row.client_code && !merged.clientCode) merged.clientCode = String(row.client_code);
       if (row.height_cm) merged.height = Number(row.height_cm);
       if (row.target_weight_kg) merged.targetWeight = Number(row.target_weight_kg);
-      if (row.subscription_plan || row.package_type_en) {
+      if (!subscribersRes.data && (row.subscription_plan || row.package_type_en)) {
         merged.subscription_plan = normalizeSubscriptionPlan(
           String(row.subscription_plan || row.package_type_en)
         );
       }
-      if (row.status) {
+      if (row.status && !subscribersRes.data) {
         merged.subscriptionStatus = row.status as ClientProfile['subscriptionStatus'];
       }
       if (row.subscription_start_date) {
@@ -1199,28 +1074,28 @@ export async function fetchClientProfileFromSupabase(
       if (row.subscription_end_date) {
         merged.subscriptionEndDate = String(row.subscription_end_date);
       }
-      if (row.age !== null && row.age !== undefined) merged.age = Number(row.age);
-      if (row.blood_type) merged.bloodType = String(row.blood_type);
-      if (row.visual_goal) merged.visualGoal = String(row.visual_goal);
-      if (row.nutrition_plan_locked !== undefined) {
+      if (row.age !== null && row.age !== undefined && !merged.age) merged.age = Number(row.age);
+      if (row.blood_type && !merged.bloodType) merged.bloodType = String(row.blood_type);
+      if (row.visual_goal && !merged.visualGoal) merged.visualGoal = String(row.visual_goal);
+      if (row.nutrition_plan_locked !== undefined && !subscribersRes.data) {
         merged.nutritionPlanLocked = Boolean(row.nutrition_plan_locked);
       }
-      if (row.inbody_filename) merged.inBodyFileName = String(row.inbody_filename);
-      if (row.inbody_file_url) merged.inBodyFileUrl = String(row.inbody_file_url);
-      if (row.assigned_password) merged.assignedPassword = String(row.assigned_password);
+      if (row.inbody_filename && !merged.inBodyFileName) merged.inBodyFileName = String(row.inbody_filename);
+      if (row.inbody_file_url && !merged.inBodyFileUrl) merged.inBodyFileUrl = String(row.inbody_file_url);
+      if (row.assigned_password && !merged.assignedPassword) merged.assignedPassword = String(row.assigned_password);
     }
 
     if (!authRes.error && authRes.data && (authRes.data as Record<string, unknown>).workout_data) {
       const authData = (authRes.data as Record<string, unknown>).workout_data as Record<string, unknown>;
-      if (authData.clientName && !clientsRes.data) merged.name = String(authData.clientName);
-      if (authData.plan) merged.subscription_plan = normalizeSubscriptionPlan(String(authData.plan));
-      if (authData.nutritionPlanLocked !== undefined) {
+      if (authData.clientName && !clientsRes.data && !subscribersRes.data) merged.name = String(authData.clientName);
+      if (authData.plan && !subscribersRes.data) merged.subscription_plan = normalizeSubscriptionPlan(String(authData.plan));
+      if (authData.nutritionPlanLocked !== undefined && !subscribersRes.data) {
         merged.nutritionPlanLocked = Boolean(authData.nutritionPlanLocked);
       }
       if (authData.visualGoal && !merged.visualGoal) merged.visualGoal = String(authData.visualGoal);
       if (authData.age && !merged.age) merged.age = Number(authData.age);
       if (authData.bloodType && !merged.bloodType) merged.bloodType = String(authData.bloodType);
-      if (authData.password) merged.assignedPassword = String(authData.password);
+      if (authData.password && !merged.assignedPassword) merged.assignedPassword = String(authData.password);
     }
 
     if (!profilesRes.error && profilesRes.data) {
@@ -1255,14 +1130,6 @@ export async function fetchClientProfileFromSupabase(
       if (ext.subscriptionEndDate) merged.subscriptionEndDate = ext.subscriptionEndDate;
     }
 
-    if (typeof window !== 'undefined' && merged.id) {
-      try {
-        localStorage.setItem(`${STORAGE_KEYS.PROFILE_PREFIX}${merged.id}`, JSON.stringify(merged));
-      } catch {
-        // ignore
-      }
-    }
-
     return merged;
   } catch {
     return baseProfile;
@@ -1270,29 +1137,11 @@ export async function fetchClientProfileFromSupabase(
 }
 
 /**
- * Persist completed subscription agreement directly into Supabase `public.declarations`
- * and local storage `oao_client_declarations`.
+ * Persist completed subscription agreement exclusively into Supabase `public.declarations`
  */
 export async function saveDeclarationToSupabase(
   agreement: SubscriptionAgreement
 ): Promise<{ synced: boolean; error?: string }> {
-  // Always persist locally first
-  if (typeof window !== 'undefined') {
-    try {
-      const existing: SubscriptionAgreement[] = JSON.parse(
-        localStorage.getItem('oao_client_declarations') || '[]'
-      );
-      const filtered = existing.filter((d) => d.id !== agreement.id);
-      filtered.unshift(agreement);
-      localStorage.setItem('oao_client_declarations', JSON.stringify(filtered));
-      localStorage.setItem('oao_active_contract', JSON.stringify(agreement));
-      window.dispatchEvent(new CustomEvent('oao_declarations_updated', { detail: filtered }));
-      window.dispatchEvent(new Event('storage'));
-    } catch {
-      // ignore storage error
-    }
-  }
-
   const client = getSupabaseClient();
   if (!client) {
     return { synced: false, error: 'Supabase client unavailable' };
@@ -1338,6 +1187,9 @@ export async function saveDeclarationToSupabase(
     if (error) {
       return { synced: false, error: error.message };
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('oao_declarations_updated'));
+    }
     return { synced: true };
   } catch (err) {
     return { synced: false, error: err instanceof Error ? err.message : 'Unknown error' };
@@ -1345,21 +1197,11 @@ export async function saveDeclarationToSupabase(
 }
 
 /**
- * Fetch agreements from Supabase `public.declarations` merged with local storage.
+ * Fetch agreements exclusively from Supabase `public.declarations`.
  */
 export async function fetchDeclarationsFromSupabase(): Promise<SubscriptionAgreement[]> {
-  let localDecls: SubscriptionAgreement[] = [];
-  if (typeof window !== 'undefined') {
-    try {
-      const raw = localStorage.getItem('oao_client_declarations');
-      localDecls = raw ? (JSON.parse(raw) as SubscriptionAgreement[]) : [];
-    } catch {
-      localDecls = [];
-    }
-  }
-
   const client = getSupabaseClient();
-  if (!client) return localDecls;
+  if (!client) return [];
 
   try {
     const { data, error } = await client
@@ -1367,9 +1209,9 @@ export async function fetchDeclarationsFromSupabase(): Promise<SubscriptionAgree
       .select('*')
       .order('completed_timestamp', { ascending: false });
 
-    if (error || !data) return localDecls;
+    if (error || !data) return [];
 
-    const remoteDecls: SubscriptionAgreement[] = data.map((row: Record<string, unknown>) => ({
+    return data.map((row: Record<string, unknown>) => ({
       id: String(row.id),
       planId: (row.plan_id === 'platinum' ? 'platinum' : 'standard') as 'standard' | 'platinum',
       subscription_plan: normalizeSubscriptionPlan(row.subscription_plan as string),
@@ -1400,39 +1242,23 @@ export async function fetchDeclarationsFromSupabase(): Promise<SubscriptionAgree
       status: 'completed_and_active',
       completedTimestamp: row.completed_timestamp ? String(row.completed_timestamp) : undefined,
     }));
-
-    // Authoritative Supabase declarations list (replaces local cache so deleted cloud rows do not reappear)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('oao_client_declarations', JSON.stringify(remoteDecls));
-    }
-    return remoteDecls;
   } catch {
-    return localDecls;
+    return [];
   }
 }
 
 /**
- * Delete declaration from Supabase & local storage
+ * Delete declaration exclusively from Supabase
  */
 export async function deleteDeclarationFromSupabase(id: string): Promise<boolean> {
-  if (typeof window !== 'undefined') {
-    try {
-      const raw = localStorage.getItem('oao_client_declarations');
-      const existing: SubscriptionAgreement[] = raw ? JSON.parse(raw) : [];
-      const updated = existing.filter((d) => d.id !== id);
-      localStorage.setItem('oao_client_declarations', JSON.stringify(updated));
-      window.dispatchEvent(new CustomEvent('oao_declarations_updated', { detail: updated }));
-      window.dispatchEvent(new Event('storage'));
-    } catch {
-      // ignore
-    }
-  }
-
   const client = getSupabaseClient();
-  if (!client) return true;
+  if (!client) return false;
   try {
-    await client.from('declarations').delete().eq('id', id);
-    return true;
+    const { error } = await client.from('declarations').delete().eq('id', id);
+    if (!error && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('oao_declarations_updated'));
+    }
+    return !error;
   } catch {
     return false;
   }
@@ -1453,7 +1279,7 @@ export async function deleteNoteFromSupabase(noteId: string): Promise<boolean> {
 }
 
 /**
- * Sync workout days to Supabase `workouts` table scoped to target client key
+ * Sync workout days exclusively to Supabase `workouts` table scoped to target client key
  */
 export async function syncWorkoutDaysToSupabase(
   clientId: string,
@@ -1461,14 +1287,6 @@ export async function syncWorkoutDaysToSupabase(
   email?: string
 ): Promise<boolean> {
   const canonicalKey = getCanonicalClientKey(clientId, email);
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(`${STORAGE_KEYS.WORKOUTS_PREFIX}${canonicalKey}`, JSON.stringify(days));
-    } catch {
-      // ignore
-    }
-  }
-
   const client = getSupabaseClient();
   if (!client) return false;
   try {
@@ -1491,20 +1309,6 @@ export async function fetchWorkoutDaysFromSupabase(
   email?: string | null
 ): Promise<WorkoutDay[]> {
   const candidates = buildCandidateClientKeys(clientId, email);
-  const canonicalKey = getCanonicalClientKey(clientId, email);
-
-  let localFallback: WorkoutDay[] | null = null;
-  if (typeof window !== 'undefined' && canonicalKey) {
-    try {
-      const raw = localStorage.getItem(`${STORAGE_KEYS.WORKOUTS_PREFIX}${canonicalKey}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) localFallback = parsed;
-      }
-    } catch {
-      localFallback = null;
-    }
-  }
 
   const client = getSupabaseClient();
   if (client && candidates.length > 0) {
@@ -1521,22 +1325,125 @@ export async function fetchWorkoutDaysFromSupabase(
       if (!error && data && Array.isArray((data as Record<string, unknown>).workout_data)) {
         const cloudDays = (data as Record<string, unknown>).workout_data as WorkoutDay[];
         if (cloudDays.length > 0) {
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem(`${STORAGE_KEYS.WORKOUTS_PREFIX}${canonicalKey}`, JSON.stringify(cloudDays));
-            } catch {
-              // ignore
-            }
-          }
           return cloudDays;
         }
       }
     } catch {
-      // fallback below
+      // fallback to initial template
     }
   }
 
-  return localFallback || JSON.parse(JSON.stringify(INITIAL_WORKOUT_DAYS));
+  return JSON.parse(JSON.stringify(INITIAL_WORKOUT_DAYS));
+}
+
+export async function fetchAverageWorkoutCompletionFromSupabase(): Promise<number> {
+  const client = getSupabaseClient();
+  if (!client) return 0;
+  try {
+    const { data, error } = await client
+      .from('workouts')
+      .select('workout_data')
+      .eq('day_key', 'all_days');
+
+    if (error || !Array.isArray(data)) return 0;
+
+    let totalSets = 0;
+    let completedSets = 0;
+    for (const row of data as Array<Record<string, unknown>>) {
+      if (!Array.isArray(row.workout_data)) continue;
+      for (const d of row.workout_data as WorkoutDay[]) {
+        for (const ex of d.exercises || []) {
+          for (const s of ex.sets || []) {
+            totalSets += 1;
+            if (s.isCompleted) completedSets += 1;
+          }
+        }
+      }
+    }
+    return totalSets > 0 ? Math.round((completedSets / totalSets) * 100) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Sync & fetch tier-level Nutrition Plans (`day_key = 'tier_nutrition_standard' | 'tier_nutrition_VIP'`)
+ */
+export async function syncTierNutritionPlanToSupabase(
+  tier: SubscriptionPlanTier,
+  categories: MealCategory[]
+): Promise<boolean> {
+  saveDietCategories(tier, categories);
+  const client = getSupabaseClient();
+  if (!client) return false;
+  const rowId = `tier_nutrition_${tier}`;
+  try {
+    const { error } = await client.from('workouts').upsert(
+      {
+        id: rowId,
+        client_id: 'admin_config',
+        day_key: rowId,
+        workout_data: { tier, categories, updatedAt: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchTierNutritionPlanFromSupabase(
+  tier: SubscriptionPlanTier
+): Promise<MealCategory[]> {
+  const client = getSupabaseClient();
+  const rowId = `tier_nutrition_${tier}`;
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('workouts')
+        .select('workout_data')
+        .eq('id', rowId)
+        .maybeSingle();
+
+      if (!error && data) {
+        const rawData = (data as Record<string, unknown>).workout_data as
+          | { categories?: MealCategory[] }
+          | MealCategory[]
+          | undefined;
+        const cats = Array.isArray(rawData) ? rawData : rawData?.categories;
+        if (Array.isArray(cats) && cats.length > 0) {
+          saveDietCategories(tier, cats);
+          return cats;
+        }
+      }
+    } catch {
+      // fallback to static defaults
+    }
+  }
+  return JSON.parse(
+    JSON.stringify(tier === 'VIP' ? VIP_PLATINUM_DIET_CATEGORIES : STANDARD_DIET_CATEGORIES)
+  );
+}
+
+export async function resetTierNutritionPlanInSupabase(
+  tier: SubscriptionPlanTier
+): Promise<MealCategory[]> {
+  const defaults = JSON.parse(
+    JSON.stringify(tier === 'VIP' ? VIP_PLATINUM_DIET_CATEGORIES : STANDARD_DIET_CATEGORIES)
+  ) as MealCategory[];
+  saveDietCategories(tier, defaults);
+  const client = getSupabaseClient();
+  const rowId = `tier_nutrition_${tier}`;
+  if (client) {
+    try {
+      await client.from('workouts').delete().eq('id', rowId);
+    } catch {
+      // ignore
+    }
+  }
+  return defaults;
 }
 
 /**
@@ -1549,14 +1456,6 @@ export async function syncNutritionPlanToSupabase(
   email?: string
 ): Promise<boolean> {
   const canonicalKey = getCanonicalClientKey(clientKey, email);
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(`${STORAGE_KEYS.DIET_PREFIX}${canonicalKey}`, JSON.stringify(categories));
-    } catch {
-      // ignore
-    }
-  }
-
   const client = getSupabaseClient();
   if (!client) return false;
   try {
@@ -1584,16 +1483,6 @@ export async function resetNutritionPlanInSupabase(
   email?: string
 ): Promise<MealCategory[]> {
   const canonicalKey = getCanonicalClientKey(clientKey, email);
-  const defaults = tier === 'VIP' ? VIP_PLATINUM_DIET_CATEGORIES : STANDARD_DIET_CATEGORIES;
-
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem(`${STORAGE_KEYS.DIET_PREFIX}${canonicalKey}`);
-    } catch {
-      // ignore
-    }
-  }
-
   const client = getSupabaseClient();
   if (client && canonicalKey) {
     try {
@@ -1602,8 +1491,7 @@ export async function resetNutritionPlanInSupabase(
       // ignore
     }
   }
-
-  return JSON.parse(JSON.stringify(defaults));
+  return fetchTierNutritionPlanFromSupabase(tier);
 }
 
 export async function fetchNutritionPlanFromSupabase(
@@ -1612,7 +1500,6 @@ export async function fetchNutritionPlanFromSupabase(
   tier: SubscriptionPlanTier = 'standard'
 ): Promise<MealCategory[]> {
   const candidates = buildCandidateClientKeys(clientId, email);
-  const canonicalKey = getCanonicalClientKey(clientId, email);
 
   const client = getSupabaseClient();
   if (client && candidates.length > 0) {
@@ -1635,47 +1522,21 @@ export async function fetchNutritionPlanFromSupabase(
           ? rawData
           : rawData?.categories;
         if (Array.isArray(cloudCategories) && cloudCategories.length > 0) {
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem(`${STORAGE_KEYS.DIET_PREFIX}${canonicalKey}`, JSON.stringify(cloudCategories));
-            } catch {
-              // ignore
-            }
-          }
           return cloudCategories;
         }
       }
     } catch {
-      // fallback below
+      // fallback to tier plan in Supabase
     }
   }
 
-  if (typeof window !== 'undefined' && canonicalKey) {
-    try {
-      const raw = localStorage.getItem(`${STORAGE_KEYS.DIET_PREFIX}${canonicalKey}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {
-      // fallback
-    }
-  }
-
-  return getDietPlanCategories(tier);
+  return fetchTierNutritionPlanFromSupabase(tier);
 }
 
 /**
  * Sync & fetch global nutrition lock setting in Supabase
  */
 export async function syncGlobalNutritionLockToSupabase(locked: boolean): Promise<boolean> {
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem('oao_nutrition_locked', String(locked));
-    } catch {
-      // ignore
-    }
-  }
   const client = getSupabaseClient();
   if (!client) return false;
   try {
@@ -1705,29 +1566,64 @@ export async function fetchGlobalNutritionLockFromSupabase(): Promise<boolean> {
         .eq('id', 'global_nutrition_lock')
         .maybeSingle();
       if (!error && data && (data as Record<string, unknown>).workout_data) {
-        const locked = Boolean(((data as Record<string, unknown>).workout_data as { locked?: boolean }).locked);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('oao_nutrition_locked', String(locked));
-        }
-        return locked;
+        return Boolean(((data as Record<string, unknown>).workout_data as { locked?: boolean }).locked);
       }
     } catch {
-      // fallback
+      return false;
     }
-  }
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('oao_nutrition_locked') === 'true';
   }
   return false;
 }
 
 /**
- * Sync & fetch per-client Dynamic Assessment, Streak & Athlete Rank (`day_key = 'assessment_bundle'`)
+ * Sync & fetch Admin Selected Target Client Key in Supabase (`admin_selected_target`)
+ */
+export async function syncAdminTargetClientToSupabase(clientKey: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client || !clientKey) return;
+  try {
+    await client.from('workouts').upsert(
+      {
+        id: 'admin_selected_target',
+        client_id: 'admin_config',
+        day_key: 'admin_config',
+        workout_data: { clientKey, updatedAt: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export async function fetchAdminTargetClientFromSupabase(): Promise<string> {
+  const client = getSupabaseClient();
+  if (!client) return '';
+  try {
+    const { data, error } = await client
+      .from('workouts')
+      .select('workout_data')
+      .eq('id', 'admin_selected_target')
+      .maybeSingle();
+    if (!error && data && (data as Record<string, unknown>).workout_data) {
+      const k = ((data as Record<string, unknown>).workout_data as { clientKey?: string }).clientKey;
+      return typeof k === 'string' ? k : '';
+    }
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
+/**
+ * Sync & fetch per-client Dynamic Assessment, Streak, Athlete Rank & Badges (`day_key = 'assessment_bundle'`)
  */
 export interface ClientAssessmentBundle {
   analysisData?: ComprehensiveAnalysisData;
   streakData: StreakData;
   athleteRank: AthleteRank;
+  badges?: Badge[];
 }
 
 export async function syncAssessmentToSupabase(
@@ -1736,14 +1632,6 @@ export async function syncAssessmentToSupabase(
   email?: string
 ): Promise<boolean> {
   const canonicalKey = getCanonicalClientKey(clientKey, email);
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(`${STORAGE_KEYS.ASSESSMENT_PREFIX}${canonicalKey}`, JSON.stringify(bundle));
-    } catch {
-      // ignore
-    }
-  }
-
   const client = getSupabaseClient();
   if (!client) return false;
   try {
@@ -1768,7 +1656,6 @@ export async function fetchAssessmentFromSupabase(
   email?: string | null
 ): Promise<ClientAssessmentBundle> {
   const candidates = buildCandidateClientKeys(clientId, email);
-  const canonicalKey = getCanonicalClientKey(clientId, email);
 
   const client = getSupabaseClient();
   if (client && candidates.length > 0) {
@@ -1784,38 +1671,15 @@ export async function fetchAssessmentFromSupabase(
 
       if (!error && data && (data as Record<string, unknown>).workout_data) {
         const w = (data as Record<string, unknown>).workout_data as Partial<ClientAssessmentBundle>;
-        const resolved: ClientAssessmentBundle = {
+        return {
           analysisData: w.analysisData,
           streakData: w.streakData || INITIAL_STREAK_DATA,
           athleteRank: w.athleteRank || INITIAL_ATHLETE_RANK,
+          badges: Array.isArray(w.badges) && w.badges.length > 0 ? w.badges : INITIAL_BADGES,
         };
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.setItem(`${STORAGE_KEYS.ASSESSMENT_PREFIX}${canonicalKey}`, JSON.stringify(resolved));
-          } catch {
-            // ignore
-          }
-        }
-        return resolved;
       }
     } catch {
       // fallback below
-    }
-  }
-
-  if (typeof window !== 'undefined' && canonicalKey) {
-    try {
-      const raw = localStorage.getItem(`${STORAGE_KEYS.ASSESSMENT_PREFIX}${canonicalKey}`);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<ClientAssessmentBundle>;
-        return {
-          analysisData: parsed.analysisData,
-          streakData: parsed.streakData || INITIAL_STREAK_DATA,
-          athleteRank: parsed.athleteRank || INITIAL_ATHLETE_RANK,
-        };
-      }
-    } catch {
-      // fallback
     }
   }
 
@@ -1823,6 +1687,7 @@ export async function fetchAssessmentFromSupabase(
     analysisData: undefined,
     streakData: JSON.parse(JSON.stringify(INITIAL_STREAK_DATA)),
     athleteRank: JSON.parse(JSON.stringify(INITIAL_ATHLETE_RANK)),
+    badges: JSON.parse(JSON.stringify(INITIAL_BADGES)),
   };
 }
 
@@ -1842,6 +1707,7 @@ export async function loadClientWorkspaceFromSupabase(params: {
   analysisData?: ComprehensiveAnalysisData;
   streakData: StreakData;
   athleteRank: AthleteRank;
+  badges: Badge[];
   notes: ClientNote[];
 }> {
   const profile = await fetchClientProfileFromSupabase(params.clientId, params.email, {
@@ -1869,6 +1735,7 @@ export async function loadClientWorkspaceFromSupabase(params: {
   const analysisData = assessment.analysisData || profile.analysisData;
   const streakData = assessment.streakData || profile.streakData || INITIAL_STREAK_DATA;
   const athleteRank = assessment.athleteRank || profile.athleteRank || INITIAL_ATHLETE_RANK;
+  const badges = Array.isArray(assessment.badges) && assessment.badges.length > 0 ? assessment.badges : INITIAL_BADGES;
 
   const hydratedProfile: ClientProfile = {
     ...profile,
@@ -1887,15 +1754,53 @@ export async function loadClientWorkspaceFromSupabase(params: {
     analysisData,
     streakData,
     athleteRank,
+    badges,
     notes,
   };
 }
 
-// Ready-to-copy SQL Schema for Coach/Admin including `clients.subscription_plan`, `declarations`, `workouts`, `notes` & RLS policies
+// Ready-to-copy SQL Schema for Coach/Admin including `subscribers`, `clients`, `declarations`, `workouts`, `notes` & RLS policies
 export const SUPABASE_SQL_SCHEMA = `-- OAO - OWN AURA OUTCOME TRAINING PORTAL DATABASE SCHEMA
 -- شغّل هذا الكود في Supabase SQL Editor لضبط الجداول وتفعيل الصلاحيات الكاملة:
 
--- 1. جدول المشتركين (clients)
+-- 0. جدول المشتركين المركزي وبيانات الدخول (subscribers)
+CREATE TABLE IF NOT EXISTS public.subscribers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  passcode TEXT NOT NULL,
+  client_code TEXT,
+  tier TEXT NOT NULL DEFAULT 'standard' CHECK (tier IN ('standard', 'VIP')),
+  goals TEXT,
+  phone TEXT,
+  age INTEGER,
+  blood_type TEXT,
+  status TEXT DEFAULT 'active',
+  nutrition_plan_locked BOOLEAN DEFAULT false,
+  inbody_filename TEXT,
+  inbody_file_url TEXT
+);
+
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS passcode TEXT;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS client_code TEXT;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'standard';
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS goals TEXT;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS age INTEGER;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS blood_type TEXT;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS nutrition_plan_locked BOOLEAN DEFAULT false;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS inbody_filename TEXT;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS inbody_file_url TEXT;
+
+ALTER TABLE public.subscribers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public access to subscribers" ON public.subscribers;
+CREATE POLICY "Allow public access to subscribers"
+  ON public.subscribers FOR ALL USING (true) WITH CHECK (true);
+
+-- 1. جدول المشتركين التفصيلي (clients)
 CREATE TABLE IF NOT EXISTS public.clients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),

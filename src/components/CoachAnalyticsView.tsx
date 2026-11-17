@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Language, Theme, SubscriptionAgreement, WorkoutDay } from '../types';
+import { Language, Theme, SubscriptionAgreement } from '../types';
 import { SignedDeclarationModal } from './SignedDeclarationModal';
 import {
   getAllSubscribersWithCredentials,
   fetchSubscribersFromSupabase,
   UserCredentialRecord,
 } from '../lib/authStore';
-import { fetchDeclarationsFromSupabase } from '../lib/supabase';
+import {
+  fetchDeclarationsFromSupabase,
+  fetchAverageWorkoutCompletionFromSupabase,
+} from '../lib/supabase';
 import {
   TrendingUp,
   Users,
@@ -63,77 +66,42 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [selectedAthlete, setSelectedAthlete] = useState<AthleteRecord | null>(null);
 
-  // Real Legal Declarations & Electronic Contracts
-  const [declarations, setDeclarations] = useState<SubscriptionAgreement[]>(() => {
-    try {
-      const stored = localStorage.getItem('oao_client_declarations');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Real Legal Declarations & Electronic Contracts (Fetched strictly from Supabase)
+  const [declarations, setDeclarations] = useState<SubscriptionAgreement[]>([]);
 
   // Real Registered Credentials
   const [credentialsList, setCredentialsList] = useState<UserCredentialRecord[]>(() =>
     getAllSubscribersWithCredentials()
   );
+  const [muscleCompletionPct, setMuscleCompletionPct] = useState<number>(0);
 
   const [activeViewingAgreement, setActiveViewingAgreement] = useState<SubscriptionAgreement | null>(null);
   const [isDeclarationModalOpen, setIsDeclarationModalOpen] = useState(false);
 
-  // Refresh lists on mount and custom/storage events
   const refreshData = () => {
-    try {
-      const stored = localStorage.getItem('oao_client_declarations');
-      setDeclarations(stored ? JSON.parse(stored) : []);
-    } catch {
-      setDeclarations([]);
-    }
     setCredentialsList(getAllSubscribersWithCredentials());
+    void fetchDeclarationsFromSupabase().then((decls) => {
+      if (decls) setDeclarations(decls);
+    });
+    void fetchAverageWorkoutCompletionFromSupabase().then(setMuscleCompletionPct);
   };
 
   useEffect(() => {
-    refreshData();
-    fetchSubscribersFromSupabase().then((subs) => {
+    void fetchSubscribersFromSupabase().then((subs) => {
       if (subs) setCredentialsList(subs);
     });
-    fetchDeclarationsFromSupabase().then((decls) => {
+    void fetchDeclarationsFromSupabase().then((decls) => {
       if (decls) setDeclarations(decls);
     });
+    void fetchAverageWorkoutCompletionFromSupabase().then(setMuscleCompletionPct);
 
     window.addEventListener('oao_declarations_updated', refreshData);
     window.addEventListener('oao_credentials_updated', refreshData);
-    window.addEventListener('storage', refreshData);
     return () => {
       window.removeEventListener('oao_declarations_updated', refreshData);
       window.removeEventListener('oao_credentials_updated', refreshData);
-      window.removeEventListener('storage', refreshData);
     };
   }, []);
-
-  // Calculate real Muscle / Workout Completion % dynamically from saved workout days (0% if empty)
-  const computeMuscleCompletionPct = (): number => {
-    try {
-      const raw = localStorage.getItem('oao_workout_days');
-      if (!raw) return 0;
-      const days = JSON.parse(raw) as WorkoutDay[];
-      let totalSets = 0;
-      let completedSets = 0;
-      days.forEach((d) => {
-        (d.exercises || []).forEach((ex) => {
-          (ex.sets || []).forEach((s) => {
-            totalSets += 1;
-            if (s.isCompleted) completedSets += 1;
-          });
-        });
-      });
-      return totalSets > 0 ? Math.round((completedSets / totalSets) * 100) : 0;
-    } catch {
-      return 0;
-    }
-  };
-
-  const muscleCompletionPct = computeMuscleCompletionPct();
 
   // Map real subscribers to athlete records (Starts cleanly empty if 0 registered)
   const athletes: AthleteRecord[] = credentialsList.map((user, idx) => {

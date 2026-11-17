@@ -23,12 +23,14 @@ import { RestTimer } from '../../components/RestTimer';
 import { VideoModal } from '../../components/VideoModal';
 import { calculateSubscriptionDetails } from '../../lib/subscriptionUtils';
 import {
+  fetchNotesFromSupabase,
   getCanonicalClientKey,
   loadClientWorkspaceFromSupabase,
   syncNoteToSupabase,
   syncProfileToSupabase,
   syncWorkoutDaysToSupabase,
 } from '../../lib/supabase';
+import { getCurrentUserSession, clearCurrentUserSession } from '../../lib/authStore';
 import {
   Home,
   LogOut,
@@ -54,61 +56,30 @@ export const StandardDashboard: React.FC = () => {
     return (localStorage.getItem('oao_theme') as Theme) || 'dark';
   });
 
-  // Client Profile state
+  // Client Profile state (Hydrated strictly from Supabase + active tab session)
   const [profile, setProfile] = useState<ClientProfile>(() => {
-    const saved = localStorage.getItem('oao_client_profile');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return { ...INITIAL_CLIENT_PROFILE, ...parsed, subscription_plan: 'standard' };
-      } catch {
-        // fallback
-      }
-    }
+    const currentUser = getCurrentUserSession();
     return {
       ...INITIAL_CLIENT_PROFILE,
+      id: currentUser?.id || INITIAL_CLIENT_PROFILE.id,
+      email: currentUser?.email || INITIAL_CLIENT_PROFILE.email,
+      name: currentUser?.name || INITIAL_CLIENT_PROFILE.name,
+      nameEn: currentUser?.name || INITIAL_CLIENT_PROFILE.nameEn,
       subscription_plan: 'standard',
     };
   });
 
-  // Workouts state
-  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>(() => {
-    const saved = localStorage.getItem('oao_workout_days');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_WORKOUT_DAYS;
-  });
+  // Workouts state (Hydrated strictly from Supabase)
+  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>(INITIAL_WORKOUT_DAYS);
 
-  // Notes state (Starts cleanly empty without seeded mock notes)
-  const [notes, setNotes] = useState<ClientNote[]>(() => {
-    const saved = localStorage.getItem('oao_client_notes');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return [];
-  });
+  // Notes state (Hydrated strictly from Supabase)
+  const [notes, setNotes] = useState<ClientNote[]>([]);
 
   // Hydrate full subscriber workspace from Supabase on mount
   useEffect(() => {
     let mounted = true;
     const hydrateFromCloud = async () => {
-      let currentUser: { id?: string; email?: string; name?: string } | null = null;
-      try {
-        const raw = localStorage.getItem('oao_current_user');
-        if (raw) currentUser = JSON.parse(raw);
-      } catch {
-        currentUser = null;
-      }
-
+      const currentUser = getCurrentUserSession();
       const targetEmail = currentUser?.email || profile.email;
       const targetId = currentUser?.id || profile.id;
       if (!targetEmail && (!targetId || targetId === 'client_athlete')) return;
@@ -128,13 +99,6 @@ export const StandardDashboard: React.FC = () => {
       setProfile(nextProfile);
       setWorkoutDays(workspace.workoutDays);
       setNotes(workspace.notes);
-      try {
-        localStorage.setItem('oao_client_profile', JSON.stringify(nextProfile));
-        localStorage.setItem('oao_workout_days', JSON.stringify(workspace.workoutDays));
-        localStorage.setItem('oao_client_notes', JSON.stringify(workspace.notes));
-      } catch {
-        // ignore
-      }
     };
 
     void hydrateFromCloud();
@@ -143,36 +107,31 @@ export const StandardDashboard: React.FC = () => {
     };
   }, []);
 
-  // Real-time synchronization for coach replies, profile updates, and workouts
+  // Real-time synchronization for coach replies and profile updates
   useEffect(() => {
-    const syncLive = () => {
-      try {
-        const savedNotes = localStorage.getItem('oao_client_notes');
-        if (savedNotes) {
-          setNotes(JSON.parse(savedNotes));
-        }
-        const savedProfile = localStorage.getItem('oao_client_profile');
-        if (savedProfile) {
-          setProfile((prev) => ({ ...prev, ...JSON.parse(savedProfile), subscription_plan: 'standard' }));
-        }
-        const savedWorkouts = localStorage.getItem('oao_workout_days');
-        if (savedWorkouts) {
-          setWorkoutDays(JSON.parse(savedWorkouts));
-        }
-      } catch {
-        // ignore
+    const handleNotesSync = () => {
+      const currentUser = getCurrentUserSession();
+      void fetchNotesFromSupabase({
+        clientId: currentUser?.id || profile.id,
+        clientEmail: currentUser?.email || profile.email,
+        clientName: currentUser?.name || profile.name,
+      }).then(setNotes);
+    };
+
+    const handleProfileSync = (e: Event) => {
+      const detail = (e as CustomEvent<ClientProfile | undefined>).detail;
+      if (detail) {
+        setProfile((prev) => ({ ...prev, ...detail, subscription_plan: 'standard' }));
       }
     };
 
-    window.addEventListener('oao_notes_updated', syncLive);
-    window.addEventListener('oao_profile_updated', syncLive);
-    window.addEventListener('storage', syncLive);
+    window.addEventListener('oao_notes_updated', handleNotesSync);
+    window.addEventListener('oao_profile_updated', handleProfileSync);
     return () => {
-      window.removeEventListener('oao_notes_updated', syncLive);
-      window.removeEventListener('oao_profile_updated', syncLive);
-      window.removeEventListener('storage', syncLive);
+      window.removeEventListener('oao_notes_updated', handleNotesSync);
+      window.removeEventListener('oao_profile_updated', handleProfileSync);
     };
-  }, []);
+  }, [profile.id, profile.email, profile.name]);
 
   // Modals state
   const [activeVideoExercise, setActiveVideoExercise] = useState<Exercise | null>(null);
@@ -184,20 +143,20 @@ export const StandardDashboard: React.FC = () => {
 
   const handleUpdateProfile = (updated: ClientProfile) => {
     setProfile(updated);
-    localStorage.setItem('oao_client_profile', JSON.stringify(updated));
-    syncProfileToSupabase(updated).catch(() => {});
+    void syncProfileToSupabase(updated);
   };
 
   const handleUpdateWorkouts = (updatedDays: WorkoutDay[]) => {
     setWorkoutDays(updatedDays);
-    localStorage.setItem('oao_workout_days', JSON.stringify(updatedDays));
     const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
-    syncWorkoutDaysToSupabase(canonicalKey, updatedDays, profile.email).catch(() => {});
+    void syncWorkoutDaysToSupabase(canonicalKey, updatedDays, profile.email);
   };
 
   const handleAddNote = (newNote: Omit<ClientNote, 'id' | 'timestamp' | 'isResolved'>) => {
     const noteRecord: ClientNote = {
       ...newNote,
+      clientId: getCanonicalClientKey(profile.id, profile.email),
+      clientEmail: profile.email,
       id: `note_${Date.now()}`,
       timestamp: new Date().toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', {
         hour: '2-digit',
@@ -205,24 +164,15 @@ export const StandardDashboard: React.FC = () => {
       }),
       isResolved: false,
     };
-    const latestRaw = localStorage.getItem('oao_client_notes');
-    const existingList: ClientNote[] = latestRaw ? JSON.parse(latestRaw) : notes;
-    const updated = [noteRecord, ...existingList];
+    const updated = [noteRecord, ...notes];
     setNotes(updated);
-    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
-    syncNoteToSupabase(noteRecord).catch(() => {});
-    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
-    window.dispatchEvent(new Event('storage'));
+    void syncNoteToSupabase(noteRecord).then(() => {
+      window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+    });
   };
 
   const handleLogout = () => {
-    localStorage.setItem('oao_session', 'guest');
-    localStorage.removeItem('oao_current_user');
-    localStorage.removeItem('oao_client_profile');
-    localStorage.removeItem('oao_workout_days');
-    localStorage.removeItem('oao_client_notes');
-    localStorage.removeItem('oao_streak_data');
-    localStorage.removeItem('oao_athlete_rank');
+    clearCurrentUserSession();
     navigate('/');
   };
 

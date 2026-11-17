@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Language, Theme } from '../types';
-import { ShieldCheck, Lock, KeyRound, AlertCircle, X, Sparkles, ArrowRight } from 'lucide-react';
-import { BrandLogo } from './BrandLogo';
+import { ShieldCheck, KeyRound, AlertCircle, X, ArrowRight } from 'lucide-react';
+import { setCoachAuthenticated } from '../lib/authStore';
 
 interface CoachPasskeyModalProps {
   isOpen: boolean;
@@ -23,6 +23,14 @@ export const CoachPasskeyModal: React.FC<CoachPasskeyModalProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    if (isOpen) {
+      setPasskey('');
+      setErrorMsg('');
+      setIsLoading(false);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const validPasskeys = ['RAMO3223', 'ramo3223'];
@@ -35,6 +43,7 @@ export const CoachPasskeyModal: React.FC<CoachPasskeyModalProps> = ({
     setTimeout(() => {
       if (validPasskeys.includes(passkey.trim())) {
         setIsLoading(false);
+        setCoachAuthenticated(true);
         onSuccess();
         navigate('/admin');
         onClose();

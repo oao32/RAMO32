@@ -8,6 +8,7 @@ import {
 } from '../types';
 import { BrandLogo } from '../components/BrandLogo';
 import { VIPBadge } from '../components/VIPBadge';
+import { saveDeclarationToSupabase } from '../lib/supabase';
 import {
   FileText,
   ShieldCheck,
@@ -349,14 +350,11 @@ export const SubscribePage: React.FC = () => {
 
     setCompletedAgreement(agreementRecord);
 
-    // Save locally for offline preservation (No database or Auth calls)
+    // Save directly to Supabase declarations table
     try {
-      const existing = JSON.parse(localStorage.getItem('oao_client_declarations') || '[]');
-      existing.push(agreementRecord);
-      localStorage.setItem('oao_client_declarations', JSON.stringify(existing));
-      localStorage.setItem('oao_active_contract', JSON.stringify(agreementRecord));
+      await saveDeclarationToSupabase(agreementRecord);
     } catch (e) {
-      console.warn('Offline storage cache error:', e);
+      console.warn('Declaration storage error:', e);
     }
 
     // Step 3: Trigger automatic PDF generation and download

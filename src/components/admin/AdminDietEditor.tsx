@@ -10,8 +10,8 @@ import {
 } from '../../data/nutrition/dietPlanData';
 import {
   getMealPlanTemplates,
+  fetchMealPlanTemplatesFromSupabase,
   saveMealPlanTemplate,
-  deleteMealPlanTemplate,
   MealPlanTemplate,
 } from '../../lib/templateStore';
 import {
@@ -25,6 +25,9 @@ import {
   fetchNutritionPlanFromSupabase,
   syncNutritionPlanToSupabase,
   resetNutritionPlanInSupabase,
+  syncTierNutritionPlanToSupabase,
+  fetchTierNutritionPlanFromSupabase,
+  resetTierNutritionPlanInSupabase,
   syncGlobalNutritionLockToSupabase,
   fetchGlobalNutritionLockFromSupabase,
 } from '../../lib/supabase';
@@ -109,17 +112,14 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
 
   const [confirmReset, setConfirmReset] = useState(false);
 
-  // Interactive Global Nutrition Plan Lock / Hide Toggle
-  const [isNutritionLocked, setIsNutritionLocked] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('oao_nutrition_locked') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  // Interactive Global Nutrition Plan Lock / Hide Toggle (persisted strictly in Supabase)
+  const [isNutritionLocked, setIsNutritionLocked] = useState<boolean>(false);
 
   useEffect(() => {
     fetchGlobalNutritionLockFromSupabase().then(setIsNutritionLocked);
+    fetchMealPlanTemplatesFromSupabase().then((tmpls) => {
+      if (Array.isArray(tmpls)) setTemplates(tmpls);
+    });
     if (!propSubscribers) {
       fetchSubscribersFromSupabase().then((subs) => {
         setInternalSubscribers(subs);
@@ -142,7 +142,7 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
     };
   }, [propSubscribers]);
 
-  // Align tier & fetch client-specific cloud meal plan whenever target subscriber changes
+  // Align tier & fetch client-specific or tier-default cloud meal plan whenever target subscriber changes
   useEffect(() => {
     let cancelled = false;
     if (activeTargetClient) {
@@ -163,7 +163,16 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
           if (!cancelled) setLoadingClientDiet(false);
         });
     } else {
-      setCategories(getSavedDietCategories(tier));
+      setLoadingClientDiet(true);
+      fetchTierNutritionPlanFromSupabase(tier)
+        .then((cloudCats) => {
+          if (!cancelled && Array.isArray(cloudCats) && cloudCats.length > 0) {
+            setCategories(cloudCats);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingClientDiet(false);
+        });
     }
     return () => {
       cancelled = true;
@@ -174,10 +183,8 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
     const nextVal = !isNutritionLocked;
     setIsNutritionLocked(nextVal);
     try {
-      localStorage.setItem('oao_nutrition_locked', String(nextVal));
       await syncGlobalNutritionLockToSupabase(nextVal);
       window.dispatchEvent(new CustomEvent('oao_nutrition_lock_updated', { detail: { global: nextVal } }));
-      window.dispatchEvent(new Event('storage'));
     } catch (e) {
       console.error(e);
     }
@@ -236,7 +243,9 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
         }
       );
     } else {
-      setCategories(getSavedDietCategories(nextTier));
+      fetchTierNutritionPlanFromSupabase(nextTier).then((cats) => {
+        if (Array.isArray(cats) && cats.length > 0) setCategories(cats);
+      });
     }
   };
 
@@ -344,12 +353,15 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
       const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
       void syncNutritionPlanToSupabase(canonicalKey, updatedCategories, tier, activeTargetClient.email);
       window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: updatedCategories } }));
+    } else {
+      void syncTierNutritionPlanToSupabase(tier, updatedCategories);
+      window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories: updatedCategories } }));
     }
     setIsMealModalOpen(false);
     setSaveMessage(
       activeTargetClient
         ? `تم حفظ الوجبة ومزامنتها في حساب (${activeTargetClient.clientName}) عبر Supabase بنجاح!`
-        : 'تم حفظ الوجبة وتحديث الماكروز بنجاح!'
+        : 'تم حفظ الوجبة وتحديث الماكروز في Supabase بنجاح!'
     );
     setTimeout(() => setSaveMessage(null), 3000);
   };
@@ -372,11 +384,14 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
       const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
       void syncNutritionPlanToSupabase(canonicalKey, updatedCategories, tier, activeTargetClient.email);
       window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: updatedCategories } }));
+    } else {
+      void syncTierNutritionPlanToSupabase(tier, updatedCategories);
+      window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories: updatedCategories } }));
     }
     setSaveMessage(
       activeTargetClient
         ? `تم حذف الوجبة وتحديث حساب (${activeTargetClient.clientName}) سحابياً!`
-        : 'تم حذف الوجبة بنجاح!'
+        : 'تم حذف الوجبة وتحديث البيانات في Supabase بنجاح!'
     );
     setTimeout(() => setSaveMessage(null), 2500);
   };
@@ -393,19 +408,22 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
       const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
       defaults = await resetNutritionPlanInSupabase(canonicalKey, tier, activeTargetClient.email);
       window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: defaults } }));
+    } else {
+      defaults = await resetTierNutritionPlanInSupabase(tier);
+      window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories: defaults } }));
     }
     setCategories(defaults);
     setConfirmReset(false);
     setSaveMessage(
       activeTargetClient
         ? `تم استرجاع الوجبات الافتراضية للمشترك (${activeTargetClient.clientName}) ومزامنتها سحابياً.`
-        : 'تم استرجاع قائمة الوجبات الافتراضية بنجاح.'
+        : 'تم استرجاع قائمة الوجبات الافتراضية ومزامنتها في Supabase بنجاح.'
     );
     setTimeout(() => setSaveMessage(null), 2500);
   };
 
   // Save current plan as reusable template
-  const handleSaveAsTemplate = (e: React.FormEvent) => {
+  const handleSaveAsTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTemplateName.trim()) return;
 
@@ -425,11 +443,11 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
       categories: JSON.parse(JSON.stringify(categories)),
     };
 
-    saveMealPlanTemplate(newTemplate);
+    await saveMealPlanTemplate(newTemplate);
     setTemplates(getMealPlanTemplates());
     setIsSaveTemplateModalOpen(false);
     setNewTemplateName('');
-    setSaveMessage('تم حفظ الخطة كقالب جاهز للاستخدام بنجاح!');
+    setSaveMessage('تم حفظ الخطة كقالب سحابي جاهز للاستخدام بنجاح!');
     setTimeout(() => setSaveMessage(null), 2500);
   };
 
@@ -442,13 +460,16 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
         const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
         void syncNutritionPlanToSupabase(canonicalKey, tmpl.categories, tier, activeTargetClient.email);
         window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: tmpl.categories } }));
+      } else {
+        void syncTierNutritionPlanToSupabase(tier, tmpl.categories);
+        window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories: tmpl.categories } }));
       }
     }
     setIsApplyTemplateModalOpen(false);
     setSaveMessage(
       activeTargetClient
         ? `تم تطبيق القالب (${tmpl.nameAr}) على حساب (${activeTargetClient.clientName}) ومزامنته في Supabase بنجاح!`
-        : `تم تطبيق القالب (${tmpl.nameAr}) بنجاح!`
+        : `تم تطبيق القالب (${tmpl.nameAr}) ومزامنته في Supabase بنجاح!`
     );
     setTimeout(() => setSaveMessage(null), 3000);
   };

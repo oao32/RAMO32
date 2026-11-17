@@ -22,29 +22,77 @@ export interface UserCredentialRecord {
   inBodyFileUrl?: string;
 }
 
-const STORAGE_KEYS = {
-  CREDENTIALS: 'oao_subscriber_credentials',
-  SUBSCRIBERS_LIST: 'oao_admin_subscribers',
-};
+export interface CurrentUserSession {
+  id?: string;
+  email: string;
+  name: string;
+  plan: SubscriptionPlanTier;
+  role: Role;
+  clientCode?: string;
+  phone?: string;
+}
 
-// Start cleanly with 0 dummy accounts (all records come dynamically from Supabase / Admin CRUD / Subscribe)
-const DEFAULT_ACCOUNTS: UserCredentialRecord[] = [];
+const COACH_AUTH_SESSION_KEY = 'oao_coach_authenticated';
+const USER_SESSION_STORAGE_KEY = 'oao_current_user_session';
+
+// In-memory directory caches hydrated strictly from Supabase (Zero localStorage)
+let subscribersMemoryCache: UserCredentialRecord[] = [];
+let globalNutritionLockMemoryCache = false;
+
+export function isCoachAuthenticated(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return sessionStorage.getItem(COACH_AUTH_SESSION_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setCoachAuthenticated(authenticated: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (authenticated) {
+      sessionStorage.setItem(COACH_AUTH_SESSION_KEY, 'true');
+    } else {
+      sessionStorage.removeItem(COACH_AUTH_SESSION_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function getCurrentUserSession(): CurrentUserSession | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(USER_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CurrentUserSession;
+    return parsed && typeof parsed.email === 'string' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setCurrentUserSession(user: CurrentUserSession | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (user) {
+      sessionStorage.setItem(USER_SESSION_STORAGE_KEY, JSON.stringify(user));
+    } else {
+      sessionStorage.removeItem(USER_SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function clearCurrentUserSession(): void {
+  setCurrentUserSession(null);
+  setCoachAuthenticated(false);
+}
 
 export function getAllSubscribersWithCredentials(): UserCredentialRecord[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
-    return [];
-  } catch {
-    return [];
-  }
+  return subscribersMemoryCache;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -60,16 +108,82 @@ function generateRecordUUID(): string {
   });
 }
 
+export function saveSubscribersList(records: UserCredentialRecord[]): void {
+  subscribersMemoryCache = records;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('oao_credentials_updated', { detail: records }));
+  }
+}
+
+function isMissingTableError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  return (
+    err.code === '42P01' ||
+    err.code === 'PGRST205' ||
+    msg.includes('does not exist') ||
+    msg.includes('could not find the table')
+  );
+}
+
+function isMissingColumnError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  return err.code === 'PGRST204' || err.code === '42703' || msg.includes('column');
+}
+
+function mapSubscribersRowToRecord(row: Record<string, unknown>): UserCredentialRecord | null {
+  const rawEmail = typeof row.email === 'string' ? row.email.trim().toLowerCase() : '';
+  if (!rawEmail) return null;
+
+  const rawPass = row.passcode ?? row.password ?? row.assigned_password;
+  const rawTier = row.tier ?? row.subscription_plan ?? row.package_type_en;
+  const rawGoals = row.goals ?? row.visual_goal;
+
+  return {
+    id: row.id ? String(row.id) : undefined,
+    email: rawEmail,
+    password: rawPass ? String(rawPass) : 'OAO-2026',
+    clientName: String(row.name || row.name_ar || row.name_en || 'مشترك'),
+    clientCode: row.client_code
+      ? String(row.client_code)
+      : rawPass
+      ? String(rawPass)
+      : undefined,
+    plan: normalizeSubscriptionPlan(typeof rawTier === 'string' ? rawTier : undefined),
+    phone: row.phone ? String(row.phone) : undefined,
+    status: (row.status as UserCredentialRecord['status']) || 'active',
+    age: row.age !== null && row.age !== undefined ? Number(row.age) : undefined,
+    bloodType: row.blood_type ? String(row.blood_type) : undefined,
+    visualGoal: rawGoals ? String(rawGoals) : undefined,
+    nutritionPlanLocked: Boolean(row.nutrition_plan_locked),
+    inBodyFileName: row.inbody_filename ? String(row.inbody_filename) : undefined,
+    inBodyFileUrl: row.inbody_file_url ? String(row.inbody_file_url) : undefined,
+    createdAt: String(row.created_at || new Date().toISOString()),
+    updatedAt: String(row.updated_at || row.created_at || new Date().toISOString()),
+    assignedByCoach: true,
+    syncedToSupabase: true,
+  };
+}
+
 /**
- * Sync real subscribers from Supabase `public.clients` merged with `workouts(day_key='client_auth')`.
- * Supabase is authoritative when reachable so deleted cloud subscribers do not resurrect from localStorage.
+ * Fetch authoritative subscribers exclusively from Supabase `public.subscribers`
+ * enriched with `public.clients` and `workouts(day_key='client_auth')`.
  */
 export async function fetchSubscribersFromSupabase(): Promise<UserCredentialRecord[]> {
-  const local = getAllSubscribersWithCredentials();
   const supabase = getSupabaseClient();
-  if (!supabase) return local;
+  if (!supabase) return subscribersMemoryCache;
 
   try {
+    let subscribersRes = await supabase
+      .from('subscribers')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (subscribersRes.error && isMissingColumnError(subscribersRes.error)) {
+      subscribersRes = await supabase.from('subscribers').select('*');
+    }
+
     const [clientsRes, authMirrorsRes] = await Promise.all([
       supabase
         .from('clients')
@@ -81,8 +195,8 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
         .eq('day_key', 'client_auth'),
     ]);
 
-    if (clientsRes.error && authMirrorsRes.error) {
-      return local;
+    if (subscribersRes.error && clientsRes.error && authMirrorsRes.error) {
+      return subscribersMemoryCache;
     }
 
     const authByEmail = new Map<string, Record<string, unknown>>();
@@ -98,11 +212,39 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
 
     const mergedByEmail = new Map<string, UserCredentialRecord>();
 
+    // 1. Primary source: central `public.subscribers` table
+    if (!subscribersRes.error && Array.isArray(subscribersRes.data)) {
+      for (const row of subscribersRes.data as Array<Record<string, unknown>>) {
+        const mapped = mapSubscribersRowToRecord(row);
+        if (!mapped) continue;
+        const mirror = authByEmail.get(mapped.email);
+        if (mirror) {
+          if (!mapped.clientCode && mirror.clientCode) mapped.clientCode = String(mirror.clientCode);
+          if (!mapped.phone && mirror.phone) mapped.phone = String(mirror.phone);
+          if (!mapped.age && mirror.age) mapped.age = Number(mirror.age);
+          if (!mapped.bloodType && mirror.bloodType) mapped.bloodType = String(mirror.bloodType);
+          if (!mapped.visualGoal && mirror.visualGoal) mapped.visualGoal = String(mirror.visualGoal);
+        }
+        mergedByEmail.set(mapped.email, mapped);
+      }
+    }
+
+    // 2. Enrich / include from `public.clients`
     if (!clientsRes.error && Array.isArray(clientsRes.data)) {
       for (const row of clientsRes.data as Array<Record<string, unknown>>) {
         if (typeof row.email !== 'string' || !row.email.trim()) continue;
         const cleanEmail = String(row.email).trim().toLowerCase();
         const mirror = authByEmail.get(cleanEmail);
+        const existingSub = mergedByEmail.get(cleanEmail);
+
+        if (existingSub) {
+          if (!existingSub.phone && row.phone) existingSub.phone = String(row.phone);
+          if (!existingSub.clientCode && row.client_code) existingSub.clientCode = String(row.client_code);
+          if (!existingSub.visualGoal && row.visual_goal) existingSub.visualGoal = String(row.visual_goal);
+          if (!existingSub.age && row.age !== null && row.age !== undefined) existingSub.age = Number(row.age);
+          if (!existingSub.bloodType && row.blood_type) existingSub.bloodType = String(row.blood_type);
+          continue;
+        }
 
         const record: UserCredentialRecord = {
           id: row.id ? String(row.id) : mirror?.id ? String(mirror.id) : undefined,
@@ -162,7 +304,7 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
       }
     }
 
-    // Include any records that only exist in client_auth mirror (e.g. if clients table lacked permission/columns)
+    // 3. Include any records present in `client_auth` mirror
     for (const [cleanEmail, mirror] of authByEmail.entries()) {
       if (!mergedByEmail.has(cleanEmail)) {
         mergedByEmail.set(cleanEmail, {
@@ -188,32 +330,18 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
       }
     }
 
-    // Keep ONLY genuinely unsynced local-only records created offline
-    const unsyncedLocal = local.filter(
-      (l) => l.syncedToSupabase === false && !mergedByEmail.has(l.email.toLowerCase())
-    );
-    const remoteList = [...Array.from(mergedByEmail.values()), ...unsyncedLocal];
+    const remoteList = Array.from(mergedByEmail.values());
     saveSubscribersList(remoteList);
     return remoteList;
   } catch {
-    return local;
-  }
-}
-
-export function saveSubscribersList(records: UserCredentialRecord[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEYS.CREDENTIALS, JSON.stringify(records));
-    window.dispatchEvent(new CustomEvent('oao_credentials_updated', { detail: records }));
-    window.dispatchEvent(new Event('storage'));
-  } catch (err) {
-    console.warn('Failed to save subscriber credentials locally:', err);
+    return subscribersMemoryCache;
   }
 }
 
 /**
- * Assign or update a subscriber password directly by the Coach.
- * Explicitly checks `{ error }` on Supabase `clients` and dual-writes to `workouts(day_key='client_auth')`.
+ * Create/update subscriber directly in Supabase central `public.subscribers` table
+ * (name, email, passcode, tier, goals, etc.) plus linked `clients` and `workouts.client_auth`.
+ * Zero browser localStorage fallback.
  */
 export async function assignSubscriberPassword(params: {
   id?: string;
@@ -237,10 +365,19 @@ export async function assignSubscriberPassword(params: {
   const normalizedPlan = normalizeSubscriptionPlan(params.plan || 'standard');
 
   if (!cleanEmail || !cleanPass) {
-    return { success: false, syncedToSupabase: false, error: 'البريد الإلكتروني وكلمة المرور مطلوبان.' };
+    return { success: false, syncedToSupabase: false, error: 'البريد الإلكتروني ورمز الدخول (Passcode) مطلوبان.' };
   }
 
-  const all = getAllSubscribersWithCredentials();
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return {
+      success: false,
+      syncedToSupabase: false,
+      error: 'قاعدة البيانات السحابية Supabase غير متصلة. يرجى ضبط متغيرات الربط أولاً.',
+    };
+  }
+
+  const all = [...subscribersMemoryCache];
   const existingIdx = all.findIndex((u) => u.email.toLowerCase() === cleanEmail);
   const existingRecord = existingIdx >= 0 ? all[existingIdx] : undefined;
 
@@ -253,10 +390,11 @@ export async function assignSubscriberPassword(params: {
     id: resolvedId,
     email: cleanEmail,
     password: cleanPass,
-    clientName: params.clientName || existingRecord?.clientName || 'مشترك',
+    clientName: params.clientName.trim() || existingRecord?.clientName || 'مشترك',
     clientCode:
       params.clientCode ||
       existingRecord?.clientCode ||
+      cleanPass ||
       `OAO-${normalizedPlan === 'VIP' ? 'VIP' : 'STD'}-${Math.floor(100 + Math.random() * 900)}`,
     plan: normalizedPlan,
     phone: params.phone !== undefined ? params.phone : existingRecord?.phone,
@@ -276,255 +414,281 @@ export async function assignSubscriberPassword(params: {
     syncedToSupabase: false,
   };
 
-  if (existingIdx >= 0) {
-    all[existingIdx] = updatedRecord;
-  } else {
-    all.unshift(updatedRecord);
-  }
-  saveSubscribersList(all);
+  try {
+    // 1. Insert / Update directly into central `public.subscribers` table
+    let targetSubscriberId = resolvedId;
+    let subscribersTableMissing = false;
+    let subscribersSynced = false;
+    let subscribersErr: { code?: string; message: string } | null = null;
 
-  // Mirror into subscriber plans map
-  if (typeof window !== 'undefined') {
-    try {
-      const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
-      const mapObj = mapRaw ? JSON.parse(mapRaw) : {};
-      mapObj[cleanEmail] = {
-        plan: normalizedPlan,
-        nameAr: updatedRecord.clientName,
+    const { data: existingSub, error: lookupSubErr } = await supabase
+      .from('subscribers')
+      .select('id')
+      .ilike('email', cleanEmail)
+      .limit(1)
+      .maybeSingle();
+
+    if (isMissingTableError(lookupSubErr)) {
+      subscribersTableMissing = true;
+    } else {
+      const fullSubPayload: Record<string, unknown> = {
+        name: updatedRecord.clientName,
+        email: cleanEmail,
+        passcode: cleanPass,
+        client_code: updatedRecord.clientCode,
+        tier: normalizedPlan,
+        goals: updatedRecord.visualGoal || null,
+        phone: updatedRecord.phone || null,
+        age: updatedRecord.age ?? null,
+        blood_type: updatedRecord.bloodType || null,
         status: updatedRecord.status,
-        nutritionPlanLocked: updatedRecord.nutritionPlanLocked,
+        nutrition_plan_locked: Boolean(updatedRecord.nutritionPlanLocked),
+        inbody_filename: updatedRecord.inBodyFileName || null,
+        inbody_file_url: updatedRecord.inBodyFileUrl || null,
+        updated_at: nowIso,
       };
-      localStorage.setItem('oao_subscriber_plans_map', JSON.stringify(mapObj));
-    } catch {
-      // ignore
-    }
-  }
 
-  // Attempt cloud sync with Supabase (`clients` + `workouts.client_auth` backup)
-  const supabase = getSupabaseClient();
-  let syncedToSupabase = false;
+      const coreSubPayload: Record<string, unknown> = {
+        name: updatedRecord.clientName,
+        email: cleanEmail,
+        passcode: cleanPass,
+        tier: normalizedPlan,
+        goals: updatedRecord.visualGoal || null,
+      };
 
-  if (supabase) {
-    try {
-      // Lookup existing row ID by case-insensitive email so we update cleanly without duplicate/conflict issues
-      let targetClientId = resolvedId;
-      const { data: existingClient } = await supabase
-        .from('clients')
-        .select('id')
-        .ilike('email', cleanEmail)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      if (existingSub && existingSub.id !== undefined && existingSub.id !== null) {
+        targetSubscriberId = String(existingSub.id);
+        let res = await supabase
+          .from('subscribers')
+          .update(fullSubPayload)
+          .eq('id', existingSub.id)
+          .select('id')
+          .maybeSingle();
 
-      if (existingClient && typeof existingClient.id === 'string') {
-        targetClientId = existingClient.id;
-        updatedRecord.id = targetClientId;
+        if (res.error && isMissingColumnError(res.error)) {
+          res = await supabase
+            .from('subscribers')
+            .update(coreSubPayload)
+            .eq('id', existingSub.id)
+            .select('id')
+            .maybeSingle();
+        }
+        subscribersErr = res.error;
+        subscribersSynced = !res.error;
+      } else {
+        let res = await supabase
+          .from('subscribers')
+          .insert({ id: targetSubscriberId, ...fullSubPayload })
+          .select('id')
+          .maybeSingle();
+
+        if (res.error && isMissingColumnError(res.error)) {
+          res = await supabase
+            .from('subscribers')
+            .insert(coreSubPayload)
+            .select('id')
+            .maybeSingle();
+        } else if (res.error && res.error.message.toLowerCase().includes('uuid')) {
+          res = await supabase
+            .from('subscribers')
+            .insert(fullSubPayload)
+            .select('id')
+            .maybeSingle();
+        }
+
+        if (!res.error && res.data && res.data.id !== undefined && res.data.id !== null) {
+          targetSubscriberId = String(res.data.id);
+        }
+        subscribersErr = res.error;
+        subscribersSynced = !res.error;
       }
+    }
 
-      const fullClientPayload: Record<string, unknown> = {
+    if (UUID_REGEX.test(targetSubscriberId)) {
+      updatedRecord.id = targetSubscriberId;
+    }
+
+    // If `subscribers` table exists and returned a hard error (RLS / constraint), fail visibly!
+    if (!subscribersTableMissing && subscribersErr) {
+      return {
+        success: false,
+        syncedToSupabase: false,
+        error: `تعذر حفظ المشترك في جدول subscribers: ${subscribersErr.message}`,
+      };
+    }
+
+    // 2. Keep linked `public.clients` table synchronized
+    let targetClientId = UUID_REGEX.test(targetSubscriberId) ? targetSubscriberId : resolvedId;
+    const { data: existingClient } = await supabase
+      .from('clients')
+      .select('id')
+      .ilike('email', cleanEmail)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingClient && typeof existingClient.id === 'string') {
+      targetClientId = existingClient.id;
+      updatedRecord.id = targetClientId;
+    }
+
+    const fullClientPayload: Record<string, unknown> = {
+      id: targetClientId,
+      email: cleanEmail,
+      name_ar: updatedRecord.clientName,
+      name_en: updatedRecord.clientName,
+      subscription_plan: normalizedPlan,
+      package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
+      package_type_en: normalizedPlan,
+      phone: updatedRecord.phone || null,
+      client_code: updatedRecord.clientCode,
+      status: updatedRecord.status,
+      assigned_password: cleanPass,
+      age: updatedRecord.age ?? null,
+      blood_type: updatedRecord.bloodType || null,
+      visual_goal: updatedRecord.visualGoal || null,
+      nutrition_plan_locked: Boolean(updatedRecord.nutritionPlanLocked),
+      inbody_filename: updatedRecord.inBodyFileName || null,
+      inbody_file_url: updatedRecord.inBodyFileUrl || null,
+    };
+
+    let { error: clientsErr } = await supabase
+      .from('clients')
+      .upsert(fullClientPayload, { onConflict: 'id' });
+
+    if (clientsErr && isMissingColumnError(clientsErr)) {
+      const corePayload = {
         id: targetClientId,
         email: cleanEmail,
         name_ar: updatedRecord.clientName,
         name_en: updatedRecord.clientName,
-        subscription_plan: normalizedPlan,
         package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
         package_type_en: normalizedPlan,
         phone: updatedRecord.phone || null,
         client_code: updatedRecord.clientCode,
         status: updatedRecord.status,
-        assigned_password: cleanPass,
-        age: updatedRecord.age ?? null,
-        blood_type: updatedRecord.bloodType || null,
-        visual_goal: updatedRecord.visualGoal || null,
-        nutrition_plan_locked: Boolean(updatedRecord.nutritionPlanLocked),
-        inbody_filename: updatedRecord.inBodyFileName || null,
-        inbody_file_url: updatedRecord.inBodyFileUrl || null,
       };
-
-      let { error: clientsErr } = await supabase
+      const retryRes = await supabase
         .from('clients')
-        .upsert(fullClientPayload, { onConflict: 'id' });
-
-      if (
-        clientsErr &&
-        (clientsErr.code === 'PGRST204' ||
-          clientsErr.code === '42703' ||
-          clientsErr.message.includes('column'))
-      ) {
-        const corePayload = {
-          id: targetClientId,
-          email: cleanEmail,
-          name_ar: updatedRecord.clientName,
-          name_en: updatedRecord.clientName,
-          package_type_ar: normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)',
-          package_type_en: normalizedPlan,
-          phone: updatedRecord.phone || null,
-          client_code: updatedRecord.clientCode,
-          status: updatedRecord.status,
-        };
-        const retryRes = await supabase
-          .from('clients')
-          .upsert(corePayload, { onConflict: 'id' });
-        clientsErr = retryRes.error;
-      }
-
-      // Mirror complete auth + metadata into `workouts` (`day_key = 'client_auth'`) so cross-device login & lock work unconditionally
-      const { error: mirrorErr } = await supabase.from('workouts').upsert(
-        {
-          id: `auth_${cleanEmail}`,
-          client_id: targetClientId,
-          day_key: 'client_auth',
-          workout_data: {
-            ...updatedRecord,
-            syncedToSupabase: true,
-          },
-          updated_at: nowIso,
-        },
-        { onConflict: 'id' }
-      );
-
-      syncedToSupabase = !clientsErr || !mirrorErr;
-
-      if (syncedToSupabase) {
-        updatedRecord.syncedToSupabase = true;
-        const latest = getAllSubscribersWithCredentials();
-        const idx = latest.findIndex((u) => u.email.toLowerCase() === cleanEmail);
-        if (idx >= 0) latest[idx] = updatedRecord;
-        else latest.unshift(updatedRecord);
-        saveSubscribersList(latest);
-      }
-    } catch (syncErr) {
-      console.warn('Supabase cloud credentials sync notice:', syncErr);
+        .upsert(corePayload, { onConflict: 'id' });
+      clientsErr = retryRes.error;
     }
-  }
 
-  return { success: true, syncedToSupabase, record: updatedRecord };
+    // 3. Mirror full subscriber auth bundle into `workouts` (`day_key = 'client_auth'`)
+    const { error: mirrorErr } = await supabase.from('workouts').upsert(
+      {
+        id: `auth_${cleanEmail}`,
+        client_id: targetClientId,
+        day_key: 'client_auth',
+        workout_data: {
+          ...updatedRecord,
+          syncedToSupabase: true,
+        },
+        updated_at: nowIso,
+      },
+      { onConflict: 'id' }
+    );
+
+    const syncedToSupabase = subscribersSynced || (!clientsErr && !mirrorErr);
+    if (!syncedToSupabase) {
+      return {
+        success: false,
+        syncedToSupabase: false,
+        error:
+          subscribersErr?.message ||
+          clientsErr?.message ||
+          mirrorErr?.message ||
+          'تعذر حفظ الحساب في قاعدة البيانات السحابية Supabase.',
+      };
+    }
+
+    updatedRecord.syncedToSupabase = true;
+    const latest = [...subscribersMemoryCache];
+    const idx = latest.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+    if (idx >= 0) latest[idx] = updatedRecord;
+    else latest.unshift(updatedRecord);
+    saveSubscribersList(latest);
+
+    return { success: true, syncedToSupabase: true, record: updatedRecord };
+  } catch (syncErr) {
+    console.warn('Supabase cloud credentials sync error:', syncErr);
+    return {
+      success: false,
+      syncedToSupabase: false,
+      error: syncErr instanceof Error ? syncErr.message : 'حدث خطأ أثناء المزامنة مع Supabase.',
+    };
+  }
 }
 
 /**
- * Permanently deletes a subscriber cascading through credentials, declarations, workouts, notes, and cloud.
+ * Permanently deletes a subscriber cascading through subscribers, clients, declarations, workouts, notes, and profiles in Supabase.
  */
 export async function deleteSubscriberRecord(email: string): Promise<boolean> {
   const cleanEmail = email.trim().toLowerCase();
-  const all = getAllSubscribersWithCredentials();
-  const targetUser = all.find((u) => u.email.toLowerCase() === cleanEmail);
-  const filtered = all.filter((u) => u.email.toLowerCase() !== cleanEmail);
-  saveSubscribersList(filtered);
+  const targetUser = subscribersMemoryCache.find((u) => u.email.toLowerCase() === cleanEmail);
 
-  // Remove from declarations locally
-  if (typeof window !== 'undefined') {
-    try {
-      const declRaw = localStorage.getItem('oao_client_declarations');
-      if (declRaw) {
-        const decls = JSON.parse(declRaw) as Array<{ email?: string; id?: string }>;
-        const filteredDecls = decls.filter(
-          (d) => (d.email || '').trim().toLowerCase() !== cleanEmail
-        );
-        localStorage.setItem('oao_client_declarations', JSON.stringify(filteredDecls));
-        window.dispatchEvent(new CustomEvent('oao_declarations_updated', { detail: filteredDecls }));
-      }
-    } catch {
-      // ignore
-    }
-
-    // Remove related notes locally
-    try {
-      const notesRaw = localStorage.getItem('oao_client_notes');
-      if (notesRaw && targetUser) {
-        const notes = JSON.parse(notesRaw) as Array<{ clientId?: string; clientName?: string; clientEmail?: string }>;
-        const filteredNotes = notes.filter(
-          (n) =>
-            n.clientId !== targetUser.id &&
-            n.clientEmail?.toLowerCase() !== cleanEmail &&
-            n.clientName !== targetUser.clientName
-        );
-        localStorage.setItem('oao_client_notes', JSON.stringify(filteredNotes));
-        window.dispatchEvent(new CustomEvent('oao_notes_updated'));
-      }
-    } catch {
-      // ignore
-    }
-
-    // Remove from plans map
-    try {
-      const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
-      if (mapRaw) {
-        const mapObj = JSON.parse(mapRaw);
-        delete mapObj[cleanEmail];
-        localStorage.setItem('oao_subscriber_plans_map', JSON.stringify(mapObj));
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // Cascade delete from Supabase
   const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      const { data: cloudClient } = await supabase
-        .from('clients')
-        .select('id')
-        .ilike('email', cleanEmail)
-        .limit(1)
-        .maybeSingle();
+  if (!supabase) return false;
 
-      const resolvedId =
-        (cloudClient && typeof cloudClient.id === 'string' ? cloudClient.id : undefined) ||
-        targetUser?.id;
+  try {
+    const [{ data: cloudSub }, { data: cloudClient }] = await Promise.all([
+      supabase.from('subscribers').select('id').ilike('email', cleanEmail).limit(1).maybeSingle(),
+      supabase.from('clients').select('id').ilike('email', cleanEmail).limit(1).maybeSingle(),
+    ]);
 
-      await supabase.from('clients').delete().ilike('email', cleanEmail);
-      await supabase.from('declarations').delete().ilike('email', cleanEmail);
-      await supabase.from('workouts').delete().eq('id', `auth_${cleanEmail}`);
+    const resolvedId =
+      (cloudClient && typeof cloudClient.id === 'string' ? cloudClient.id : undefined) ||
+      (cloudSub && cloudSub.id !== undefined ? String(cloudSub.id) : undefined) ||
+      targetUser?.id;
 
-      const candidateKeys = [resolvedId, cleanEmail].filter((k): k is string => Boolean(k));
-      for (const k of candidateKeys) {
-        await supabase.from('workouts').delete().eq('client_id', k);
-        await supabase.from('workouts').delete().eq('id', `workouts_${k}`);
-        await supabase.from('workouts').delete().eq('id', `nutrition_${k}`);
-        await supabase.from('workouts').delete().eq('id', `assessment_${k}`);
-        await supabase.from('workouts').delete().eq('id', `profile_ext_${k}`);
-        await supabase.from('notes').delete().eq('client_id', k);
-        await supabase.from('profiles').delete().eq('id', k);
-      }
-    } catch (e) {
-      console.warn('Supabase delete subscriber notice:', e);
+    await supabase.from('subscribers').delete().ilike('email', cleanEmail);
+    await supabase.from('clients').delete().ilike('email', cleanEmail);
+    await supabase.from('declarations').delete().ilike('email', cleanEmail);
+    await supabase.from('workouts').delete().eq('id', `auth_${cleanEmail}`);
+
+    const candidateKeys = [resolvedId, cleanEmail].filter((k): k is string => Boolean(k));
+    for (const k of candidateKeys) {
+      await supabase.from('workouts').delete().eq('client_id', k);
+      await supabase.from('workouts').delete().eq('id', `workouts_${k}`);
+      await supabase.from('workouts').delete().eq('id', `nutrition_${k}`);
+      await supabase.from('workouts').delete().eq('id', `assessment_${k}`);
+      await supabase.from('workouts').delete().eq('id', `profile_ext_${k}`);
+      await supabase.from('notes').delete().eq('client_id', k);
+      await supabase.from('profiles').delete().eq('id', k);
     }
-  }
 
-  return true;
+    const filtered = subscribersMemoryCache.filter((u) => u.email.toLowerCase() !== cleanEmail);
+    saveSubscribersList(filtered);
+    return true;
+  } catch (e) {
+    console.warn('Supabase delete subscriber error:', e);
+    return false;
+  }
 }
 
 /**
- * Toggles a subscriber status between 'active' and 'suspended' and syncs to Supabase.
+ * Toggles a subscriber status between 'active' and 'suspended' and syncs directly to Supabase `subscribers`, `clients`, and `workouts`.
  */
 export function toggleSubscriberStatus(email: string): 'active' | 'suspended' {
   const cleanEmail = email.trim().toLowerCase();
-  const all = getAllSubscribersWithCredentials();
+  const all = [...subscribersMemoryCache];
   const idx = all.findIndex((u) => u.email.toLowerCase() === cleanEmail);
   if (idx < 0) return 'active';
 
   const newStatus = all[idx].status === 'suspended' ? 'active' : 'suspended';
-  all[idx].status = newStatus;
-  all[idx].updatedAt = new Date().toISOString();
+  all[idx] = {
+    ...all[idx],
+    status: newStatus,
+    updatedAt: new Date().toISOString(),
+  };
   const updatedRec = { ...all[idx] };
   saveSubscribersList(all);
-
-  try {
-    const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
-    const mapObj = mapRaw ? JSON.parse(mapRaw) : {};
-    if (mapObj[cleanEmail]) {
-      mapObj[cleanEmail].status = newStatus;
-      localStorage.setItem('oao_subscriber_plans_map', JSON.stringify(mapObj));
-    }
-  } catch {
-    // ignore
-  }
 
   const supabase = getSupabaseClient();
   if (supabase) {
     void (async () => {
       try {
+        await supabase.from('subscribers').update({ status: newStatus }).ilike('email', cleanEmail);
         await supabase.from('clients').update({ status: newStatus }).ilike('email', cleanEmail);
         await supabase.from('workouts').upsert(
           {
@@ -546,31 +710,23 @@ export function toggleSubscriberStatus(email: string): 'active' | 'suspended' {
 }
 
 /**
- * Toggles a subscriber nutrition plan access lock and syncs to Supabase.
+ * Toggles a subscriber nutrition plan access lock and syncs directly to Supabase `subscribers`, `clients`, and `workouts`.
  */
 export function toggleSubscriberNutritionLock(email: string, locked?: boolean): boolean {
   const cleanEmail = email.trim().toLowerCase();
-  const all = getAllSubscribersWithCredentials();
+  const all = [...subscribersMemoryCache];
   const idx = all.findIndex((u) => u.email.toLowerCase() === cleanEmail);
   if (idx < 0) return false;
 
   const currentVal = all[idx].nutritionPlanLocked || false;
   const newVal = locked !== undefined ? locked : !currentVal;
-  all[idx].nutritionPlanLocked = newVal;
-  all[idx].updatedAt = new Date().toISOString();
+  all[idx] = {
+    ...all[idx],
+    nutritionPlanLocked: newVal,
+    updatedAt: new Date().toISOString(),
+  };
   const updatedRec = { ...all[idx] };
   saveSubscribersList(all);
-
-  try {
-    const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
-    const mapObj = mapRaw ? JSON.parse(mapRaw) : {};
-    if (mapObj[cleanEmail]) {
-      mapObj[cleanEmail].nutritionPlanLocked = newVal;
-      localStorage.setItem('oao_subscriber_plans_map', JSON.stringify(mapObj));
-    }
-  } catch {
-    // ignore
-  }
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
@@ -582,6 +738,10 @@ export function toggleSubscriberNutritionLock(email: string, locked?: boolean): 
   if (supabase) {
     void (async () => {
       try {
+        await supabase
+          .from('subscribers')
+          .update({ nutrition_plan_locked: newVal })
+          .ilike('email', cleanEmail);
         await supabase
           .from('clients')
           .update({ nutrition_plan_locked: newVal })
@@ -606,42 +766,14 @@ export function toggleSubscriberNutritionLock(email: string, locked?: boolean): 
 }
 
 /**
- * Check if nutrition plan is locked for a given subscriber email (local fast check)
+ * Fast memory check for nutrition lock state (populated from Supabase)
  */
 export function isSubscriberNutritionLocked(email?: string): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    if (localStorage.getItem('oao_nutrition_locked') === 'true') return true;
-    let checkEmail = email?.trim().toLowerCase();
-    if (!checkEmail) {
-      const currentRaw = localStorage.getItem('oao_current_user');
-      if (currentRaw) {
-        const parsed = JSON.parse(currentRaw);
-        checkEmail = (parsed?.email || '').trim().toLowerCase();
-      }
-    }
-    if (!checkEmail) {
-      const profRaw = localStorage.getItem('oao_client_profile');
-      if (profRaw) {
-        const prof = JSON.parse(profRaw);
-        if (prof?.nutritionPlanLocked) return true;
-        checkEmail = (prof?.email || '').trim().toLowerCase();
-      }
-    }
-    if (!checkEmail) return false;
-    const all = getAllSubscribersWithCredentials();
-    const matched = all.find((u) => u.email.toLowerCase() === checkEmail);
-    if (matched?.nutritionPlanLocked) return true;
-
-    const mapRaw = localStorage.getItem('oao_subscriber_plans_map');
-    if (mapRaw) {
-      const mapObj = JSON.parse(mapRaw);
-      if (mapObj[checkEmail]?.nutritionPlanLocked) return true;
-    }
-  } catch {
-    // ignore
-  }
-  return false;
+  if (globalNutritionLockMemoryCache) return true;
+  const checkEmail = (email || getCurrentUserSession()?.email || '').trim().toLowerCase();
+  if (!checkEmail) return false;
+  const matched = subscribersMemoryCache.find((u) => u.email.toLowerCase() === checkEmail);
+  return Boolean(matched?.nutritionPlanLocked);
 }
 
 /**
@@ -656,12 +788,20 @@ export async function fetchSubscriberNutritionLockFromSupabase(
   if (!supabase) return isSubscriberNutritionLocked(cleanEmail);
 
   try {
-    const [globalRes, clientRes, mirrorRes] = await Promise.all([
+    const [globalRes, subRes, clientRes, mirrorRes] = await Promise.all([
       supabase
         .from('workouts')
         .select('workout_data')
         .eq('id', 'global_nutrition_lock')
         .maybeSingle(),
+      cleanEmail
+        ? supabase
+            .from('subscribers')
+            .select('nutrition_plan_locked')
+            .ilike('email', cleanEmail)
+            .limit(1)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
       cleanEmail
         ? supabase
             .from('clients')
@@ -691,6 +831,11 @@ export async function fetchSubscriberNutritionLockFromSupabase(
         globalRes.data &&
         ((globalRes.data as Record<string, unknown>).workout_data as { locked?: boolean } | undefined)?.locked
     );
+    const subRowLocked = Boolean(
+      !subRes.error &&
+        subRes.data &&
+        (subRes.data as Record<string, unknown>).nutrition_plan_locked
+    );
     const clientRowLocked = Boolean(
       !clientRes.error &&
         clientRes.data &&
@@ -703,19 +848,17 @@ export async function fetchSubscriberNutritionLockFromSupabase(
           ?.nutritionPlanLocked
     );
 
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('oao_nutrition_locked', String(globalLocked));
-    }
-
-    return globalLocked || clientRowLocked || mirrorLocked;
+    globalNutritionLockMemoryCache = globalLocked;
+    return globalLocked || subRowLocked || clientRowLocked || mirrorLocked;
   } catch {
     return isSubscriberNutritionLocked(cleanEmail);
   }
 }
 
 /**
- * Authenticates user by Email + Password OR by Passcode / Client Code / Assigned Password.
- * Queries live Supabase subscribers & declarations first so logins work seamlessly across all devices.
+ * Authenticates user by Email + Passcode/Password OR by Passcode / Client Code.
+ * Queries live Supabase `subscribers`, `clients`, `workouts(client_auth)`, and `declarations` directly
+ * so manually created accounts work permanently across devices and after clearing browser cache.
  */
 export async function authenticateUser(
   identifier: string,
@@ -734,9 +877,10 @@ export async function authenticateUser(
   const cleanId = (identifier || '').trim().toLowerCase();
   const cleanPass = (password || '').trim();
 
-  // Special Master Coach checks
-  if (cleanId === 'coach.omar@oao.com' || cleanId === 'ramo3223' || cleanId === 'coach') {
-    if (!cleanPass || cleanPass.toUpperCase() === 'RAMO3223') {
+  // Special Master Coach checks (strictly require secret passkey RAMO3223)
+  if (cleanId === 'coach.omar@oao.com') {
+    if (cleanPass.toUpperCase() === 'RAMO3223') {
+      setCoachAuthenticated(true);
       return {
         success: true,
         role: 'admin',
@@ -746,13 +890,78 @@ export async function authenticateUser(
         plan: 'VIP',
       };
     }
+    return {
+      success: false,
+      role: 'client',
+      email: 'coach.omar@oao.com',
+      name: 'الكوتش عمر عدنان',
+      plan: 'VIP',
+      error: 'يرجى إدخال رمز المرور السري الصحيح للكوتش.',
+    };
   }
 
-  // Always hydrate live subscriber directory from Supabase first
+  if (!cleanPass && cleanId === 'ramo3223') {
+    setCoachAuthenticated(true);
+    return {
+      success: true,
+      role: 'admin',
+      id: 'coach_omar',
+      email: 'coach.omar@oao.com',
+      name: 'الكوتش عمر عدنان',
+      plan: 'VIP',
+    };
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return {
+      success: false,
+      role: 'client',
+      email: cleanId,
+      name: 'مشترك',
+      plan: 'standard',
+      error: 'قاعدة البيانات السحابية Supabase غير متصلة حالياً. يرجى المحاولة لاحقاً أو التواصل مع الكوتش.',
+    };
+  }
+
+  // Always query live subscriber directory directly from Supabase (`subscribers` + `clients` + `client_auth`)
   const all = await fetchSubscribersFromSupabase();
 
-  // 1. Credentials mode or direct email lookup
-  const matchedByEmail = all.find((u) => u.email.trim().toLowerCase() === cleanId);
+  // Also run a direct targeted query against `public.subscribers` to guarantee immediate fresh validation
+  let directSubRecord: UserCredentialRecord | null = null;
+  try {
+    const directRes = cleanPass
+      ? await supabase.from('subscribers').select('*').ilike('email', cleanId).limit(1).maybeSingle()
+      : await supabase
+          .from('subscribers')
+          .select('*')
+          .or(`email.ilike.${cleanId},passcode.ilike.${cleanId},client_code.ilike.${cleanId}`)
+          .limit(1)
+          .maybeSingle();
+
+    if (!directRes.error && directRes.data) {
+      directSubRecord = mapSubscribersRowToRecord(directRes.data as Record<string, unknown>);
+    } else if (directRes.error && !cleanPass) {
+      // Retry without `client_code` in case `subscribers` has only the 5 core columns
+      const fallbackRes = await supabase
+        .from('subscribers')
+        .select('*')
+        .or(`email.ilike.${cleanId},passcode.ilike.${cleanId}`)
+        .limit(1)
+        .maybeSingle();
+      if (!fallbackRes.error && fallbackRes.data) {
+        directSubRecord = mapSubscribersRowToRecord(fallbackRes.data as Record<string, unknown>);
+      }
+    }
+  } catch {
+    // ignore transient targeted query failure; fall back to `all` hydrated above
+  }
+
+  // 1. Credentials mode (Email + Passcode/Password) or direct email lookup
+  const matchedByEmail =
+    (directSubRecord && directSubRecord.email === cleanId ? directSubRecord : null) ||
+    all.find((u) => u.email.trim().toLowerCase() === cleanId);
+
   if (matchedByEmail) {
     if (matchedByEmail.status === 'suspended') {
       return {
@@ -773,10 +982,16 @@ export async function authenticateUser(
         email: matchedByEmail.email,
         name: matchedByEmail.clientName,
         plan: matchedByEmail.plan,
-        error: 'يرجى إدخال كلمة المرور المخصصة لحسابك في تبويب (إيميل + كلمة المرور).',
+        error: 'يرجى إدخال رمز الدخول / كلمة المرور المخصصة لحسابك في تبويب (إيميل + كلمة المرور).',
       };
     }
-    if (matchedByEmail.password.trim() === cleanPass) {
+    const storedPass = matchedByEmail.password.trim();
+    const storedCode = (matchedByEmail.clientCode || '').trim();
+    if (
+      storedPass === cleanPass ||
+      storedPass.toLowerCase() === cleanPass.toLowerCase() ||
+      (storedCode && storedCode.toLowerCase() === cleanPass.toLowerCase())
+    ) {
       return {
         success: true,
         role: matchedByEmail.email === 'coach.omar@oao.com' ? 'admin' : 'client',
@@ -795,17 +1010,19 @@ export async function authenticateUser(
       email: matchedByEmail.email,
       name: matchedByEmail.clientName,
       plan: matchedByEmail.plan,
-      error: 'كلمة المرور غير صحيحة، يرجى التحقق أو التواصل مع الكوتش.',
+      error: 'كلمة المرور أو رمز الدخول غير صحيح، يرجى التحقق أو التواصل مع الكوتش.',
     };
   }
 
-  // 2. Passcode mode: match either `clientCode` OR assigned `password` (e.g., OAO-XXXX) case-insensitively
+  // 2. Passcode mode: match `passcode` / `password` OR `clientCode` directly from Supabase `subscribers` / `clients`
   if (!cleanPass) {
-    const matchedByCodeOrPass = all.find((u) => {
-      const codeMatch = u.clientCode && u.clientCode.trim().toLowerCase() === cleanId;
-      const passMatch = u.password && u.password.trim().toLowerCase() === cleanId;
-      return Boolean(codeMatch || passMatch);
-    });
+    const matchedByCodeOrPass =
+      directSubRecord ||
+      all.find((u) => {
+        const codeMatch = u.clientCode && u.clientCode.trim().toLowerCase() === cleanId;
+        const passMatch = u.password && u.password.trim().toLowerCase() === cleanId;
+        return Boolean(codeMatch || passMatch);
+      });
 
     if (matchedByCodeOrPass) {
       if (matchedByCodeOrPass.status === 'suspended') {
@@ -833,8 +1050,7 @@ export async function authenticateUser(
   }
 
   // 3. Check signed declarations in Supabase `public.declarations` (by contract ID only in passcode mode)
-  const supabase = getSupabaseClient();
-  if (supabase && !cleanPass) {
+  if (!cleanPass) {
     try {
       const { data: declRow } = await supabase
         .from('declarations')
@@ -870,34 +1086,7 @@ export async function authenticateUser(
         };
       }
     } catch {
-      // fall through to local declarations check
-    }
-  }
-
-  // 4. Local signed declarations fallback (offline mode)
-  if (typeof window !== 'undefined' && !cleanPass) {
-    try {
-      const declRaw = localStorage.getItem('oao_client_declarations');
-      if (declRaw) {
-        const decls = JSON.parse(declRaw) as Array<Record<string, unknown>>;
-        const found = decls.find(
-          (d) => typeof d.id === 'string' && d.id.trim().toLowerCase() === cleanId
-        );
-        if (found) {
-          const rawPlan = (found.subscription_plan as string) || (found.planId as string);
-          const declEmail = (found.email as string)?.trim().toLowerCase() || `${cleanId}@oao.athlete`;
-          return {
-            success: true,
-            role: 'client',
-            id: declEmail,
-            email: declEmail,
-            name: (found.fullName as string) || 'مشترك معتمد',
-            plan: normalizeSubscriptionPlan(rawPlan),
-          };
-        }
-      }
-    } catch {
-      // ignore
+      // ignore query failure
     }
   }
 
@@ -907,7 +1096,7 @@ export async function authenticateUser(
     email: cleanId,
     name: 'مشترك',
     plan: 'standard',
-    error: 'بيانات الدخول غير صحيحة أو غير مسجلة. يرجى التحقق من البريد وكلمة المرور أو التواصل مع الكوتش.',
+    error: 'بيانات الدخول غير صحيحة أو غير مسجلة في Supabase. يرجى التحقق من البريد أو رمز الدخول أو التواصل مع الكوتش.',
   };
 }
 

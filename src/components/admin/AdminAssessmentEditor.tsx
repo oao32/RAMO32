@@ -134,11 +134,7 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
 
     onUpdateProfile(updatedProfile);
 
-    // Persist locally and sync straight to target client's Supabase assessment & profile records
-    localStorage.setItem('oao_client_profile', JSON.stringify(updatedProfile));
-    localStorage.setItem('oao_streak_data', JSON.stringify(streakData));
-    localStorage.setItem('oao_athlete_rank', JSON.stringify(athleteRank));
-
+    // Persist directly to target client's Supabase assessment & profile records
     await Promise.all([
       syncAssessmentToSupabase(
         canonicalKey,
@@ -151,7 +147,6 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
     window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
     window.dispatchEvent(new CustomEvent('oao_streak_updated', { detail: streakData }));
     window.dispatchEvent(new CustomEvent('oao_rank_updated', { detail: athleteRank }));
-    window.dispatchEvent(new Event('storage'));
 
     setSavedNotice(true);
     setTimeout(() => setSavedNotice(false), 3000);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import {
   ClientProfile,
   WorkoutDay,
@@ -31,10 +31,14 @@ import {
   syncWorkoutDaysToSupabase,
   syncNoteToSupabase,
   deleteNoteFromSupabase,
+  syncAdminTargetClientToSupabase,
+  fetchAdminTargetClientFromSupabase,
 } from '../../lib/supabase';
 import {
   fetchSubscribersFromSupabase,
   getAllSubscribersWithCredentials,
+  isCoachAuthenticated,
+  clearCurrentUserSession,
   UserCredentialRecord,
 } from '../../lib/authStore';
 import { AdminSubscribersManager } from '../../components/admin/AdminSubscribersManager';
@@ -47,6 +51,7 @@ import {
 import { CoachAnalyticsView } from '../../components/CoachAnalyticsView';
 import {
   getWorkoutTemplates,
+  fetchWorkoutTemplatesFromSupabase,
   saveWorkoutTemplate,
   WorkoutTemplate,
 } from '../../lib/templateStore';
@@ -104,37 +109,20 @@ export const AdminPanel: React.FC = () => {
   const [newWorkoutTemplateName, setNewWorkoutTemplateName] = useState('');
   const [workoutTemplateNotice, setWorkoutTemplateNotice] = useState<string | null>(null);
 
-  // Real Subscribers & Declarations (Starts Clean without Fake Mock Data)
-  const [declarations, setDeclarations] = useState<SubscriptionAgreement[]>(() => {
-    try {
-      const stored = localStorage.getItem('oao_client_declarations');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Real Subscribers & Declarations (Hydrated strictly from Supabase)
+  const [declarations, setDeclarations] = useState<SubscriptionAgreement[]>([]);
 
   const [selectedDeclaration, setSelectedDeclaration] = useState<SubscriptionAgreement | null>(null);
   const [isDeclarationModalOpen, setIsDeclarationModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Client Profile & Biometrics State (Editable for Athlete)
-  const [profile, setProfile] = useState<ClientProfile>(() => {
-    try {
-      const saved = localStorage.getItem('oao_client_profile');
-      return saved ? { ...INITIAL_CLIENT_PROFILE, ...JSON.parse(saved) } : INITIAL_CLIENT_PROFILE;
-    } catch {
-      return INITIAL_CLIENT_PROFILE;
-    }
-  });
+  // Client Profile & Biometrics State (Hydrated per selected subscriber from Supabase)
+  const [profile, setProfile] = useState<ClientProfile>(INITIAL_CLIENT_PROFILE);
   const [savedProfileMessage, setSavedProfileMessage] = useState(false);
 
-  // Workouts State
-  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>(() => {
-    const saved = localStorage.getItem('oao_workout_days');
-    return saved ? JSON.parse(saved) : INITIAL_WORKOUT_DAYS;
-  });
+  // Workouts State (Hydrated per selected subscriber from Supabase)
+  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>(INITIAL_WORKOUT_DAYS);
   const [selectedDayKey, setSelectedDayKey] = useState<string>('upper');
   const [newExerciseModalOpen, setNewExerciseModalOpen] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -154,15 +142,8 @@ export const AdminPanel: React.FC = () => {
   const [newDaySubtitleAr, setNewDaySubtitleAr] = useState('');
   const [confirmDeleteDayKey, setConfirmDeleteDayKey] = useState<string | null>(null);
 
-  // Inquiries & Notes State (Starts Clean without Seeded Mock Data)
-  const [notes, setNotes] = useState<ClientNote[]>(() => {
-    try {
-      const saved = localStorage.getItem('oao_client_notes');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Inquiries & Notes State (Hydrated strictly from Supabase)
+  const [notes, setNotes] = useState<ClientNote[]>([]);
   const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
   const [editingReplyNoteId, setEditingReplyNoteId] = useState<string | null>(null);
   const [editReplyText, setEditReplyText] = useState('');
@@ -189,13 +170,7 @@ export const AdminPanel: React.FC = () => {
   const [subscribers, setSubscribers] = useState<UserCredentialRecord[]>(() =>
     getAllSubscribersWithCredentials()
   );
-  const [selectedTargetClientKey, setSelectedTargetClientKey] = useState<string>(() => {
-    try {
-      return localStorage.getItem('oao_admin_target_client') || '';
-    } catch {
-      return '';
-    }
-  });
+  const [selectedTargetClientKey, setSelectedTargetClientKey] = useState<string>('');
   const selectedTargetKeyRef = useRef<string>(selectedTargetClientKey);
   selectedTargetKeyRef.current = selectedTargetClientKey;
 
@@ -213,11 +188,7 @@ export const AdminPanel: React.FC = () => {
     async (clientKey: string, subsOverride?: UserCredentialRecord[]) => {
       setSelectedTargetClientKey(clientKey);
       selectedTargetKeyRef.current = clientKey;
-      try {
-        localStorage.setItem('oao_admin_target_client', clientKey);
-      } catch {
-        // ignore
-      }
+      void syncAdminTargetClientToSupabase(clientKey);
 
       const pool = subsOverride || subscribers;
       const target = pool.find(
@@ -244,19 +215,9 @@ export const AdminPanel: React.FC = () => {
             : workspace.workoutDays[0]?.key || 'upper'
         );
 
-        try {
-          localStorage.setItem('oao_client_profile', JSON.stringify(workspace.profile));
-          localStorage.setItem('oao_workout_days', JSON.stringify(workspace.workoutDays));
-          localStorage.setItem('oao_streak_data', JSON.stringify(workspace.streakData));
-          localStorage.setItem('oao_athlete_rank', JSON.stringify(workspace.athleteRank));
-        } catch {
-          // ignore
-        }
-
         window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: workspace.profile }));
         window.dispatchEvent(new CustomEvent('oao_streak_updated', { detail: workspace.streakData }));
         window.dispatchEvent(new CustomEvent('oao_rank_updated', { detail: workspace.athleteRank }));
-        window.dispatchEvent(new Event('storage'));
       } finally {
         setIsLoadingTargetClient(false);
       }
@@ -294,8 +255,11 @@ export const AdminPanel: React.FC = () => {
     [selectAndLoadTargetClient]
   );
 
-  // Refresh declarations, subscribers, and live notes on load + Supabase sync
+  const coachAuthed = isCoachAuthenticated();
+
+  // Refresh declarations, subscribers, templates, and live notes on load exclusively from Supabase
   useEffect(() => {
+    if (!coachAuthed) return;
     let mounted = true;
     fetchDeclarationsFromSupabase().then((remoteDecls) => {
       if (mounted) setDeclarations(remoteDecls);
@@ -303,50 +267,42 @@ export const AdminPanel: React.FC = () => {
     fetchNotesFromSupabase().then((remoteNotes) => {
       if (mounted) setNotes(remoteNotes);
     });
-    void refreshSubscribersDirectory(true);
+    fetchWorkoutTemplatesFromSupabase().then((tmpls) => {
+      if (mounted && Array.isArray(tmpls)) setWorkoutTemplates(tmpls);
+    });
+    void (async () => {
+      const savedTargetKey = await fetchAdminTargetClientFromSupabase();
+      if (mounted && savedTargetKey && !selectedTargetKeyRef.current) {
+        setSelectedTargetClientKey(savedTargetKey);
+        selectedTargetKeyRef.current = savedTargetKey;
+      }
+      await refreshSubscribersDirectory(true);
+    })();
 
     const syncLiveDeclarations = () => {
-      try {
-        const stored = localStorage.getItem('oao_client_declarations');
-        if (stored) {
-          setDeclarations(JSON.parse(stored));
-        }
-      } catch {
-        // ignore
-      }
+      void fetchDeclarationsFromSupabase().then((remoteDecls) => {
+        if (mounted) setDeclarations(remoteDecls);
+      });
     };
 
     const syncLiveNotes = () => {
-      try {
-        const savedNotes = localStorage.getItem('oao_client_notes');
-        if (savedNotes) {
-          setNotes(JSON.parse(savedNotes));
-        }
-      } catch {
-        // ignore
-      }
+      void fetchNotesFromSupabase().then((remoteNotes) => {
+        if (mounted) setNotes(remoteNotes);
+      });
     };
 
     const syncLiveCredentials = () => {
       setSubscribers(getAllSubscribersWithCredentials());
     };
 
-    const handleStorage = () => {
-      syncLiveDeclarations();
-      syncLiveNotes();
-      syncLiveCredentials();
-    };
-
     window.addEventListener('oao_declarations_updated', syncLiveDeclarations);
     window.addEventListener('oao_notes_updated', syncLiveNotes);
     window.addEventListener('oao_credentials_updated', syncLiveCredentials);
-    window.addEventListener('storage', handleStorage);
     return () => {
       mounted = false;
       window.removeEventListener('oao_declarations_updated', syncLiveDeclarations);
       window.removeEventListener('oao_notes_updated', syncLiveNotes);
       window.removeEventListener('oao_credentials_updated', syncLiveCredentials);
-      window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
@@ -358,6 +314,7 @@ export const AdminPanel: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!coachAuthed) return;
     if (activeTab === 'database') {
       refreshAILogs();
     } else if (activeTab === 'inquiries') {
@@ -371,7 +328,7 @@ export const AdminPanel: React.FC = () => {
     ) {
       void refreshSubscribersDirectory(true);
     }
-  }, [activeTab]);
+  }, [activeTab, coachAuthed]);
 
   const handleCopySubscribeLink = () => {
     const url = `${window.location.origin}/subscribe`;
@@ -406,12 +363,11 @@ export const AdminPanel: React.FC = () => {
       return n;
     });
     setNotes(updated);
-    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
     if (modifiedNote) {
-      void syncNoteToSupabase(modifiedNote);
+      void syncNoteToSupabase(modifiedNote).then(() => {
+        window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+      });
     }
-    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
-    window.dispatchEvent(new Event('storage'));
     setReplyTexts((prev) => ({ ...prev, [noteId]: '' }));
   };
 
@@ -436,12 +392,11 @@ export const AdminPanel: React.FC = () => {
       return n;
     });
     setNotes(updated);
-    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
     if (modifiedNote) {
-      void syncNoteToSupabase(modifiedNote);
+      void syncNoteToSupabase(modifiedNote).then(() => {
+        window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+      });
     }
-    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
-    window.dispatchEvent(new Event('storage'));
     setEditingReplyNoteId(null);
     setEditReplyText('');
   };
@@ -468,10 +423,9 @@ export const AdminPanel: React.FC = () => {
     };
     const updated = [newNote, ...notes];
     setNotes(updated);
-    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
-    void syncNoteToSupabase(newNote);
-    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
-    window.dispatchEvent(new Event('storage'));
+    void syncNoteToSupabase(newNote).then(() => {
+      window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+    });
     setNewInquiryClientName('');
     setNewInquirySubject('');
     setNewInquiryMessage('');
@@ -482,10 +436,9 @@ export const AdminPanel: React.FC = () => {
   const handleDeleteNote = (noteId: string) => {
     const updated = notes.filter((n) => n.id !== noteId);
     setNotes(updated);
-    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
-    void deleteNoteFromSupabase(noteId);
-    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
-    window.dispatchEvent(new Event('storage'));
+    void deleteNoteFromSupabase(noteId).then(() => {
+      window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+    });
     setConfirmDeleteNoteId(null);
   };
 
@@ -505,9 +458,7 @@ export const AdminPanel: React.FC = () => {
       email: targetClientEmail || profile.email,
     };
     setProfile(updatedProfile);
-    localStorage.setItem('oao_client_profile', JSON.stringify(updatedProfile));
     void syncClientProfileToSupabase(targetCanonicalKey, updatedProfile);
-    window.dispatchEvent(new Event('storage'));
     window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
     setSavedProfileMessage(true);
     setTimeout(() => setSavedProfileMessage(false), 3000);
@@ -524,9 +475,7 @@ export const AdminPanel: React.FC = () => {
       subscription_plan: selectedTargetClient?.plan || profile.subscription_plan,
     };
     setProfile(resetProfile);
-    localStorage.setItem('oao_client_profile', JSON.stringify(resetProfile));
     void syncClientProfileToSupabase(targetCanonicalKey, resetProfile);
-    window.dispatchEvent(new Event('storage'));
     window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: resetProfile }));
     setSavedProfileMessage(true);
     setTimeout(() => setSavedProfileMessage(false), 3000);
@@ -554,9 +503,7 @@ export const AdminPanel: React.FC = () => {
         : d
     );
     setWorkoutDays(updated);
-    localStorage.setItem('oao_workout_days', JSON.stringify(updated));
     void syncWorkoutDaysToSupabase(targetCanonicalKey, updated, targetClientEmail);
-    window.dispatchEvent(new Event('storage'));
     setIsEditDayModalOpen(false);
   };
 
@@ -579,9 +526,7 @@ export const AdminPanel: React.FC = () => {
     const updated = [...workoutDays, newDay];
     setWorkoutDays(updated);
     setSelectedDayKey(dayKey);
-    localStorage.setItem('oao_workout_days', JSON.stringify(updated));
     void syncWorkoutDaysToSupabase(targetCanonicalKey, updated, targetClientEmail);
-    window.dispatchEvent(new Event('storage'));
     setNewDayTitleAr('');
     setNewDaySubtitleAr('');
     setIsAddDayModalOpen(false);
@@ -602,9 +547,7 @@ export const AdminPanel: React.FC = () => {
     if (selectedDayKey === dayKey && updated.length > 0) {
       setSelectedDayKey(updated[0].key);
     }
-    localStorage.setItem('oao_workout_days', JSON.stringify(updated));
     void syncWorkoutDaysToSupabase(targetCanonicalKey, updated, targetClientEmail);
-    window.dispatchEvent(new Event('storage'));
     setConfirmDeleteDayKey(null);
     setWorkoutTemplateNotice('تم حذف يوم التمرين وتحديث الجدول بنجاح.');
     setTimeout(() => setWorkoutTemplateNotice(null), 3000);
@@ -649,9 +592,7 @@ export const AdminPanel: React.FC = () => {
         };
       });
       setWorkoutDays(updated);
-      localStorage.setItem('oao_workout_days', JSON.stringify(updated));
       void syncWorkoutDaysToSupabase(targetCanonicalKey, updated, targetClientEmail);
-      window.dispatchEvent(new Event('storage'));
     } else {
       // Adding new exercise
       const newEx: Exercise = {
@@ -680,9 +621,7 @@ export const AdminPanel: React.FC = () => {
         day.key === selectedDayKey ? { ...day, exercises: [...day.exercises, newEx] } : day
       );
       setWorkoutDays(updated);
-      localStorage.setItem('oao_workout_days', JSON.stringify(updated));
       void syncWorkoutDaysToSupabase(targetCanonicalKey, updated, targetClientEmail);
-      window.dispatchEvent(new Event('storage'));
     }
 
     setEditingExercise(null);
@@ -699,16 +638,17 @@ export const AdminPanel: React.FC = () => {
       day.key === dayKey ? { ...day, exercises: day.exercises.filter((e) => e.id !== exId) } : day
     );
     setWorkoutDays(updated);
-    localStorage.setItem('oao_workout_days', JSON.stringify(updated));
     void syncWorkoutDaysToSupabase(targetCanonicalKey, updated, targetClientEmail);
-    window.dispatchEvent(new Event('storage'));
   };
 
   const handleLogout = () => {
-    localStorage.setItem('oao_session', 'guest');
-    localStorage.removeItem('oao_current_user');
-    navigate('/');
+    clearCurrentUserSession();
+    navigate('/', { replace: true });
   };
+
+  if (!coachAuthed) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-[#030712] text-white selection:bg-orange-500 selection:text-white font-['Alexandria',sans-serif]">
@@ -1738,7 +1678,7 @@ export const AdminPanel: React.FC = () => {
                     className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs transition-all cursor-pointer flex items-center gap-2 shadow-md"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>حفظ بيانات الربط في المتصفح</span>
+                    <span>تطبيق بيانات الربط للجلسة الحالية</span>
                   </button>
 
                   {savedConfigMessage && (
@@ -2044,7 +1984,7 @@ export const AdminPanel: React.FC = () => {
             </div>
 
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 if (!newWorkoutTemplateName.trim()) return;
                 const newTmpl: WorkoutTemplate = {
@@ -2056,11 +1996,11 @@ export const AdminPanel: React.FC = () => {
                   createdAt: new Date().toISOString(),
                   workoutDays: JSON.parse(JSON.stringify(workoutDays)),
                 };
-                saveWorkoutTemplate(newTmpl);
+                await saveWorkoutTemplate(newTmpl);
                 setWorkoutTemplates(getWorkoutTemplates());
                 setIsSaveWorkoutTemplateModalOpen(false);
                 setNewWorkoutTemplateName('');
-                setWorkoutTemplateNotice('تم حفظ جدول التمارين كقالب جاهز بنجاح!');
+                setWorkoutTemplateNotice('تم حفظ جدول التمارين كقالب سحابي جاهز بنجاح!');
                 setTimeout(() => setWorkoutTemplateNotice(null), 3000);
               }}
               className="space-y-4 text-xs"
@@ -2145,16 +2085,14 @@ export const AdminPanel: React.FC = () => {
                     onClick={() => {
                       if (tmpl.workoutDays && tmpl.workoutDays.length > 0) {
                         setWorkoutDays(tmpl.workoutDays);
-                        localStorage.setItem('oao_workout_days', JSON.stringify(tmpl.workoutDays));
                         void syncWorkoutDaysToSupabase(
                           targetCanonicalKey,
                           tmpl.workoutDays,
                           targetClientEmail
                         );
-                        window.dispatchEvent(new Event('storage'));
                       }
                       setIsApplyWorkoutTemplateModalOpen(false);
-                      setWorkoutTemplateNotice(`تم تطبيق قالب التمارين (${tmpl.nameAr}) بنجاح!`);
+                      setWorkoutTemplateNotice(`تم تطبيق قالب التمارين (${tmpl.nameAr}) ومزامنته في Supabase بنجاح!`);
                       setTimeout(() => setWorkoutTemplateNotice(null), 3000);
                     }}
                     className="px-4 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs shrink-0 cursor-pointer shadow-md"

@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { assignSubscriberPassword } from '../lib/authStore';
+import { assignSubscriberPassword, setCurrentUserSession } from '../lib/authStore';
 import { saveDeclarationToSupabase, syncProfileToSupabase } from '../lib/supabase';
 import { INITIAL_CLIENT_PROFILE } from '../data/initialData';
 
@@ -494,17 +494,15 @@ export const StandaloneSubscribePage: React.FC = () => {
         subscriptionStatus: 'active' as const,
         subscriptionDaysLeft: currentDurationInfo.days,
       };
-      localStorage.setItem('oao_client_profile', JSON.stringify(updatedProfile));
-      localStorage.setItem(
-        'oao_current_user',
-        JSON.stringify({
-          id: canonicalId,
-          email: cleanEmail,
-          name: cleanFullName,
-          plan: resolvedPlanTier,
-          role: 'client',
-        })
-      );
+      setCurrentUserSession({
+        id: canonicalId,
+        email: cleanEmail,
+        name: cleanFullName,
+        plan: resolvedPlanTier,
+        role: 'client',
+        clientCode: assignRes.record?.clientCode || generatedCode,
+        phone: phoneWhatsapp.trim(),
+      });
       window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
       await syncProfileToSupabase(updatedProfile);
     } catch (authErr) {
@@ -2220,16 +2218,13 @@ export const StandaloneSubscribePage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  localStorage.setItem('oao_session', 'client');
-                  localStorage.setItem(
-                    'oao_current_user',
-                    JSON.stringify({
-                      email: email.trim().toLowerCase(),
-                      name: cleanFullName,
-                      plan: resolvedPlanTier,
-                      role: 'client',
-                    })
-                  );
+                  setCurrentUserSession({
+                    id: email.trim().toLowerCase(),
+                    email: email.trim().toLowerCase(),
+                    name: cleanFullName,
+                    plan: resolvedPlanTier,
+                    role: 'client',
+                  });
                   if (resolvedPlanTier === 'VIP') {
                     navigate('/vip');
                   } else {

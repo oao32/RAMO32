@@ -77,6 +77,8 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
   const [resetModalUser, setResetModalUser] = useState<UserCredentialRecord | null>(null);
   const [newPasswordVal, setNewPasswordVal] = useState('');
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [isSavingReset, setIsSavingReset] = useState(false);
 
   // Full Edit Subscriber Modal State
   const [editingSubscriber, setEditingSubscriber] = useState<UserCredentialRecord | null>(null);
@@ -90,6 +92,8 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
   const [editVisualGoal, setEditVisualGoal] = useState<string>('');
   const [editStatus, setEditStatus] = useState<'active' | 'suspended'>('active');
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Manual Add Subscriber Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -102,6 +106,9 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
   const [addBloodType, setAddBloodType] = useState<string>('');
   const [addVisualGoal, setAddVisualGoal] = useState<string>('تضخيم وبناء عضلي (Bulking)');
   const [addMessage, setAddMessage] = useState<string | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [isSavingAdd, setIsSavingAdd] = useState(false);
+  const [isRefreshingCloud, setIsRefreshingCloud] = useState(false);
 
   // WhatsApp share notification & inline delete confirmation states
   const [whatsappCopiedFor, setWhatsappCopiedFor] = useState<string | null>(null);
@@ -114,16 +121,26 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     setTimeout(() => setActionNotice(null), 3000);
   };
 
-  const refreshList = () => {
-    setCredentialsList(getAllSubscribersWithCredentials());
-    try {
-      const declRaw = localStorage.getItem('oao_client_declarations');
-      if (declRaw) {
-        setDeclarations(JSON.parse(declRaw));
+  const refreshList = async (forceRemote = false) => {
+    if (forceRemote) {
+      setIsRefreshingCloud(true);
+      try {
+        const [subs, decls] = await Promise.all([
+          fetchSubscribersFromSupabase(),
+          fetchDeclarationsFromSupabase(),
+        ]);
+        if (subs) setCredentialsList(subs);
+        if (decls) setDeclarations(decls);
+      } finally {
+        setIsRefreshingCloud(false);
       }
-    } catch {
-      // ignore
+      return;
     }
+
+    setCredentialsList(getAllSubscribersWithCredentials());
+    void fetchDeclarationsFromSupabase().then((decls) => {
+      if (decls) setDeclarations(decls);
+    });
   };
 
   useEffect(() => {
@@ -131,20 +148,17 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
   }, [initialDeclarations]);
 
   useEffect(() => {
-    fetchSubscribersFromSupabase().then((subs) => {
-      if (subs) setCredentialsList(subs);
-    });
-    fetchDeclarationsFromSupabase().then((decls) => {
-      if (decls) setDeclarations(decls);
-    });
+    void refreshList(true);
 
-    window.addEventListener('oao_credentials_updated', refreshList);
-    window.addEventListener('oao_declarations_updated', refreshList);
-    window.addEventListener('storage', refreshList);
+    const handleSyncEvent = () => {
+      void refreshList(false);
+    };
+
+    window.addEventListener('oao_credentials_updated', handleSyncEvent);
+    window.addEventListener('oao_declarations_updated', handleSyncEvent);
     return () => {
-      window.removeEventListener('oao_credentials_updated', refreshList);
-      window.removeEventListener('oao_declarations_updated', refreshList);
-      window.removeEventListener('storage', refreshList);
+      window.removeEventListener('oao_credentials_updated', handleSyncEvent);
+      window.removeEventListener('oao_declarations_updated', handleSyncEvent);
     };
   }, []);
 
@@ -170,13 +184,18 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     setEditVisualGoal(user.visualGoal || 'تضخيم وبناء عضلي (Bulking)');
     setEditStatus((user.status as 'active' | 'suspended') || 'active');
     setEditMessage(null);
+    setEditError(null);
   };
 
   const handleSaveEditProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSubscriber || !editEmail.trim() || !editName.trim()) return;
 
-    await assignSubscriberPassword({
+    setEditError(null);
+    setEditMessage(null);
+    setIsSavingEdit(true);
+
+    const res = await assignSubscriberPassword({
       id: editingSubscriber.id,
       email: editEmail.trim(),
       password: editPassword.trim() || editingSubscriber.password || 'OAO-2026',
@@ -191,19 +210,26 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       nutritionPlanLocked: editingSubscriber.nutritionPlanLocked,
     });
 
-    refreshList();
-    setEditMessage('تم حفظ وتحديث بيانات المشترك بنجاح!');
+    setIsSavingEdit(false);
+
+    if (!res.success || !res.syncedToSupabase) {
+      setEditError(res.error || 'تعذر تحديث بيانات المشترك في Supabase.');
+      return;
+    }
+
+    await refreshList(true);
+    setEditMessage('تم حفظ وتحديث بيانات المشترك في Supabase بنجاح!');
     setTimeout(() => {
       setEditingSubscriber(null);
       setEditMessage(null);
-      showNotice('تم تحديث ملف المشترك وحفظه في النظام.');
-    }, 1200);
+      showNotice('تم تحديث ملف المشترك وحفظه سحابياً في Supabase.');
+    }, 1000);
   };
 
   // Toggle Suspend / Active
   const handleToggleStatus = (email: string, clientName: string) => {
     const newStatus = toggleSubscriberStatus(email);
-    refreshList();
+    void refreshList(false);
     showNotice(
       newStatus === 'suspended'
         ? `⚠️ تم إيقاف/تعليق حساب المشترك (${clientName})`
@@ -214,7 +240,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
   // Toggle Nutrition Plan Lock per subscriber
   const handleToggleNutritionLock = (email: string, clientName: string, currentLock?: boolean) => {
     const nextVal = toggleSubscriberNutritionLock(email, !currentLock);
-    refreshList();
+    void refreshList(false);
     showNotice(
       nextVal
         ? `🔒 تم قفل الخطة الغذائية عن (${clientName})`
@@ -231,9 +257,13 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     }
 
     setConfirmDeleteEmail(null);
-    await deleteSubscriberRecord(email);
-    refreshList();
-    showNotice(`🗑️ تم حذف المشترك (${clientName}) نهائياً من قاعدة البيانات.`);
+    const deleted = await deleteSubscriberRecord(email);
+    if (!deleted) {
+      showNotice('⚠️ تعذر حذف المشترك من Supabase. يرجى التحقق من الاتصال.');
+      return;
+    }
+    await refreshList(true);
+    showNotice(`🗑️ تم حذف المشترك (${clientName}) نهائياً من قاعدة البيانات السحابية.`);
   };
 
   // Delete Declaration permanently (inline 2-step confirmation + Supabase sync)
@@ -255,13 +285,18 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     setResetModalUser(user);
     setNewPasswordVal(user.password || handleGenerateRandomPassword());
     setResetMessage(null);
+    setResetError(null);
   };
 
   const handleSaveResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetModalUser || !newPasswordVal.trim()) return;
 
-    await assignSubscriberPassword({
+    setResetError(null);
+    setResetMessage(null);
+    setIsSavingReset(true);
+
+    const res = await assignSubscriberPassword({
       id: resetModalUser.id,
       email: resetModalUser.email,
       password: newPasswordVal.trim(),
@@ -276,23 +311,35 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       nutritionPlanLocked: resetModalUser.nutritionPlanLocked,
     });
 
-    refreshList();
-    setResetMessage('تم تعيين كلمة المرور وتحديث الحساب بنجاح!');
+    setIsSavingReset(false);
+
+    if (!res.success || !res.syncedToSupabase) {
+      setResetError(res.error || 'تعذر تحديث رمز الدخول في Supabase.');
+      return;
+    }
+
+    await refreshList(true);
+    setResetMessage('تم تعيين رمز الدخول وتحديث الحساب في Supabase بنجاح!');
     setTimeout(() => {
       setResetModalUser(null);
       setResetMessage(null);
-      showNotice('تم تحديث كلمة المرور.');
-    }, 1200);
+      showNotice('تم تحديث رمز الدخول سحابياً.');
+    }, 1000);
   };
 
   const handleSaveNewSubscriber = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!addEmail.trim() || !addName.trim() || !addPassword.trim()) return;
 
-    await assignSubscriberPassword({
+    setAddError(null);
+    setAddMessage(null);
+    setIsSavingAdd(true);
+
+    const res = await assignSubscriberPassword({
       email: addEmail.trim(),
       password: addPassword.trim(),
       clientName: addName.trim(),
+      clientCode: addPassword.trim(),
       plan: addPlan,
       phone: addPhone.trim() || undefined,
       age: addAge ? Number(addAge) : undefined,
@@ -302,19 +349,29 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       nutritionPlanLocked: false,
     });
 
-    refreshList();
-    setAddMessage('تم إنشاء حساب المشترك واعتماد كلمة المرور بنجاح!');
+    setIsSavingAdd(false);
+
+    if (!res.success || !res.syncedToSupabase) {
+      setAddError(
+        res.error || 'تعذر حفظ بيانات المشترك في جدول subscribers بـ Supabase. يرجى التحقق من الربط.'
+      );
+      return;
+    }
+
+    await refreshList(true);
+    setAddMessage('تم حفظ المشترك وبياناته مباشرة في قاعدة بيانات Supabase بنجاح!');
     setTimeout(() => {
       setIsAddModalOpen(false);
       setAddMessage(null);
+      setAddError(null);
       setAddName('');
       setAddEmail('');
       setAddPassword('');
       setAddPhone('');
       setAddAge('');
       setAddBloodType('');
-      showNotice('تمت إضافة المشترك الجديد بنجاح.');
-    }, 1200);
+      showNotice('تمت إضافة المشترك الجديد ومزامنته مع Supabase بنجاح.');
+    }, 1000);
   };
 
   const handleCopyWhatsAppMessage = (user: {
@@ -356,6 +413,8 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => {
+              setAddError(null);
+              setAddMessage(null);
               setAddPassword(handleGenerateRandomPassword());
               setIsAddModalOpen(true);
             }}
@@ -363,6 +422,16 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
           >
             <Plus className="w-4 h-4" />
             <span>إضافة وتفعيل مشترك جديد</span>
+          </button>
+
+          <button
+            onClick={() => void refreshList(true)}
+            disabled={isRefreshingCloud}
+            className="px-3.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-60"
+            title="تحديث قائمة المشتركين مباشرة من Supabase"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-orange-400 ${isRefreshingCloud ? 'animate-spin' : ''}`} />
+            <span>تحديث السحابة</span>
           </button>
 
           <button
@@ -411,7 +480,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
             </h3>
           </div>
           <span className="text-xs text-slate-400 font-medium">
-            تحكم كامل في تعديل الحساب، تعليقه، قفل الوجبات، وحذفه
+            مزامنة سحابية مباشرة عبر جدول subscribers في Supabase
           </span>
         </div>
 
@@ -914,6 +983,13 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                 </div>
               </div>
 
+              {editError && (
+                <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-xs text-rose-200 font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
               {editMessage && (
                 <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-xs text-emerald-300 font-bold flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
@@ -931,9 +1007,10 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs shadow-lg cursor-pointer"
+                  disabled={isSavingEdit}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs shadow-lg cursor-pointer disabled:opacity-60"
                 >
-                  حفظ وتحديث الملف
+                  {isSavingEdit ? 'جاري الحفظ في Supabase...' : 'حفظ وتحديث الملف'}
                 </button>
               </div>
             </form>
@@ -989,6 +1066,13 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                 </div>
               </div>
 
+              {resetError && (
+                <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-xs text-rose-200 font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{resetError}</span>
+                </div>
+              )}
+
               {resetMessage && (
                 <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-xs text-emerald-300 font-bold flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
@@ -1013,9 +1097,10 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
 
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs shadow-md cursor-pointer"
+                  disabled={isSavingReset}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs shadow-md cursor-pointer disabled:opacity-60"
                 >
-                  حفظ وتحديث كلمة المرور
+                  {isSavingReset ? 'جاري التحديث...' : 'حفظ وتحديث كلمة المرور'}
                 </button>
               </div>
             </form>
@@ -1169,6 +1254,13 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                 </div>
               </div>
 
+              {addError && (
+                <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-xs text-rose-200 font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{addError}</span>
+                </div>
+              )}
+
               {addMessage && (
                 <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-xs text-emerald-300 font-bold flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
@@ -1186,9 +1278,10 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs shadow-lg cursor-pointer"
+                  disabled={isSavingAdd}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs shadow-lg cursor-pointer disabled:opacity-60"
                 >
-                  تفعيل الحساب واعتماد كلمة المرور
+                  {isSavingAdd ? 'جاري الحفظ في Supabase...' : 'تفعيل الحساب واعتماد كلمة المرور'}
                 </button>
               </div>
             </form>

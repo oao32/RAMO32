@@ -33,6 +33,7 @@ import { VideoModal } from '../../components/VideoModal';
 import { ShareableProgressCardModal } from '../../components/ShareableProgressCardModal';
 import { calculateSubscriptionDetails } from '../../lib/subscriptionUtils';
 import {
+  fetchNotesFromSupabase,
   getCanonicalClientKey,
   loadClientWorkspaceFromSupabase,
   syncAssessmentToSupabase,
@@ -40,6 +41,7 @@ import {
   syncProfileToSupabase,
   syncWorkoutDaysToSupabase,
 } from '../../lib/supabase';
+import { getCurrentUserSession, clearCurrentUserSession } from '../../lib/authStore';
 import {
   Home,
   LogOut,
@@ -64,37 +66,31 @@ export const VipDashboard: React.FC = () => {
     return (localStorage.getItem('oao_theme') as Theme) || 'dark';
   });
 
-  // Client Profile state (Locked as VIP)
+  // Client Profile state (Locked as VIP, hydrated strictly from Supabase)
   const [profile, setProfile] = useState<ClientProfile>(() => {
-    const saved = localStorage.getItem('oao_client_profile');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return { ...INITIAL_CLIENT_PROFILE, ...parsed, subscription_plan: 'VIP' };
-      } catch {
-        // fallback
-      }
-    }
+    const currentUser = getCurrentUserSession();
     return {
       ...INITIAL_CLIENT_PROFILE,
-      name: 'عبدالرحمن الشمري',
-      nameEn: 'Abdulrahman Al-Shammari',
+      id: currentUser?.id || INITIAL_CLIENT_PROFILE.id,
+      email: currentUser?.email || INITIAL_CLIENT_PROFILE.email,
+      name: currentUser?.name || INITIAL_CLIENT_PROFILE.name,
+      nameEn: currentUser?.name || INITIAL_CLIENT_PROFILE.nameEn,
       subscription_plan: 'VIP',
     };
   });
+
+  // Workouts, Notes, Streak, Badges & Rank states (Hydrated strictly from Supabase)
+  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>(INITIAL_WORKOUT_DAYS);
+  const [notes, setNotes] = useState<ClientNote[]>([]);
+  const [streakData, setStreakData] = useState<StreakData>(INITIAL_STREAK_DATA);
+  const [badges, setBadges] = useState<Badge[]>(INITIAL_BADGES);
+  const [athleteRank, setAthleteRank] = useState<AthleteRank>(INITIAL_ATHLETE_RANK);
 
   // Hydrate full subscriber workspace from Supabase on mount
   useEffect(() => {
     let mounted = true;
     const hydrateFromCloud = async () => {
-      let currentUser: { id?: string; email?: string; name?: string } | null = null;
-      try {
-        const raw = localStorage.getItem('oao_current_user');
-        if (raw) currentUser = JSON.parse(raw);
-      } catch {
-        currentUser = null;
-      }
-
+      const currentUser = getCurrentUserSession();
       const targetEmail = currentUser?.email || profile.email;
       const targetId = currentUser?.id || profile.id;
       if (!targetEmail && (!targetId || targetId === 'client_athlete')) return;
@@ -116,15 +112,7 @@ export const VipDashboard: React.FC = () => {
       setNotes(workspace.notes);
       setStreakData(workspace.streakData);
       setAthleteRank(workspace.athleteRank);
-      try {
-        localStorage.setItem('oao_client_profile', JSON.stringify(nextProfile));
-        localStorage.setItem('oao_workout_days', JSON.stringify(workspace.workoutDays));
-        localStorage.setItem('oao_client_notes', JSON.stringify(workspace.notes));
-        localStorage.setItem('oao_streak_data', JSON.stringify(workspace.streakData));
-        localStorage.setItem('oao_athlete_rank', JSON.stringify(workspace.athleteRank));
-      } catch {
-        // ignore
-      }
+      if (workspace.badges) setBadges(workspace.badges);
     };
 
     void hydrateFromCloud();
@@ -133,102 +121,42 @@ export const VipDashboard: React.FC = () => {
     };
   }, []);
 
-  // Real-time synchronization for coach replies, profile, workouts, streak & rank
+  // Real-time synchronization for coach replies, profile, streak & rank
   useEffect(() => {
-    const handleSync = () => {
-      try {
-        const savedNotes = localStorage.getItem('oao_client_notes');
-        if (savedNotes) setNotes(JSON.parse(savedNotes));
-        const savedProfile = localStorage.getItem('oao_client_profile');
-        if (savedProfile) {
-          setProfile((prev) => ({ ...prev, ...JSON.parse(savedProfile), subscription_plan: 'VIP' }));
-        }
-        const savedWorkouts = localStorage.getItem('oao_workout_days');
-        if (savedWorkouts) setWorkoutDays(JSON.parse(savedWorkouts));
-        const savedStreak = localStorage.getItem('oao_streak_data');
-        if (savedStreak) setStreakData(JSON.parse(savedStreak));
-        const savedRank = localStorage.getItem('oao_athlete_rank');
-        if (savedRank) setAthleteRank(JSON.parse(savedRank));
-      } catch {
-        // ignore
+    const handleNotesSync = () => {
+      const currentUser = getCurrentUserSession();
+      void fetchNotesFromSupabase({
+        clientId: currentUser?.id || profile.id,
+        clientEmail: currentUser?.email || profile.email,
+        clientName: currentUser?.name || profile.name,
+      }).then(setNotes);
+    };
+    const handleProfileSync = (e: Event) => {
+      const detail = (e as CustomEvent<ClientProfile | undefined>).detail;
+      if (detail) {
+        setProfile((prev) => ({ ...prev, ...detail, subscription_plan: 'VIP' }));
       }
     };
-    window.addEventListener('oao_notes_updated', handleSync);
-    window.addEventListener('oao_profile_updated', handleSync);
-    window.addEventListener('oao_streak_updated', handleSync);
-    window.addEventListener('oao_rank_updated', handleSync);
-    window.addEventListener('storage', handleSync);
+    const handleStreakSync = (e: Event) => {
+      const detail = (e as CustomEvent<StreakData | undefined>).detail;
+      if (detail) setStreakData(detail);
+    };
+    const handleRankSync = (e: Event) => {
+      const detail = (e as CustomEvent<AthleteRank | undefined>).detail;
+      if (detail) setAthleteRank(detail);
+    };
+
+    window.addEventListener('oao_notes_updated', handleNotesSync);
+    window.addEventListener('oao_profile_updated', handleProfileSync);
+    window.addEventListener('oao_streak_updated', handleStreakSync);
+    window.addEventListener('oao_rank_updated', handleRankSync);
     return () => {
-      window.removeEventListener('oao_notes_updated', handleSync);
-      window.removeEventListener('oao_profile_updated', handleSync);
-      window.removeEventListener('oao_streak_updated', handleSync);
-      window.removeEventListener('oao_rank_updated', handleSync);
-      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('oao_notes_updated', handleNotesSync);
+      window.removeEventListener('oao_profile_updated', handleProfileSync);
+      window.removeEventListener('oao_streak_updated', handleStreakSync);
+      window.removeEventListener('oao_rank_updated', handleRankSync);
     };
-  }, []);
-
-  // Workouts state
-  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>(() => {
-    const saved = localStorage.getItem('oao_workout_days');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_WORKOUT_DAYS;
-  });
-
-  // Notes state (Starts cleanly empty without seeded mock notes)
-  const [notes, setNotes] = useState<ClientNote[]>(() => {
-    const saved = localStorage.getItem('oao_client_notes');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return [];
-  });
-
-  // Streak & Gamification state
-  const [streakData, setStreakData] = useState<StreakData>(() => {
-    const saved = localStorage.getItem('oao_streak_data');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_STREAK_DATA;
-  });
-
-  const [badges, setBadges] = useState<Badge[]>(() => {
-    const saved = localStorage.getItem('oao_badges');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_BADGES;
-  });
-
-  const [athleteRank, setAthleteRank] = useState<AthleteRank>(() => {
-    const saved = localStorage.getItem('oao_athlete_rank');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_ATHLETE_RANK;
-  });
+  }, [profile.id, profile.email, profile.name]);
 
   // Modals state
   const [activeVideoExercise, setActiveVideoExercise] = useState<Exercise | null>(null);
@@ -241,20 +169,20 @@ export const VipDashboard: React.FC = () => {
 
   const handleUpdateProfile = (updated: ClientProfile) => {
     setProfile(updated);
-    localStorage.setItem('oao_client_profile', JSON.stringify(updated));
-    syncProfileToSupabase(updated).catch(() => {});
+    void syncProfileToSupabase(updated);
   };
 
   const handleUpdateWorkouts = (updatedDays: WorkoutDay[]) => {
     setWorkoutDays(updatedDays);
-    localStorage.setItem('oao_workout_days', JSON.stringify(updatedDays));
     const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
-    syncWorkoutDaysToSupabase(canonicalKey, updatedDays, profile.email).catch(() => {});
+    void syncWorkoutDaysToSupabase(canonicalKey, updatedDays, profile.email);
   };
 
   const handleAddNote = (newNote: Omit<ClientNote, 'id' | 'timestamp' | 'isResolved'>) => {
     const noteRecord: ClientNote = {
       ...newNote,
+      clientId: getCanonicalClientKey(profile.id, profile.email),
+      clientEmail: profile.email,
       id: `note_${Date.now()}`,
       timestamp: new Date().toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', {
         hour: '2-digit',
@@ -262,24 +190,15 @@ export const VipDashboard: React.FC = () => {
       }),
       isResolved: false,
     };
-    const latestRaw = localStorage.getItem('oao_client_notes');
-    const existingList: ClientNote[] = latestRaw ? JSON.parse(latestRaw) : notes;
-    const updated = [noteRecord, ...existingList];
+    const updated = [noteRecord, ...notes];
     setNotes(updated);
-    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
-    syncNoteToSupabase(noteRecord).catch(() => {});
-    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
-    window.dispatchEvent(new Event('storage'));
+    void syncNoteToSupabase(noteRecord).then(() => {
+      window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+    });
   };
 
   const handleLogout = () => {
-    localStorage.setItem('oao_session', 'guest');
-    localStorage.removeItem('oao_current_user');
-    localStorage.removeItem('oao_client_profile');
-    localStorage.removeItem('oao_workout_days');
-    localStorage.removeItem('oao_client_notes');
-    localStorage.removeItem('oao_streak_data');
-    localStorage.removeItem('oao_athlete_rank');
+    clearCurrentUserSession();
     navigate('/');
   };
 
@@ -503,7 +422,6 @@ export const VipDashboard: React.FC = () => {
                 totalWorkoutsCompleted: streakData.totalWorkoutsCompleted + 1,
               };
               setStreakData(nextStreak);
-              localStorage.setItem('oao_streak_data', JSON.stringify(nextStreak));
               const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
               syncAssessmentToSupabase(
                 canonicalKey,
@@ -511,6 +429,7 @@ export const VipDashboard: React.FC = () => {
                   analysisData: profile.analysisData,
                   streakData: nextStreak,
                   athleteRank,
+                  badges,
                 },
                 profile.email
               ).catch(() => {});
@@ -521,7 +440,6 @@ export const VipDashboard: React.FC = () => {
                 freezesRemaining: Math.max(0, streakData.freezesRemaining - 1),
               };
               setStreakData(nextStreak);
-              localStorage.setItem('oao_streak_data', JSON.stringify(nextStreak));
               const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
               syncAssessmentToSupabase(
                 canonicalKey,
@@ -529,6 +447,7 @@ export const VipDashboard: React.FC = () => {
                   analysisData: profile.analysisData,
                   streakData: nextStreak,
                   athleteRank,
+                  badges,
                 },
                 profile.email
               ).catch(() => {});

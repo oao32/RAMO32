@@ -11,8 +11,7 @@ import {
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react';
-import { normalizeSubscriptionPlan } from '../lib/supabase';
-import { authenticateUser } from '../lib/authStore';
+import { authenticateUser, setCoachAuthenticated, setCurrentUserSession } from '../lib/authStore';
 import { Mail, Lock } from 'lucide-react';
 
 export interface AllowedPasscode {
@@ -54,13 +53,6 @@ export const ALLOWED_PASSCODES: AllowedPasscode[] = [
   },
   {
     code: 'RAMO3223',
-    plan: 'VIP',
-    clientName: 'الكوتش عمر عدنان',
-    email: 'coach.omar@oao.com',
-    role: 'admin',
-  },
-  {
-    code: 'COACH',
     plan: 'VIP',
     clientName: 'الكوتش عمر عدنان',
     email: 'coach.omar@oao.com',
@@ -143,20 +135,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         return;
       }
 
-      try {
-        localStorage.setItem(
-          'oao_current_user',
-          JSON.stringify({
-            id: authResult.id || authResult.email,
-            email: authResult.email,
-            name: authResult.name,
-            plan: authResult.plan,
-            role: authResult.role,
-          })
-        );
-      } catch {
-        // ignore storage errors
-      }
+      setCurrentUserSession({
+        id: authResult.id || authResult.email,
+        email: authResult.email,
+        name: authResult.name,
+        plan: authResult.plan,
+        role: authResult.role,
+        clientCode: authResult.clientCode,
+        phone: authResult.phone,
+      });
 
       setSuccessNotice(
         language === 'ar'
@@ -202,20 +189,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     // 1. Check authenticateUser first (live Supabase + assigned passwords + declarations)
     const authByCode = await authenticateUser(cleanCode);
     if (authByCode.success) {
-      try {
-        localStorage.setItem(
-          'oao_current_user',
-          JSON.stringify({
-            id: authByCode.id || authByCode.email,
-            email: authByCode.email,
-            name: authByCode.name,
-            plan: authByCode.plan,
-            role: authByCode.role,
-          })
-        );
-      } catch {
-        // ignore
-      }
+      setCurrentUserSession({
+        id: authByCode.id || authByCode.email,
+        email: authByCode.email,
+        name: authByCode.name,
+        plan: authByCode.plan,
+        role: authByCode.role,
+        clientCode: authByCode.clientCode,
+        phone: authByCode.phone,
+      });
       setSuccessNotice(
         language === 'ar'
           ? `تم التحقق بنجاح! أهلاً بك يا ${authByCode.name} (${authByCode.plan === 'VIP' ? 'عضوية VIP' : 'الباقة القياسية'})`
@@ -254,68 +236,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       (entry) => entry.code.trim().toUpperCase() === cleanCode
     );
 
-    // 3. Also check if the entered code matches a locally generated signed contract ID
-    let localContractMatch: { plan: SubscriptionPlanTier; name: string; email: string } | null = null;
+    // 3. Evaluation: If not matched in Supabase or built-in master passcodes, show error alert
     if (!matchedEntry) {
-      try {
-        const storedDeclRaw = localStorage.getItem('oao_client_declarations');
-        if (storedDeclRaw) {
-          const declarations = JSON.parse(storedDeclRaw) as Array<Record<string, unknown>>;
-          const foundDecl = declarations.find((d) => {
-            const id = typeof d.id === 'string' ? d.id.trim().toUpperCase() : '';
-            return id === cleanCode;
-          });
-          if (foundDecl) {
-            localContractMatch = {
-              plan: normalizeSubscriptionPlan(
-                (foundDecl.subscription_plan as string) || (foundDecl.planId as string)
-              ),
-              name: typeof foundDecl.fullName === 'string' ? foundDecl.fullName : 'مشترك معتمد',
-              email: typeof foundDecl.email === 'string' ? foundDecl.email : `${cleanCode.toLowerCase()}@oao.athlete`,
-            };
-          }
-        }
-      } catch {
-        // ignore storage errors
-      }
-    }
-
-    // 4. Evaluation: If neither matched, show the exact requested error alert
-    if (!matchedEntry && !localContractMatch) {
       setIsLoading(false);
       setErrorMsg(
         language === 'ar'
-          ? 'رمز الاشتراك غير صحيح أو غير مفعّل، يرجى التواصل مع الكوتش'
+          ? authByCode.error || 'رمز الاشتراك غير صحيح أو غير مفعّل، يرجى التواصل مع الكوتش'
           : 'Invalid or inactive subscription passcode. Please contact your coach.'
       );
       return;
     }
 
-    // 5. Successful match handling
-    const resolvedRole: Role = matchedEntry?.role || 'client';
-    const resolvedPlan: SubscriptionPlanTier =
-      matchedEntry?.plan || localContractMatch?.plan || 'standard';
-    const resolvedName: string =
-      matchedEntry?.clientName || localContractMatch?.name || 'مشترك معتمد';
+    // 4. Successful match handling
+    const resolvedRole: Role = matchedEntry.role || 'client';
+    const resolvedPlan: SubscriptionPlanTier = matchedEntry.plan || 'standard';
+    const resolvedName: string = matchedEntry.clientName || 'مشترك معتمد';
     const resolvedEmail: string =
-      matchedEntry?.email || localContractMatch?.email || `${cleanCode.toLowerCase()}@oao.athlete`;
+      matchedEntry.email || `${cleanCode.toLowerCase()}@oao.athlete`;
 
     const resolvedId: string = resolvedEmail.trim().toLowerCase();
 
-    try {
-      localStorage.setItem(
-        'oao_current_user',
-        JSON.stringify({
-          id: resolvedId,
-          email: resolvedEmail,
-          name: resolvedName,
-          plan: resolvedPlan,
-          role: resolvedRole,
-        })
-      );
-    } catch {
-      // ignore
-    }
+    setCurrentUserSession({
+      id: resolvedId,
+      email: resolvedEmail,
+      name: resolvedName,
+      plan: resolvedPlan,
+      role: resolvedRole,
+    });
 
     setSuccessNotice(
       language === 'ar'
@@ -325,6 +272,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setTimeout(() => {
       setIsLoading(false);
+      if (resolvedRole === 'admin') {
+        setCoachAuthenticated(true);
+      }
       onSuccess(resolvedRole, resolvedEmail, resolvedName, resolvedPlan, resolvedId);
       if (resolvedRole === 'admin') {
         navigate('/admin');

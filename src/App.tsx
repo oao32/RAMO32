@@ -94,6 +94,7 @@ const ALL_PLANS: Record<'standard' | 'platinum', PlanDetails> = {
   },
 };
 import {
+  fetchNotesFromSupabase,
   getCanonicalClientKey,
   loadClientWorkspaceFromSupabase,
   syncAssessmentToSupabase,
@@ -103,26 +104,25 @@ import {
   normalizeSubscriptionPlan,
 } from './lib/supabase';
 import {
+  isCoachAuthenticated,
+  setCoachAuthenticated,
+  getCurrentUserSession,
+  setCurrentUserSession,
+  clearCurrentUserSession,
+} from './lib/authStore';
+import {
   Sun,
   Moon,
   Globe,
-  User,
   ShieldCheck,
-  Dumbbell,
-  Scale,
-  Ruler,
   Flame,
-  Sparkles,
   Compass,
   Zap,
   LogOut,
   KeyRound,
-  Lock,
-  ArrowRight,
   QrCode,
   Crown,
   Clock,
-  Calendar,
 } from 'lucide-react';
 
 function MainPortal() {
@@ -136,35 +136,27 @@ function MainPortal() {
     return (localStorage.getItem('oao_lang') as Language) || 'ar';
   });
 
-  // Session State: 'guest' (default visitor), 'client' (authenticated athlete), or 'admin' (coach with passkey)
+  // Session State: 'guest' (default regular visitor / client login view) or 'client' (authenticated athlete in current tab)
   const [userSession, setUserSession] = useState<UserSession>(() => {
-    const saved = localStorage.getItem('oao_session') as UserSession;
-    if (saved === 'client' || saved === 'admin') {
-      return saved;
-    }
-    return 'guest'; // By default, visitor sees only the Home page and Membership plans
+    const active = getCurrentUserSession();
+    return active?.role === 'client' ? 'client' : 'guest';
   });
-
-  // Backward-compatible role indicator for child components
-  const currentRole: Role = userSession === 'admin' ? 'admin' : 'client';
 
   // Toggle viewing plans when logged in as client
   const [showPlansForAthlete, setShowPlansForAthlete] = useState(false);
 
-  // Client Profile State with LocalStorage Persistence (normalized subscription_plan: 'standard' | 'VIP')
+  // Client Profile State (Hydrated strictly from Supabase + active tab session)
   const [profile, setProfile] = useState<ClientProfile>(() => {
-    const saved = localStorage.getItem('oao_client_profile');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as ClientProfile;
-        return {
-          ...INITIAL_CLIENT_PROFILE,
-          ...parsed,
-          subscription_plan: normalizeSubscriptionPlan(parsed.subscription_plan || 'VIP'),
-        };
-      } catch {
-        // fallback
-      }
+    const active = getCurrentUserSession();
+    if (active) {
+      return {
+        ...INITIAL_CLIENT_PROFILE,
+        id: active.id || active.email || INITIAL_CLIENT_PROFILE.id,
+        email: active.email || INITIAL_CLIENT_PROFILE.email,
+        name: active.name || INITIAL_CLIENT_PROFILE.name,
+        nameEn: active.name || INITIAL_CLIENT_PROFILE.nameEn,
+        subscription_plan: normalizeSubscriptionPlan(active.plan),
+      };
     }
     return INITIAL_CLIENT_PROFILE;
   });
@@ -176,31 +168,11 @@ function MainPortal() {
   const clientSubDetails = calculateSubscriptionDetails(profile);
   const isClientExpired = userSession === 'client' && clientSubDetails.isExpired;
 
-  // Workout Days State with LocalStorage Persistence
-  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>(() => {
-    const saved = localStorage.getItem('oao_workout_days');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_WORKOUT_DAYS;
-  });
+  // Workout Days State (Hydrated strictly from Supabase)
+  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>(INITIAL_WORKOUT_DAYS);
 
-  // Client Notes State with LocalStorage Persistence (Starts cleanly empty without mock data)
-  const [notes, setNotes] = useState<ClientNote[]>(() => {
-    const saved = localStorage.getItem('oao_client_notes');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return [];
-  });
+  // Client Notes State (Hydrated strictly from Supabase)
+  const [notes, setNotes] = useState<ClientNote[]>([]);
 
   const hydrateClientWorkspace = useCallback(
     async (params: {
@@ -215,16 +187,7 @@ function MainPortal() {
       setNotes(workspace.notes);
       setStreakData(workspace.streakData);
       setAthleteRank(workspace.athleteRank);
-
-      try {
-        localStorage.setItem('oao_client_profile', JSON.stringify(workspace.profile));
-        localStorage.setItem('oao_workout_days', JSON.stringify(workspace.workoutDays));
-        localStorage.setItem('oao_client_notes', JSON.stringify(workspace.notes));
-        localStorage.setItem('oao_streak_data', JSON.stringify(workspace.streakData));
-        localStorage.setItem('oao_athlete_rank', JSON.stringify(workspace.athleteRank));
-      } catch {
-        // ignore
-      }
+      if (workspace.badges) setBadges(workspace.badges);
     },
     []
   );
@@ -232,13 +195,7 @@ function MainPortal() {
   // Hydrate live workspace from Supabase when a subscriber session is active on mount
   useEffect(() => {
     if (userSession !== 'client') return;
-    let currentUser: { id?: string; email?: string; name?: string; plan?: SubscriptionPlanTier } | null = null;
-    try {
-      const raw = localStorage.getItem('oao_current_user');
-      if (raw) currentUser = JSON.parse(raw);
-    } catch {
-      currentUser = null;
-    }
+    const currentUser = getCurrentUserSession();
     const targetEmail = currentUser?.email || profile.email;
     const targetId = currentUser?.id || profile.id;
     if (!targetEmail && (!targetId || targetId === 'client_athlete')) return;
@@ -253,44 +210,38 @@ function MainPortal() {
 
   // Real-time synchronization for coach replies, athlete inquiries, profile updates, and login triggers
   useEffect(() => {
-    const handleSync = () => {
-      try {
-        const savedNotes = localStorage.getItem('oao_client_notes');
-        if (savedNotes) {
-          setNotes(JSON.parse(savedNotes));
-        }
-        const savedProfile = localStorage.getItem('oao_client_profile');
-        if (savedProfile) {
-          const parsed = JSON.parse(savedProfile) as ClientProfile;
-          setProfile((prev) => ({
-            ...prev,
-            ...parsed,
-            subscription_plan: normalizeSubscriptionPlan(parsed.subscription_plan || prev.subscription_plan),
-          }));
-        }
-        const savedWorkouts = localStorage.getItem('oao_workout_days');
-        if (savedWorkouts) {
-          setWorkoutDays(JSON.parse(savedWorkouts));
-        }
-      } catch {
-        // ignore
+    const handleNotesSync = () => {
+      const currentUser = getCurrentUserSession();
+      if (!currentUser && userSession !== 'client') return;
+      void fetchNotesFromSupabase({
+        clientId: currentUser?.id || profile.id,
+        clientEmail: currentUser?.email || profile.email,
+        clientName: currentUser?.name || profile.name,
+      }).then(setNotes);
+    };
+    const handleProfileSync = (e: Event) => {
+      const detail = (e as CustomEvent<ClientProfile | undefined>).detail;
+      if (detail) {
+        setProfile((prev) => ({
+          ...prev,
+          ...detail,
+          subscription_plan: normalizeSubscriptionPlan(detail.subscription_plan || prev.subscription_plan),
+        }));
       }
     };
     const handleOpenLogin = () => {
       setAuthModalInitialRole('client');
       setIsAuthModalOpen(true);
     };
-    window.addEventListener('oao_notes_updated', handleSync);
-    window.addEventListener('oao_profile_updated', handleSync);
-    window.addEventListener('storage', handleSync);
+    window.addEventListener('oao_notes_updated', handleNotesSync);
+    window.addEventListener('oao_profile_updated', handleProfileSync);
     window.addEventListener('oao-open-login-modal', handleOpenLogin);
     return () => {
-      window.removeEventListener('oao_notes_updated', handleSync);
-      window.removeEventListener('oao_profile_updated', handleSync);
-      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('oao_notes_updated', handleNotesSync);
+      window.removeEventListener('oao_profile_updated', handleProfileSync);
       window.removeEventListener('oao-open-login-modal', handleOpenLogin);
     };
-  }, []);
+  }, [userSession, profile.id, profile.email, profile.name]);
 
   // Modals state
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -314,42 +265,10 @@ function MainPortal() {
     return params.get('view') === 'plans';
   });
 
-  // Gamification & Streak State with LocalStorage Persistence
-  const [streakData, setStreakData] = useState<StreakData>(() => {
-    const saved = localStorage.getItem('oao_streak_data');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_STREAK_DATA;
-  });
-
-  const [badges, setBadges] = useState<Badge[]>(() => {
-    const saved = localStorage.getItem('oao_badges');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_BADGES;
-  });
-
-  const [athleteRank, setAthleteRank] = useState<AthleteRank>(() => {
-    const saved = localStorage.getItem('oao_athlete_rank');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_ATHLETE_RANK;
-  });
+  // Gamification & Streak State (Hydrated strictly from Supabase)
+  const [streakData, setStreakData] = useState<StreakData>(INITIAL_STREAK_DATA);
+  const [badges, setBadges] = useState<Badge[]>(INITIAL_BADGES);
+  const [athleteRank, setAthleteRank] = useState<AthleteRank>(INITIAL_ATHLETE_RANK);
 
   // Section references for smooth scrolling
   const portalRef = useRef<HTMLDivElement | null>(null);
@@ -393,17 +312,15 @@ function MainPortal() {
     localStorage.setItem('oao_theme', theme);
   }, [theme]);
 
-  // Auto-Save Profile
+  // Auto-Save Profile to Supabase
   const handleUpdateProfile = (newProfile: ClientProfile) => {
     setProfile(newProfile);
-    localStorage.setItem('oao_client_profile', JSON.stringify(newProfile));
-    syncProfileToSupabase(newProfile);
+    void syncProfileToSupabase(newProfile);
   };
 
-  // Auto-Save Workouts
+  // Auto-Save Workouts to Supabase
   const handleUpdateWorkouts = (newDays: WorkoutDay[]) => {
     setWorkoutDays(newDays);
-    localStorage.setItem('oao_workout_days', JSON.stringify(newDays));
     const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
     void syncWorkoutDaysToSupabase(canonicalKey, newDays, profile.email);
   };
@@ -417,17 +334,14 @@ function MainPortal() {
   // Gamification & Streak Handlers
   const handleUpdateStreakData = (newStreak: StreakData) => {
     setStreakData(newStreak);
-    localStorage.setItem('oao_streak_data', JSON.stringify(newStreak));
   };
 
   const handleUpdateBadges = (newBadges: Badge[]) => {
     setBadges(newBadges);
-    localStorage.setItem('oao_badges', JSON.stringify(newBadges));
   };
 
   const handleUpdateAthleteRank = (newRank: AthleteRank) => {
     setAthleteRank(newRank);
-    localStorage.setItem('oao_athlete_rank', JSON.stringify(newRank));
   };
 
   const handleLogTodayWorkout = () => {
@@ -534,7 +448,7 @@ function MainPortal() {
     );
   };
 
-  // Auto-Save Notes
+  // Auto-Save Notes to Supabase
   const handleAddNote = (newNoteData: Omit<ClientNote, 'id' | 'timestamp' | 'isResolved'>) => {
     const now = new Date();
     const timeString = `${now.toISOString().slice(0, 10)} ${String(now.getHours()).padStart(2, '0')}:${String(
@@ -543,6 +457,8 @@ function MainPortal() {
 
     const newNote: ClientNote = {
       ...newNoteData,
+      clientId: getCanonicalClientKey(profile.id, profile.email),
+      clientEmail: profile.email,
       id: `note_${Date.now()}`,
       timestamp: timeString,
       isResolved: false,
@@ -550,10 +466,9 @@ function MainPortal() {
 
     const updated = [newNote, ...notes];
     setNotes(updated);
-    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
-    window.dispatchEvent(new Event('storage'));
-    syncNoteToSupabase(newNote);
+    void syncNoteToSupabase(newNote).then(() => {
+      window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+    });
   };
 
   // Coach replies to note in Admin view
@@ -571,16 +486,15 @@ function MainPortal() {
           replyTimestamp: timeString,
           isResolved: true,
         };
-        syncNoteToSupabase(modified);
+        void syncNoteToSupabase(modified).then(() => {
+          window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+        });
         return modified;
       }
       return item;
     });
 
     setNotes(updated);
-    localStorage.setItem('oao_client_notes', JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('oao_notes_updated'));
-    window.dispatchEvent(new Event('storage'));
   };
 
   // Mandatory Declaration & Plan Checkout Handlers
@@ -608,7 +522,6 @@ function MainPortal() {
     athleteEmail: string
   ) => {
     setUserSession('client');
-    localStorage.setItem('oao_session', 'client');
 
     const resolvedDays =
       agreement.durationDays ||
@@ -625,6 +538,17 @@ function MainPortal() {
 
     const todayIso = agreement.startDate || getTodayIsoString();
     const calculatedEndDate = agreement.endDate || addDaysToDate(todayIso, resolvedDays);
+
+    const resolvedEmail = (athleteEmail || profile.email || '').trim().toLowerCase();
+
+    setCurrentUserSession({
+      id: resolvedEmail,
+      email: resolvedEmail,
+      name: athleteName || profile.name,
+      plan: resolvedPlan,
+      role: 'client',
+      phone: agreement.phoneWhatsapp || profile.phone,
+    });
 
     const updatedProfile: ClientProfile = {
       ...profile,
@@ -660,14 +584,8 @@ function MainPortal() {
   };
 
   const handleLogout = () => {
+    clearCurrentUserSession();
     setUserSession('guest');
-    localStorage.setItem('oao_session', 'guest');
-    localStorage.removeItem('oao_current_user');
-    localStorage.removeItem('oao_client_profile');
-    localStorage.removeItem('oao_workout_days');
-    localStorage.removeItem('oao_client_notes');
-    localStorage.removeItem('oao_streak_data');
-    localStorage.removeItem('oao_athlete_rank');
     setShowPlansForAthlete(false);
   };
 
@@ -679,35 +597,21 @@ function MainPortal() {
     clientId?: string
   ) => {
     if (role === 'admin') {
-      setUserSession('admin');
-      localStorage.setItem('oao_session', 'admin');
+      setCoachAuthenticated(true);
       navigate('/admin');
     } else {
       setUserSession('client');
-      localStorage.setItem('oao_session', 'client');
       const nextPlan = normalizeSubscriptionPlan(subscriptionPlan || 'standard');
       const resolvedId = getCanonicalClientKey(clientId, userEmail);
       const todayIso = getTodayIsoString();
 
-      try {
-        localStorage.removeItem('oao_client_profile');
-        localStorage.removeItem('oao_workout_days');
-        localStorage.removeItem('oao_client_notes');
-        localStorage.removeItem('oao_streak_data');
-        localStorage.removeItem('oao_athlete_rank');
-        localStorage.setItem(
-          'oao_current_user',
-          JSON.stringify({
-            id: resolvedId,
-            email: userEmail || '',
-            name: userName || INITIAL_CLIENT_PROFILE.name,
-            plan: nextPlan,
-            role: 'client',
-          })
-        );
-      } catch {
-        // ignore
-      }
+      setCurrentUserSession({
+        id: resolvedId,
+        email: userEmail || '',
+        name: userName || INITIAL_CLIENT_PROFILE.name,
+        plan: nextPlan,
+        role: 'client',
+      });
 
       const baselineProfile: ClientProfile = {
         ...INITIAL_CLIENT_PROFILE,
@@ -735,8 +639,7 @@ function MainPortal() {
   };
 
   const handleCoachPasskeySuccess = () => {
-    setUserSession('admin');
-    localStorage.setItem('oao_session', 'admin');
+    setCoachAuthenticated(true);
     navigate('/admin');
   };
 
@@ -957,23 +860,6 @@ function MainPortal() {
             </div>
           )}
 
-          {userSession === 'admin' && (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => navigate('/admin')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-bold cursor-pointer transition-all hover:scale-105 ${
-                  theme === 'dark'
-                    ? 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/40 text-blue-300'
-                    : 'bg-gradient-to-r from-[#0B132B] to-[#1C2541] text-white border-blue-500/40'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4 text-orange-400" />
-                <span>{language === 'ar' ? 'فتح لوحة تحكم الكوتش الموحدة' : 'Open Coach Admin Panel'}</span>
-              </button>
-            </div>
-          )}
-
           {/* Action Buttons: QR Share, Logins, Logout, Theme, Language */}
           <div className="flex items-center gap-2">
             {/* QR Code Generator Button for sharing Subscriptions directly */}
@@ -1011,7 +897,7 @@ function MainPortal() {
               </button>
             )}
 
-            {/* GUEST ACTIONS: Athlete Passcode Login + Coach Passkey */}
+            {/* GUEST ACTIONS: Athlete Login (Passcode / Email) + Coach Passkey */}
             {userSession === 'guest' && !isDirectPlansLanding && (
               <>
                 <button
@@ -1019,7 +905,7 @@ function MainPortal() {
                   className="px-3 sm:px-4 py-1.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-black text-xs tracking-wider uppercase shadow-[0_0_15px_rgba(249,115,22,0.4)] transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
                   <KeyRound className="w-3.5 h-3.5 text-white" />
-                  <span>{language === 'ar' ? 'دخول المشترك برمز سري' : 'Passcode Login'}</span>
+                  <span>{language === 'ar' ? 'دخول المشترك' : 'Subscriber Login'}</span>
                 </button>
 
                 <button
@@ -1038,7 +924,7 @@ function MainPortal() {
             )}
 
             {/* LOGGED IN LOGOUT BUTTON */}
-            {userSession !== 'guest' && (
+            {userSession === 'client' && (
               <button
                 onClick={handleLogout}
                 className="px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 hover:text-red-300 text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5"
@@ -1446,45 +1332,6 @@ function MainPortal() {
         </main>
       )}
 
-      {/* =========================================================================
-          VIEW 3: COACH ADMIN PORTAL (Unified single panel at /admin)
-          ========================================================================= */}
-      {!isDirectPlansLanding && userSession === 'admin' && (
-        <main className="max-w-7xl mx-auto px-3 sm:px-6 py-12 pb-20 relative z-20">
-          <div className="max-w-xl mx-auto p-8 rounded-3xl bg-[#0B132B]/90 border-2 border-orange-500/40 text-center space-y-5 shadow-2xl">
-            <div className="w-14 h-14 rounded-2xl bg-orange-500/20 border border-orange-500/40 text-orange-400 flex items-center justify-center mx-auto">
-              <ShieldCheck className="w-7 h-7" />
-            </div>
-            <h2 className="text-xl font-black text-white">
-              {language === 'ar' ? 'أهلاً بك كوتش عمر عدنان' : 'Welcome Coach Omar Adnan'}
-            </h2>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              {language === 'ar'
-                ? 'تم توحيد جميع صلاحيات الإدارة والتحليلات وإدارة المشتركين والتمارين والأنظمة الغذائية في لوحة تحكم واحدة.'
-                : 'All admin tools, analytics, subscribers, workouts, and nutrition editors are unified in the Coach Admin Panel.'}
-            </p>
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => navigate('/admin')}
-                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs sm:text-sm flex items-center gap-2 shadow-lg cursor-pointer transition-transform hover:scale-105"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>{language === 'ar' ? 'الدخول إلى لوحة التحكم الموحدة (/admin)' : 'Enter Coach Admin Panel'}</span>
-                <ArrowRight className="w-4 h-4 rtl:rotate-180" />
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/15 text-slate-300 font-bold text-xs cursor-pointer"
-              >
-                {language === 'ar' ? 'تسجيل الخروج' : 'Logout'}
-              </button>
-            </div>
-          </div>
-        </main>
-      )}
-
       {/* FOOTER */}
       <footer
         className={`border-t py-6 text-center text-xs transition-colors relative z-20 ${
@@ -1580,6 +1427,13 @@ function MainPortal() {
   );
 }
 
+function RequireCoachAuth({ children }: { children: React.ReactElement }) {
+  if (!isCoachAuthenticated()) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -1588,7 +1442,14 @@ export default function App() {
         <Route path="/subscribe" element={<StandaloneSubscribePage />} />
         <Route path="/standard" element={<StandardDashboard />} />
         <Route path="/vip" element={<VipDashboard />} />
-        <Route path="/admin" element={<AdminPanel />} />
+        <Route
+          path="/admin"
+          element={
+            <RequireCoachAuth>
+              <AdminPanel />
+            </RequireCoachAuth>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

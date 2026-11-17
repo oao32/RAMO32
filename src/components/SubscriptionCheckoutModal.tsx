@@ -43,7 +43,7 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { assignSubscriberPassword } from '../lib/authStore';
+import { assignSubscriberPassword, setCurrentUserSession } from '../lib/authStore';
 import { INITIAL_CLIENT_PROFILE } from '../data/initialData';
 
 export interface PlanDetails {
@@ -501,12 +501,9 @@ export const SubscriptionCheckoutModal: React.FC<SubscriptionCheckoutModalProps>
         status: 'active',
       });
 
-      const existingProfileRaw = localStorage.getItem('oao_client_profile');
-      const baseProfile = existingProfileRaw
-        ? { ...INITIAL_CLIENT_PROFILE, ...JSON.parse(existingProfileRaw) }
-        : INITIAL_CLIENT_PROFILE;
       const updatedProfile = {
-        ...baseProfile,
+        ...INITIAL_CLIENT_PROFILE,
+        id: cleanEmail,
         name: fullName.trim(),
         nameEn: fullName.trim(),
         email: cleanEmail,
@@ -520,9 +517,17 @@ export const SubscriptionCheckoutModal: React.FC<SubscriptionCheckoutModalProps>
         subscriptionStatus: 'active' as const,
         subscriptionDaysLeft: currentDurationInfo.days,
       };
-      localStorage.setItem('oao_client_profile', JSON.stringify(updatedProfile));
+      setCurrentUserSession({
+        id: cleanEmail,
+        email: cleanEmail,
+        name: fullName.trim(),
+        plan: resolvedPlanTier,
+        role: 'client',
+        clientCode: generatedCode,
+        phone: phoneWhatsapp.trim(),
+      });
       window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
-      syncProfileToSupabase(updatedProfile).catch(() => {});
+      await syncProfileToSupabase(updatedProfile);
     } catch (authErr) {
       console.warn('Auto provision credentials notice:', authErr);
     }
