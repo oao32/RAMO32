@@ -58,6 +58,7 @@ import {
   saveWorkoutTemplate,
   WorkoutTemplate,
 } from '../../lib/templateStore';
+import { toYouTubeEmbedUrl } from '../../lib/youtube';
 import {
   Users,
   Dumbbell,
@@ -135,6 +136,7 @@ export const AdminPanel: React.FC = () => {
   const [newExSets, setNewExSets] = useState(3);
   const [newExReps, setNewExReps] = useState('10 - 12');
   const [newExVideo, setNewExVideo] = useState('');
+  const [newExCoachWarning, setNewExCoachWarning] = useState('');
 
   // Day Rename / Customize & Add Day Modals
   const [isEditDayModalOpen, setIsEditDayModalOpen] = useState(false);
@@ -575,6 +577,7 @@ export const AdminPanel: React.FC = () => {
     setNewExSets(ex.setsCount);
     setNewExReps(ex.repsRange);
     setNewExVideo(ex.videoUrl || '');
+    setNewExCoachWarning(ex.coachWarning || '');
     setNewExerciseModalOpen(true);
   };
 
@@ -582,6 +585,9 @@ export const AdminPanel: React.FC = () => {
   const handleSaveExercise = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newExNameAr.trim()) return;
+
+    const normalizedVideoUrl = toYouTubeEmbedUrl(newExVideo) || undefined;
+    const normalizedCoachWarning = newExCoachWarning.trim() || undefined;
 
     if (editingExercise) {
       // Editing existing exercise
@@ -599,7 +605,8 @@ export const AdminPanel: React.FC = () => {
               targetMuscleEn: newExMuscle.trim() || 'Target Muscle',
               setsCount: Number(newExSets) || 3,
               repsRange: newExReps.trim() || '10 - 12',
-              videoUrl: newExVideo.trim() || undefined,
+              videoUrl: normalizedVideoUrl,
+              coachWarning: normalizedCoachWarning,
             };
           }),
         };
@@ -617,7 +624,8 @@ export const AdminPanel: React.FC = () => {
         setsCount: Number(newExSets) || 3,
         repsRange: newExReps.trim() || '10 - 12',
         recommendedRestSeconds: 90,
-        videoUrl: newExVideo.trim() || undefined,
+        videoUrl: normalizedVideoUrl,
+        coachWarning: normalizedCoachWarning,
         formTipsAr: ['أداء منضبط وتحكم كامل في المدى الحركي'],
         formTipsEn: ['Controlled cadence and full range of motion'],
         sets: Array.from({ length: Number(newExSets) || 3 }, (_, idx) => ({
@@ -642,6 +650,7 @@ export const AdminPanel: React.FC = () => {
     setNewExNameEn('');
     setNewExMuscle('');
     setNewExVideo('');
+    setNewExCoachWarning('');
     setNewExerciseModalOpen(false);
   };
 
@@ -955,6 +964,7 @@ export const AdminPanel: React.FC = () => {
                     setNewExSets(3);
                     setNewExReps('10 - 12');
                     setNewExVideo('');
+                    setNewExCoachWarning('');
                     setNewExerciseModalOpen(true);
                   }}
                   className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs flex items-center gap-2 cursor-pointer shadow-lg"
@@ -1872,11 +1882,22 @@ export const AdminPanel: React.FC = () => {
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">رابط فيديو التمرين (يوتيوب اختياري):</label>
                 <input
-                  type="url"
+                  type="text"
                   value={newExVideo}
                   onChange={(e) => setNewExVideo(e.target.value)}
                   placeholder="https://www.youtube.com/watch?v=..."
                   className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 text-white text-xs outline-none focus:border-orange-500 font-mono text-start"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">تنبيه الكوتش:</label>
+                <textarea
+                  rows={3}
+                  value={newExCoachWarning}
+                  onChange={(e) => setNewExCoachWarning(e.target.value)}
+                  placeholder="لا تضحِّ بالتكنيك والمدى الحركي الكامل من أجل زيادة الوزن. الأولوية لعصر العضلة وحمايتك من الإصابات."
+                  className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 text-white text-xs outline-none focus:border-orange-500 resize-none"
                 />
               </div>
 

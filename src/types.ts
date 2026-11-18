@@ -103,6 +103,7 @@ export interface Exercise {
   repsRange: string;
   recommendedRestSeconds: number;
   videoUrl?: string;
+  coachWarning?: string;
   thumbnailUrl?: string;
   formTipsAr: string[];
   formTipsEn: string[];

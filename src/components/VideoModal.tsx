@@ -1,6 +1,12 @@
 import React from 'react';
-import { X, Play, CheckCircle2, AlertTriangle, Clock, Target } from 'lucide-react';
+import { X, Play, AlertTriangle, Clock, Target } from 'lucide-react';
 import { Exercise, Language } from '../types';
+import { toYouTubeEmbedUrl } from '../lib/youtube';
+
+const DEFAULT_COACH_WARNING_AR =
+  'لا تضحِّ بالتكنيك والمدى الحركي الكامل من أجل زيادة الوزن. الأولوية لعصر العضلة وحمايتك من الإصابات.';
+const DEFAULT_COACH_WARNING_EN =
+  'Never compromise full range of motion for heavier weight. Prioritize mind-muscle connection and joint longevity.';
 
 interface VideoModalProps {
   exercise: Exercise | null;
@@ -16,6 +22,11 @@ export const VideoModal: React.FC<VideoModalProps> = ({
   language,
 }) => {
   if (!isOpen || !exercise) return null;
+
+  const embedUrl = toYouTubeEmbedUrl(exercise.videoUrl);
+  const coachWarningText =
+    exercise.coachWarning?.trim() ||
+    (language === 'ar' ? DEFAULT_COACH_WARNING_AR : DEFAULT_COACH_WARNING_EN);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
@@ -52,57 +63,30 @@ export const VideoModal: React.FC<VideoModalProps> = ({
         </div>
 
         {/* Video Player Box */}
-        <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black/90 border border-white/10 mb-4 shadow-inner flex items-center justify-center group">
-          {exercise.videoUrl ? (
+        {embedUrl ? (
+          <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black/90 border border-white/10 mb-4 shadow-inner">
             <iframe
-              src={exercise.videoUrl}
+              src={embedUrl}
               title={exercise.nameEn}
               className="w-full h-full border-0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
-          ) : (
-            <div className="flex flex-col items-center justify-center p-6 text-center">
-              <Play className="w-12 h-12 text-orange-400/80 mb-2 group-hover:scale-110 transition-transform" />
-              <p className="text-sm font-bold text-white">
-                {language === 'ar' ? 'عرض توضيحي ثلاثي الأبعاد للتمرين' : '3D Form Demonstration'}
-              </p>
-              <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                {language === 'ar'
-                  ? 'يتم تشغيل الفيديو المعتمد من قبل الكوتش عمر عدنان لشرح التكنيك الصحيح بدقة'
-                  : 'Approved form demonstration verified by Coach Omar Adnan'}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Coaching Form Tips */}
-        <div className="space-y-3">
-          <div className="bg-[#070a14] p-4 rounded-2xl border border-orange-500/20">
-            <h4 className="font-bold text-orange-400 text-xs md:text-sm mb-2 flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>{language === 'ar' ? 'تعليمات الأداء والتكنيك المعتمد' : 'Coaching Cues & Proper Execution'}</span>
-            </h4>
-            <ul className="space-y-1.5 text-xs text-slate-200">
-              {(language === 'ar' ? exercise.formTipsAr : exercise.formTipsEn).map((tip, idx) => (
-                <li key={idx} className="flex items-start gap-2">
-                  <span className="text-orange-400 font-bold">•</span>
-                  <span>{tip}</span>
-                </li>
-              ))}
-            </ul>
           </div>
+        ) : (
+          <div className="w-full rounded-2xl bg-[#070a14] border border-white/10 p-6 mb-4 text-center">
+            <p className="text-xs font-bold text-slate-400">
+              {language === 'ar' ? 'الفيديو غير متوفر' : 'Video unavailable'}
+            </p>
+          </div>
+        )}
 
-          <div className="bg-amber-950/20 border border-amber-500/30 p-3 rounded-2xl text-xs text-amber-300 flex items-start gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">{language === 'ar' ? 'تنبيه الكوتش: ' : "Coach's Warning: "}</span>
-              <span>
-                {language === 'ar'
-                  ? 'لا تضحِّ بالتكنيك والمدى الحركي الكامل من أجل زيادة الوزن. الأولوية لعصر العضلة وحمايتك من الإصابات.'
-                  : 'Never compromise full range of motion for heavier weight. Prioritize mind-muscle connection and joint longevity.'}
-              </span>
-            </div>
+        {/* Coach's Warning */}
+        <div className="bg-amber-950/20 border border-amber-500/30 p-3 rounded-2xl text-xs text-amber-300 flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">{language === 'ar' ? 'تنبيه الكوتش: ' : "Coach's Warning: "}</span>
+            <span>{coachWarningText}</span>
           </div>
         </div>
 
