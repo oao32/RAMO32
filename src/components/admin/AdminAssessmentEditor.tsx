@@ -6,8 +6,8 @@ import {
   AthleteRank,
 } from '../../types';
 import {
-  INITIAL_STREAK_DATA,
-  INITIAL_ATHLETE_RANK,
+  createNeutralStreakData,
+  createNeutralAthleteRank,
 } from '../../data/initialData';
 import {
   getCanonicalClientKey,
@@ -99,11 +99,11 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
 
   // Streak & Rank State
   const [streakData, setStreakData] = useState<StreakData>(
-    () => profile.streakData || INITIAL_STREAK_DATA
+    () => profile.streakData || createNeutralStreakData()
   );
 
   const [athleteRank, setAthleteRank] = useState<AthleteRank>(
-    () => profile.athleteRank || INITIAL_ATHLETE_RANK
+    () => profile.athleteRank || createNeutralAthleteRank()
   );
 
   const [savedNotice, setSavedNotice] = useState(false);
@@ -111,8 +111,8 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
   // Re-hydrate editor fields automatically whenever the selected target subscriber's profile changes
   useEffect(() => {
     setAnalysisData(profile.analysisData || buildDefaultAnalysisData());
-    setStreakData(profile.streakData || INITIAL_STREAK_DATA);
-    setAthleteRank(profile.athleteRank || INITIAL_ATHLETE_RANK);
+    setStreakData(profile.streakData || createNeutralStreakData());
+    setAthleteRank(profile.athleteRank || createNeutralAthleteRank());
   }, [profile.id, profile.email, profile.analysisData, profile.streakData, profile.athleteRank]);
 
   // Form field helpers
@@ -145,16 +145,24 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
     ]);
 
     window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
-    window.dispatchEvent(new CustomEvent('oao_streak_updated', { detail: streakData }));
-    window.dispatchEvent(new CustomEvent('oao_rank_updated', { detail: athleteRank }));
+    window.dispatchEvent(
+      new CustomEvent('oao_streak_updated', {
+        detail: { ...streakData, clientId: canonicalKey, email: updatedProfile.email },
+      })
+    );
+    window.dispatchEvent(
+      new CustomEvent('oao_rank_updated', {
+        detail: { ...athleteRank, clientId: canonicalKey, email: updatedProfile.email },
+      })
+    );
 
     setSavedNotice(true);
     setTimeout(() => setSavedNotice(false), 3000);
   };
 
   const handleResetAssessment = () => {
-    const resetStreak = INITIAL_STREAK_DATA;
-    const resetRank = INITIAL_ATHLETE_RANK;
+    const resetStreak = createNeutralStreakData();
+    const resetRank = createNeutralAthleteRank();
     setStreakData(resetStreak);
     setAthleteRank(resetRank);
     setAnalysisData({

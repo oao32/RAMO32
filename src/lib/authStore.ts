@@ -1,6 +1,7 @@
 import { Role, SubscriptionPlanTier } from '../types';
 import {
   formatSupabaseErrorMessage,
+  generateSecureAccessToken,
   getSupabaseClient,
   isCoachIdConstraintError,
   isMissingTableError as isMissingTableErrShared,
@@ -15,6 +16,7 @@ export interface UserCredentialRecord {
   password: string;
   clientName: string;
   clientCode?: string;
+  accessToken?: string;
   plan: SubscriptionPlanTier;
   phone?: string;
   status: 'active' | 'suspended' | 'expiring' | 'expired';
@@ -38,6 +40,7 @@ export interface CurrentUserSession {
   role: Role;
   clientCode?: string;
   phone?: string;
+  accessToken?: string;
 }
 
 const COACH_AUTH_SESSION_KEY = 'oao_coach_authenticated';
@@ -153,6 +156,7 @@ function mapSubscribersRowToRecord(row: Record<string, unknown>): UserCredential
   const rawPass = row.passcode ?? row.password ?? row.assigned_password;
   const rawTier = row.tier ?? row.subscription_plan ?? row.package_type_en;
   const rawGoals = row.goals ?? row.visual_goal;
+  const rawToken = typeof row.access_token === 'string' ? row.access_token.trim() : '';
 
   return {
     id: row.id ? String(row.id) : undefined,
@@ -164,6 +168,7 @@ function mapSubscribersRowToRecord(row: Record<string, unknown>): UserCredential
       : rawPass
       ? String(rawPass)
       : undefined,
+    accessToken: rawToken || undefined,
     plan: normalizeSubscriptionPlan(typeof rawTier === 'string' ? rawTier : undefined),
     phone: row.phone ? String(row.phone) : undefined,
     status: (row.status as UserCredentialRecord['status']) || 'active',
@@ -238,6 +243,7 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
         const mirror = authByEmail.get(mapped.email);
         if (mirror) {
           if (!mapped.clientCode && mirror.clientCode) mapped.clientCode = String(mirror.clientCode);
+          if (!mapped.accessToken && mirror.accessToken) mapped.accessToken = String(mirror.accessToken).trim();
           if (!mapped.phone && mirror.phone) mapped.phone = String(mirror.phone);
           if (!mapped.age && mirror.age) mapped.age = Number(mirror.age);
           if (!mapped.bloodType && mirror.bloodType) mapped.bloodType = String(mirror.bloodType);
@@ -254,10 +260,12 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
         const cleanEmail = String(row.email).trim().toLowerCase();
         const mirror = authByEmail.get(cleanEmail);
         const existingSub = mergedByEmail.get(cleanEmail);
+        const clientToken = typeof row.access_token === 'string' ? row.access_token.trim() : '';
 
         if (existingSub) {
           if (!existingSub.phone && row.phone) existingSub.phone = String(row.phone);
           if (!existingSub.clientCode && row.client_code) existingSub.clientCode = String(row.client_code);
+          if (!existingSub.accessToken && clientToken) existingSub.accessToken = clientToken;
           if (!existingSub.visualGoal && row.visual_goal) existingSub.visualGoal = String(row.visual_goal);
           if (!existingSub.age && row.age !== null && row.age !== undefined) existingSub.age = Number(row.age);
           if (!existingSub.bloodType && row.blood_type) existingSub.bloodType = String(row.blood_type);
@@ -280,6 +288,9 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
             : mirror?.clientCode
             ? String(mirror.clientCode)
             : undefined,
+          accessToken:
+            clientToken ||
+            (typeof mirror?.accessToken === 'string' ? mirror.accessToken.trim() : undefined),
           plan: normalizeSubscriptionPlan(
             (row.subscription_plan as string) || (mirror?.plan as string)
           ),
@@ -333,6 +344,10 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
           password: mirror.password ? String(mirror.password) : 'OAO-2026',
           clientName: String(mirror.clientName || 'مشترك'),
           clientCode: mirror.clientCode ? String(mirror.clientCode) : undefined,
+          accessToken:
+            typeof mirror.accessToken === 'string' && mirror.accessToken.trim()
+              ? mirror.accessToken.trim()
+              : undefined,
           plan: normalizeSubscriptionPlan(mirror.plan as string),
           phone: mirror.phone ? String(mirror.phone) : undefined,
           status: (mirror.status as UserCredentialRecord['status']) || 'active',
@@ -369,6 +384,7 @@ export async function assignSubscriberPassword(params: {
   password: string;
   clientName: string;
   clientCode?: string;
+  accessToken?: string;
   plan?: SubscriptionPlanTier;
   phone?: string;
   status?: 'active' | 'suspended' | 'expiring' | 'expired';
@@ -406,6 +422,30 @@ export async function assignSubscriberPassword(params: {
     (existingRecord?.id && UUID_REGEX.test(existingRecord.id) ? existingRecord.id : undefined) ||
     generateRecordUUID();
 
+  // Preserve any existing access_token in DB before minting a fresh token
+  let existingDbToken = '';
+  try {
+    const [{ data: subTokRow }, { data: clientTokRow }] = await Promise.all([
+      supabase.from('subscribers').select('access_token').ilike('email', cleanEmail).limit(1).maybeSingle(),
+      supabase.from('clients').select('access_token').ilike('email', cleanEmail).limit(1).maybeSingle(),
+    ]);
+    existingDbToken =
+      (subTokRow && typeof (subTokRow as Record<string, unknown>).access_token === 'string'
+        ? String((subTokRow as Record<string, unknown>).access_token).trim()
+        : '') ||
+      (clientTokRow && typeof (clientTokRow as Record<string, unknown>).access_token === 'string'
+        ? String((clientTokRow as Record<string, unknown>).access_token).trim()
+        : '');
+  } catch {
+    // Ignore if access_token column hasn't been added yet
+  }
+
+  const resolvedAccessToken =
+    (params.accessToken && params.accessToken.trim()) ||
+    (existingRecord?.accessToken && existingRecord.accessToken.trim()) ||
+    existingDbToken ||
+    generateSecureAccessToken();
+
   const updatedRecord: UserCredentialRecord = {
     id: resolvedId,
     email: cleanEmail,
@@ -416,6 +456,7 @@ export async function assignSubscriberPassword(params: {
       existingRecord?.clientCode ||
       cleanPass ||
       `OAO-${normalizedPlan === 'VIP' ? 'VIP' : 'STD'}-${Math.floor(100 + Math.random() * 900)}`,
+    accessToken: resolvedAccessToken,
     plan: normalizedPlan,
     phone: params.phone !== undefined ? params.phone : existingRecord?.phone,
     status: params.status || existingRecord?.status || 'active',
@@ -444,9 +485,10 @@ export async function assignSubscriberPassword(params: {
           body: JSON.stringify({ record: updatedRecord }),
         });
         if (proxyRes.ok) {
-          const proxyJson = (await proxyRes.json()) as { success?: boolean; id?: string };
+          const proxyJson = (await proxyRes.json()) as { success?: boolean; id?: string; accessToken?: string };
           if (proxyJson.success) {
             if (proxyJson.id) updatedRecord.id = proxyJson.id;
+            if (proxyJson.accessToken) updatedRecord.accessToken = proxyJson.accessToken;
             updatedRecord.syncedToSupabase = true;
             const latest = [...subscribersMemoryCache];
             const idx = latest.findIndex((u) => u.email.toLowerCase() === cleanEmail);
@@ -488,6 +530,7 @@ export async function assignSubscriberPassword(params: {
         email: cleanEmail,
         passcode: cleanPass,
         client_code: updatedRecord.clientCode,
+        access_token: resolvedAccessToken,
         tier: normalizedPlan,
         goals: updatedRecord.visualGoal || null,
         phone: updatedRecord.phone || null,
@@ -581,6 +624,7 @@ export async function assignSubscriberPassword(params: {
         package_type_en: normalizedPlan,
         phone: updatedRecord.phone || null,
         client_code: updatedRecord.clientCode,
+        access_token: resolvedAccessToken,
         status: updatedRecord.status,
         assigned_password: cleanPass,
         age: updatedRecord.age ?? null,
@@ -716,65 +760,448 @@ export async function assignSubscriberPassword(params: {
 }
 
 /**
- * Permanently deletes a subscriber cascading through subscribers, clients, declarations, workouts, notes, and profiles in Supabase.
+ * Ensures a subscriber has an isolated, non-guessable access_token persisted in Supabase
+ * without touching or overwriting any other subscriber or existing token.
  */
-export async function deleteSubscriberRecord(email: string): Promise<boolean> {
-  const cleanEmail = email.trim().toLowerCase();
+export async function ensureSubscriberAccessToken(user: {
+  id?: string;
+  email: string;
+  accessToken?: string;
+  clientName?: string;
+  plan?: SubscriptionPlanTier;
+  password?: string;
+  clientCode?: string;
+}): Promise<{ success: boolean; accessToken?: string; error?: string }> {
+  const cleanEmail = (user.email || '').trim().toLowerCase();
+  const cachedUser = subscribersMemoryCache.find((u) => u.email.toLowerCase() === cleanEmail);
+  const existingToken = (user.accessToken || cachedUser?.accessToken || '').trim();
+  if (existingToken) {
+    return { success: true, accessToken: existingToken };
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase || !cleanEmail) {
+    return {
+      success: false,
+      error: 'قاعدة البيانات السحابية Supabase غير متصلة لتوليد رابط المشترك.',
+    };
+  }
+
+  try {
+    // 1. Check live Supabase first in case another device/SQL backfill already generated it
+    const [{ data: subRow }, { data: clientRow }] = await Promise.all([
+      supabase.from('subscribers').select('id, access_token').ilike('email', cleanEmail).limit(1).maybeSingle(),
+      supabase.from('clients').select('id, access_token').ilike('email', cleanEmail).limit(1).maybeSingle(),
+    ]);
+
+    const liveToken =
+      (subRow && typeof (subRow as Record<string, unknown>).access_token === 'string'
+        ? String((subRow as Record<string, unknown>).access_token).trim()
+        : '') ||
+      (clientRow && typeof (clientRow as Record<string, unknown>).access_token === 'string'
+        ? String((clientRow as Record<string, unknown>).access_token).trim()
+        : '');
+
+    if (liveToken) {
+      const updatedList = subscribersMemoryCache.map((u) =>
+        u.email.toLowerCase() === cleanEmail ? { ...u, accessToken: liveToken } : u
+      );
+      saveSubscribersList(updatedList);
+      return { success: true, accessToken: liveToken };
+    }
+
+    // 2. Mint a fresh isolated token and persist strictly on this subscriber's rows
+    const mintedToken = generateSecureAccessToken();
+    const nowIso = new Date().toISOString();
+
+    const [subUpd, clientUpd] = await Promise.all([
+      supabase.from('subscribers').update({ access_token: mintedToken, updated_at: nowIso }).ilike('email', cleanEmail),
+      supabase.from('clients').update({ access_token: mintedToken }).ilike('email', cleanEmail),
+    ]);
+
+    const hardSubErr =
+      subUpd.error && !isMissingTableError(subUpd.error) && !isMissingColumnError(subUpd.error)
+        ? subUpd.error
+        : null;
+    const hardClientErr =
+      clientUpd.error && !isMissingTableError(clientUpd.error) && !isMissingColumnError(clientUpd.error)
+        ? clientUpd.error
+        : null;
+
+    if (hardSubErr && hardClientErr) {
+      return { success: false, error: formatSupabaseErrorMessage(hardSubErr) };
+    }
+
+    // Also update client_auth mirror if present
+    try {
+      const { data: authMirror } = await supabase
+        .from('workouts')
+        .select('id, workout_data')
+        .eq('id', `auth_${cleanEmail}`)
+        .maybeSingle();
+
+      if (authMirror && authMirror.workout_data) {
+        const wData = authMirror.workout_data as Record<string, unknown>;
+        await supabase
+          .from('workouts')
+          .update({
+            workout_data: { ...wData, accessToken: mintedToken, updatedAt: nowIso },
+            updated_at: nowIso,
+          })
+          .eq('id', `auth_${cleanEmail}`);
+      }
+    } catch {
+      // ignore if workouts mirror is absent
+    }
+
+    const updatedList = subscribersMemoryCache.map((u) =>
+      u.email.toLowerCase() === cleanEmail ? { ...u, accessToken: mintedToken } : u
+    );
+    saveSubscribersList(updatedList);
+    return { success: true, accessToken: mintedToken };
+  } catch (err) {
+    return { success: false, error: formatSupabaseErrorMessage(err) };
+  }
+}
+
+/**
+ * Authenticates an isolated subscriber portal `/s/:token` strictly by exact `access_token` match in Supabase.
+ * Never falls back to any default/first subscriber row.
+ */
+export async function authenticateByAccessToken(token: string): Promise<{
+  success: boolean;
+  role: Role;
+  id?: string;
+  email: string;
+  name: string;
+  plan: SubscriptionPlanTier;
+  clientCode?: string;
+  phone?: string;
+  accessToken?: string;
+  status?: UserCredentialRecord['status'];
+  error?: string;
+}> {
+  const cleanToken = (token || '').trim();
+  if (!cleanToken || cleanToken.length < 8) {
+    return {
+      success: false,
+      role: 'client',
+      email: '',
+      name: 'مشترك',
+      plan: 'standard',
+      error: 'رابط الدخول الخاص غير صالح.',
+    };
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return {
+      success: false,
+      role: 'client',
+      email: '',
+      name: 'مشترك',
+      plan: 'standard',
+      error: 'قاعدة البيانات السحابية Supabase غير متصلة حالياً.',
+    };
+  }
+
+  try {
+    let matchedRecord: UserCredentialRecord | null = null;
+
+    // 1. Primary lookup in `subscribers` by exact access_token
+    const { data: subRow, error: subErr } = await supabase
+      .from('subscribers')
+      .select('*')
+      .eq('access_token', cleanToken)
+      .limit(1)
+      .maybeSingle();
+
+    if (!subErr && subRow) {
+      matchedRecord = mapSubscribersRowToRecord(subRow as Record<string, unknown>);
+    }
+
+    // 2. Lookup in `clients` by exact access_token if not found yet
+    if (!matchedRecord) {
+      const { data: clientRow, error: clientErr } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('access_token', cleanToken)
+        .limit(1)
+        .maybeSingle();
+
+      if (!clientErr && clientRow) {
+        const cRow = clientRow as Record<string, unknown>;
+        matchedRecord = mapSubscribersRowToRecord({
+          ...cRow,
+          passcode: cRow.assigned_password ?? cRow.client_code,
+          tier: cRow.subscription_plan ?? cRow.package_type_en,
+          name: cRow.name_ar ?? cRow.name_en,
+          goals: cRow.visual_goal,
+          access_token: cRow.access_token,
+        });
+      }
+    }
+
+    // 3. Fallback strict filter inside `workouts(day_key='client_auth')`
+    if (!matchedRecord) {
+      const { data: authRows, error: authErr } = await supabase
+        .from('workouts')
+        .select('*')
+        .eq('day_key', 'client_auth');
+
+      if (!authErr && Array.isArray(authRows)) {
+        for (const row of authRows as Array<Record<string, unknown>>) {
+          const w = (row.workout_data || {}) as Record<string, unknown>;
+          const rowToken = typeof w.accessToken === 'string' ? w.accessToken.trim() : '';
+          if (rowToken && rowToken === cleanToken && typeof w.email === 'string') {
+            matchedRecord = {
+              id: w.id ? String(w.id) : row.client_id ? String(row.client_id) : undefined,
+              email: w.email.trim().toLowerCase(),
+              password: w.password ? String(w.password) : 'OAO-2026',
+              clientName: String(w.clientName || 'مشترك'),
+              clientCode: w.clientCode ? String(w.clientCode) : undefined,
+              accessToken: rowToken,
+              plan: normalizeSubscriptionPlan(w.plan as string),
+              phone: w.phone ? String(w.phone) : undefined,
+              status: (w.status as UserCredentialRecord['status']) || 'active',
+              createdAt: String(w.createdAt || new Date().toISOString()),
+              updatedAt: String(w.updatedAt || new Date().toISOString()),
+              assignedByCoach: true,
+              syncedToSupabase: true,
+            };
+            break;
+          }
+        }
+      }
+    }
+
+    if (!matchedRecord) {
+      return {
+        success: false,
+        role: 'client',
+        email: '',
+        name: 'مشترك',
+        plan: 'standard',
+        error: 'الرابط الخاص غير صالح أو تم إلغاء تفعيل الحساب.',
+      };
+    }
+
+    if (matchedRecord.status === 'suspended') {
+      return {
+        success: false,
+        role: 'client',
+        id: matchedRecord.id,
+        email: matchedRecord.email,
+        name: matchedRecord.clientName,
+        plan: matchedRecord.plan,
+        status: 'suspended',
+        error: 'تم تعليق هذا الحساب مؤقتاً من قبل الكوتش. يرجى التواصل مع الإدارة.',
+      };
+    }
+
+    return {
+      success: true,
+      role: matchedRecord.email === 'coach.omar@oao.com' ? 'admin' : 'client',
+      id: matchedRecord.id,
+      email: matchedRecord.email,
+      name: matchedRecord.clientName,
+      plan: matchedRecord.plan,
+      clientCode: matchedRecord.clientCode,
+      phone: matchedRecord.phone,
+      accessToken: matchedRecord.accessToken || cleanToken,
+      status: matchedRecord.status,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      role: 'client',
+      email: '',
+      name: 'مشترك',
+      plan: 'standard',
+      error: formatSupabaseErrorMessage(err),
+    };
+  }
+}
+
+/**
+ * Permanently deletes a subscriber cascading through subscribers, clients, declarations, workouts, notes, profiles,
+ * and ai_generation_logs in Supabase. Verifies post-delete removal so silent RLS 0-row blocks never pretend success.
+ */
+export async function deleteSubscriberRecord(
+  target: string | { email: string; id?: string; accessToken?: string }
+): Promise<{ success: boolean; error?: string }> {
+  const rawEmail = typeof target === 'string' ? target : target.email;
+  const cleanEmail = (rawEmail || '').trim().toLowerCase();
   const targetUser = subscribersMemoryCache.find((u) => u.email.toLowerCase() === cleanEmail);
+  const explicitId = typeof target === 'string' ? targetUser?.id : target.id || targetUser?.id;
+  const explicitToken =
+    typeof target === 'string' ? targetUser?.accessToken : target.accessToken || targetUser?.accessToken;
+
+  if (!cleanEmail && !explicitId && !explicitToken) {
+    return { success: false, error: 'تعذر تحديد المشترك المطلوب حذفه.' };
+  }
 
   if (typeof window !== 'undefined') {
     try {
       const proxyRes = await fetch('/api/admin/subscribers', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, id: targetUser?.id }),
+        body: JSON.stringify({ email: cleanEmail, id: explicitId, accessToken: explicitToken }),
       });
       if (proxyRes.ok) {
         const filtered = subscribersMemoryCache.filter((u) => u.email.toLowerCase() !== cleanEmail);
         saveSubscribersList(filtered);
-        return true;
+        return { success: true };
+      }
+      if (proxyRes.status !== 404 && proxyRes.status !== 405 && proxyRes.status !== 501) {
+        const errJson = (await proxyRes.json().catch(() => ({}))) as { error?: string; fallbackToClient?: boolean };
+        if (!errJson.fallbackToClient) {
+          return {
+            success: false,
+            error: errJson.error ? formatSupabaseErrorMessage(errJson.error) : 'تعذر حذف المشترك من الخادم.',
+          };
+        }
       }
     } catch {
-      // fall through to direct Supabase client
+      // Static hosting (Cloudflare Pages) or offline proxy -> proceed directly via Supabase client
     }
   }
 
   const supabase = getSupabaseClient();
-  if (!supabase) return false;
+  if (!supabase) {
+    return { success: false, error: 'قاعدة البيانات السحابية Supabase غير متصلة.' };
+  }
 
   try {
-    const [{ data: cloudSub }, { data: cloudClient }] = await Promise.all([
-      supabase.from('subscribers').select('id').ilike('email', cleanEmail).limit(1).maybeSingle(),
-      supabase.from('clients').select('id').ilike('email', cleanEmail).limit(1).maybeSingle(),
+    // 1. Gather all matching rows & candidate keys before deletion
+    const candidateIds = new Set<string>();
+    const candidateEmails = new Set<string>();
+    if (cleanEmail) candidateEmails.add(cleanEmail);
+    if (explicitId) candidateIds.add(String(explicitId));
+
+    const [subRowsRes, clientRowsRes] = await Promise.all([
+      cleanEmail
+        ? supabase.from('subscribers').select('id, email').ilike('email', cleanEmail)
+        : explicitId
+        ? supabase.from('subscribers').select('id, email').eq('id', explicitId)
+        : Promise.resolve({ data: null, error: null }),
+      cleanEmail
+        ? supabase.from('clients').select('id, email').ilike('email', cleanEmail)
+        : explicitId
+        ? supabase.from('clients').select('id, email').eq('id', explicitId)
+        : Promise.resolve({ data: null, error: null }),
     ]);
 
-    const resolvedId =
-      (cloudClient && typeof cloudClient.id === 'string' ? cloudClient.id : undefined) ||
-      (cloudSub && cloudSub.id !== undefined ? String(cloudSub.id) : undefined) ||
-      targetUser?.id;
-
-    await supabase.from('subscribers').delete().ilike('email', cleanEmail);
-    await supabase.from('clients').delete().ilike('email', cleanEmail);
-    await supabase.from('declarations').delete().ilike('email', cleanEmail);
-    await supabase.from('workouts').delete().eq('id', `auth_${cleanEmail}`);
-
-    const candidateKeys = [resolvedId, cleanEmail].filter((k): k is string => Boolean(k));
-    for (const k of candidateKeys) {
-      await supabase.from('workouts').delete().eq('client_id', k);
-      await supabase.from('workouts').delete().eq('id', `workouts_${k}`);
-      await supabase.from('workouts').delete().eq('id', `nutrition_${k}`);
-      await supabase.from('workouts').delete().eq('id', `assessment_${k}`);
-      await supabase.from('workouts').delete().eq('id', `profile_ext_${k}`);
-      await supabase.from('notes').delete().eq('client_id', k);
-      await supabase.from('profiles').delete().eq('id', k);
+    if (Array.isArray(subRowsRes.data)) {
+      for (const r of subRowsRes.data as Array<Record<string, unknown>>) {
+        if (r.id !== undefined && r.id !== null) candidateIds.add(String(r.id));
+        if (typeof r.email === 'string' && r.email.trim()) candidateEmails.add(r.email.trim().toLowerCase());
+      }
+    }
+    if (Array.isArray(clientRowsRes.data)) {
+      for (const r of clientRowsRes.data as Array<Record<string, unknown>>) {
+        if (r.id !== undefined && r.id !== null) candidateIds.add(String(r.id));
+        if (typeof r.email === 'string' && r.email.trim()) candidateEmails.add(r.email.trim().toLowerCase());
+      }
     }
 
-    const filtered = subscribersMemoryCache.filter((u) => u.email.toLowerCase() !== cleanEmail);
+    const candidateKeys = Array.from(new Set([...candidateIds, ...candidateEmails]));
+    const errors: string[] = [];
+
+    const checkDeleteErr = (err: { code?: string; message?: string } | null | undefined) => {
+      if (!err) return;
+      if (isMissingTableError(err) || isMissingTableErrShared(err) || isMissingColumnError(err)) return;
+      errors.push(formatSupabaseErrorMessage(err));
+    };
+
+    // 2. Delete child records first (avoid FK constraint violations)
+    for (const em of candidateEmails) {
+      const [wAuthRes, notesEmailRes, declRes] = await Promise.all([
+        supabase.from('workouts').delete().eq('id', `auth_${em}`),
+        supabase.from('notes').delete().ilike('client_email', em),
+        supabase.from('declarations').delete().ilike('email', em),
+      ]);
+      checkDeleteErr(wAuthRes.error);
+      checkDeleteErr(notesEmailRes.error);
+      checkDeleteErr(declRes.error);
+    }
+
+    for (const k of candidateKeys) {
+      const childOps = await Promise.all([
+        supabase.from('notes').delete().eq('client_id', k),
+        supabase.from('workouts').delete().eq('client_id', k),
+        supabase.from('workouts').delete().eq('id', `workouts_${k}`),
+        supabase.from('workouts').delete().eq('id', `nutrition_${k}`),
+        supabase.from('workouts').delete().eq('id', `assessment_${k}`),
+        supabase.from('workouts').delete().eq('id', `profile_ext_${k}`),
+        supabase.from('ai_generation_logs').delete().eq('client_id', k),
+        supabase.from('profiles').delete().eq('id', k),
+      ]);
+      for (const op of childOps) checkDeleteErr(op.error);
+    }
+
+    // 3. Delete parent rows from `subscribers` and `clients`
+    for (const em of candidateEmails) {
+      const [subDel, clientDel] = await Promise.all([
+        supabase.from('subscribers').delete().ilike('email', em),
+        supabase.from('clients').delete().ilike('email', em),
+      ]);
+      checkDeleteErr(subDel.error);
+      checkDeleteErr(clientDel.error);
+    }
+
+    for (const idVal of candidateIds) {
+      const [subById, clientById] = await Promise.all([
+        supabase.from('subscribers').delete().eq('id', idVal),
+        supabase.from('clients').delete().eq('id', idVal),
+      ]);
+      checkDeleteErr(subById.error);
+      checkDeleteErr(clientById.error);
+    }
+
+    if (explicitToken) {
+      const [subByTok, clientByTok] = await Promise.all([
+        supabase.from('subscribers').delete().eq('access_token', explicitToken),
+        supabase.from('clients').delete().eq('access_token', explicitToken),
+      ]);
+      checkDeleteErr(subByTok.error);
+      checkDeleteErr(clientByTok.error);
+    }
+
+    // 4. Verify rows are genuinely gone in Supabase (catches silent RLS 0-row blocks)
+    const [verifySub, verifyClient] = await Promise.all([
+      cleanEmail
+        ? supabase.from('subscribers').select('id').ilike('email', cleanEmail).limit(1)
+        : Promise.resolve({ data: [], error: null }),
+      cleanEmail
+        ? supabase.from('clients').select('id').ilike('email', cleanEmail).limit(1)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    const stillInSubscribers =
+      !verifySub.error && Array.isArray(verifySub.data) && verifySub.data.length > 0;
+    const stillInClients =
+      !verifyClient.error && Array.isArray(verifyClient.data) && verifyClient.data.length > 0;
+
+    if (errors.length > 0 || stillInSubscribers || stillInClients) {
+      return {
+        success: false,
+        error:
+          errors[0] ||
+          'لم يتم حذف سجل المشترك من Supabase (تحقق من صلاحيات الحذف RLS Policy في جدول subscribers / clients).',
+      };
+    }
+
+    const filtered = subscribersMemoryCache.filter((u) => {
+      if (cleanEmail && u.email.toLowerCase() === cleanEmail) return false;
+      if (explicitId && u.id === explicitId) return false;
+      return true;
+    });
     saveSubscribersList(filtered);
-    return true;
+    return { success: true };
   } catch (e) {
     console.warn('Supabase delete subscriber error:', e);
-    return false;
+    return { success: false, error: formatSupabaseErrorMessage(e) };
   }
 }
 
@@ -1006,6 +1433,7 @@ export async function authenticateUser(
   plan: SubscriptionPlanTier;
   clientCode?: string;
   phone?: string;
+  accessToken?: string;
   error?: string;
 }> {
   const cleanId = (identifier || '').trim().toLowerCase();
@@ -1169,6 +1597,7 @@ export async function authenticateUser(
         plan: matchedByEmail.plan,
         clientCode: matchedByEmail.clientCode,
         phone: matchedByEmail.phone,
+        accessToken: matchedByEmail.accessToken,
       };
     }
     return {
@@ -1213,6 +1642,7 @@ export async function authenticateUser(
         plan: matchedByCodeOrPass.plan,
         clientCode: matchedByCodeOrPass.clientCode,
         phone: matchedByCodeOrPass.phone,
+        accessToken: matchedByCodeOrPass.accessToken,
       };
     }
   }
@@ -1251,6 +1681,7 @@ export async function authenticateUser(
           plan: linkedSub?.plan || normalizeSubscriptionPlan((d.subscription_plan as string) || (d.plan_id as string)),
           clientCode: linkedSub?.clientCode,
           phone: linkedSub?.phone || (typeof d.phone_whatsapp === 'string' ? d.phone_whatsapp : undefined),
+          accessToken: linkedSub?.accessToken,
         };
       }
     } catch {
@@ -1278,21 +1709,23 @@ export function generateWhatsAppWelcomeMessage(options: {
   plan: SubscriptionPlanTier;
   clientCode?: string;
   phone?: string;
+  accessToken?: string;
 }): string {
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://oao-portal.com';
   const planNameAr = options.plan === 'VIP' ? 'الباقة البلاتينية النخبوية (VIP)' : 'الباقة القياسية (Standard)';
+  const portalUrl = options.accessToken ? `${origin}/s/${options.accessToken}` : origin;
 
   return `مرحباً يا بطل ${options.clientName} 👋
 يسعدنا انضمامك إلى منصة OAO التدريبية تحت إشراف الكوتش عمر عدنان! 🏋️‍♂️🔥
 
 📋 بيانات دخول حسابك المعتمد:
-🔗 رابط المنصة: ${origin}
+🔗 رابط حسابك الخاص المباشر: ${portalUrl}
 📧 البريد الإلكتروني: ${options.email}
 🔑 كلمة المرور: ${options.password || 'oao-vip-2026'}
 ${options.clientCode ? `🏷️ رمز الاشتراك البديل: ${options.clientCode}\n` : ''}💎 نوع الباقة: ${planNameAr}
 
 💡 توجيهات سريعة:
-1. ادخل عبر الرابط أعلاه وسجل دخولك بالبريد وكلمة المرور.
+1. افتح رابط حسابك الخاص أعلاه للدخول مباشرة إلى لوحتك التدريبية المعزولة.
 2. ستجد جدولك التدريبي المخصص ونظامك الغذائي ومتابعة مؤشراتك الحيوية.
 3. يمكنك التواصل مباشرة مع الكوتش من صندوق الاستفسارات داخل حسابك.
 

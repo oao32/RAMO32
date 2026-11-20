@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { StandardDashboard } from './pages/user/StandardDashboard';
 import { VipDashboard } from './pages/user/VipDashboard';
+import { SubscriberTokenPortal } from './pages/user/SubscriberTokenPortal';
 import { AdminPanel } from './pages/admin/AdminPanel';
 import { StandaloneSubscribePage } from './pages/StandaloneSubscribePage';
 import {
@@ -24,11 +25,11 @@ import {
   SubscriptionPlanTier,
 } from './types';
 import {
-  INITIAL_CLIENT_PROFILE,
   INITIAL_WORKOUT_DAYS,
-  INITIAL_STREAK_DATA,
-  INITIAL_BADGES,
-  INITIAL_ATHLETE_RANK,
+  createNeutralClientProfile,
+  createNeutralStreakData,
+  createNeutralBadges,
+  createNeutralAthleteRank,
 } from './data/initialData';
 import { BrandLogo } from './components/BrandLogo';
 import { TickerBanner } from './components/TickerBanner';
@@ -145,20 +146,22 @@ function MainPortal() {
   // Toggle viewing plans when logged in as client
   const [showPlansForAthlete, setShowPlansForAthlete] = useState(false);
 
-  // Client Profile State (Hydrated strictly from Supabase + active tab session)
+  // Client Profile State (Hydrated strictly from Supabase + active tab session; zero demo defaults)
   const [profile, setProfile] = useState<ClientProfile>(() => {
     const active = getCurrentUserSession();
     if (active) {
-      return {
-        ...INITIAL_CLIENT_PROFILE,
-        id: active.id || active.email || INITIAL_CLIENT_PROFILE.id,
-        email: active.email || INITIAL_CLIENT_PROFILE.email,
-        name: active.name || INITIAL_CLIENT_PROFILE.name,
-        nameEn: active.name || INITIAL_CLIENT_PROFILE.nameEn,
+      return createNeutralClientProfile({
+        id: active.id || active.email || '',
+        email: active.email || '',
+        name: active.name || 'مشترك',
+        nameEn: active.name || 'Athlete',
+        clientCode: active.clientCode,
+        accessToken: active.accessToken,
+        phone: active.phone,
         subscription_plan: normalizeSubscriptionPlan(active.plan),
-      };
+      });
     }
-    return INITIAL_CLIENT_PROFILE;
+    return createNeutralClientProfile();
   });
 
   const activeSubscriptionPlan: SubscriptionPlanTier = normalizeSubscriptionPlan(
@@ -174,6 +177,8 @@ function MainPortal() {
   // Client Notes State (Hydrated strictly from Supabase)
   const [notes, setNotes] = useState<ClientNote[]>([]);
 
+  const workspaceRequestRef = useRef(0);
+
   const hydrateClientWorkspace = useCallback(
     async (params: {
       clientId?: string | null;
@@ -181,7 +186,9 @@ function MainPortal() {
       fallbackName?: string;
       fallbackPlan?: SubscriptionPlanTier;
     }) => {
+      const requestId = ++workspaceRequestRef.current;
       const workspace = await loadClientWorkspaceFromSupabase(params);
+      if (requestId !== workspaceRequestRef.current) return;
       setProfile(workspace.profile);
       setWorkoutDays(workspace.workoutDays);
       setNotes(workspace.notes);
@@ -198,7 +205,7 @@ function MainPortal() {
     const currentUser = getCurrentUserSession();
     const targetEmail = currentUser?.email || profile.email;
     const targetId = currentUser?.id || profile.id;
-    if (!targetEmail && (!targetId || targetId === 'client_athlete')) return;
+    if (!targetEmail && !targetId) return;
 
     void hydrateClientWorkspace({
       clientId: targetId,
@@ -210,6 +217,9 @@ function MainPortal() {
 
   // Real-time synchronization for coach replies, athlete inquiries, profile updates, and login triggers
   useEffect(() => {
+    const cleanEmail = (profile.email || '').trim().toLowerCase();
+    const cleanId = (profile.id || '').trim().toLowerCase();
+
     const handleNotesSync = () => {
       const currentUser = getCurrentUserSession();
       if (!currentUser && userSession !== 'client') return;
@@ -222,6 +232,10 @@ function MainPortal() {
     const handleProfileSync = (e: Event) => {
       const detail = (e as CustomEvent<ClientProfile | undefined>).detail;
       if (detail) {
+        const dEmail = (detail.email || '').trim().toLowerCase();
+        const dId = (detail.id || '').trim().toLowerCase();
+        if (cleanEmail && dEmail && dEmail !== cleanEmail) return;
+        if (cleanId && dId && dId !== cleanId && (!dEmail || dEmail !== cleanEmail)) return;
         setProfile((prev) => ({
           ...prev,
           ...detail,
@@ -266,9 +280,9 @@ function MainPortal() {
   });
 
   // Gamification & Streak State (Hydrated strictly from Supabase)
-  const [streakData, setStreakData] = useState<StreakData>(INITIAL_STREAK_DATA);
-  const [badges, setBadges] = useState<Badge[]>(INITIAL_BADGES);
-  const [athleteRank, setAthleteRank] = useState<AthleteRank>(INITIAL_ATHLETE_RANK);
+  const [streakData, setStreakData] = useState<StreakData>(() => createNeutralStreakData());
+  const [badges, setBadges] = useState<Badge[]>(() => createNeutralBadges());
+  const [athleteRank, setAthleteRank] = useState<AthleteRank>(() => createNeutralAthleteRank());
 
   // Section references for smooth scrolling
   const portalRef = useRef<HTMLDivElement | null>(null);
@@ -584,9 +598,16 @@ function MainPortal() {
   };
 
   const handleLogout = () => {
+    workspaceRequestRef.current += 1;
     clearCurrentUserSession();
     setUserSession('guest');
     setShowPlansForAthlete(false);
+    setProfile(createNeutralClientProfile());
+    setWorkoutDays(INITIAL_WORKOUT_DAYS);
+    setNotes([]);
+    setStreakData(createNeutralStreakData());
+    setBadges(createNeutralBadges());
+    setAthleteRank(createNeutralAthleteRank());
   };
 
   const handleAuthSuccess = (
@@ -604,30 +625,35 @@ function MainPortal() {
       const nextPlan = normalizeSubscriptionPlan(subscriptionPlan || 'standard');
       const resolvedId = getCanonicalClientKey(clientId, userEmail);
       const todayIso = getTodayIsoString();
+      const existingSession = getCurrentUserSession();
 
       setCurrentUserSession({
         id: resolvedId,
         email: userEmail || '',
-        name: userName || INITIAL_CLIENT_PROFILE.name,
+        name: userName || 'مشترك',
         plan: nextPlan,
         role: 'client',
+        clientCode: existingSession?.clientCode,
+        phone: existingSession?.phone,
+        accessToken: existingSession?.accessToken,
       });
 
-      const baselineProfile: ClientProfile = {
-        ...INITIAL_CLIENT_PROFILE,
+      const baselineProfile = createNeutralClientProfile({
         id: resolvedId,
-        name: userName && userName.trim() ? userName.trim() : INITIAL_CLIENT_PROFILE.name,
-        nameEn: userName && userName.trim() ? userName.trim() : INITIAL_CLIENT_PROFILE.nameEn,
+        name: userName && userName.trim() ? userName.trim() : 'مشترك',
+        nameEn: userName && userName.trim() ? userName.trim() : 'Athlete',
         email: userEmail || '',
+        accessToken: existingSession?.accessToken,
         subscription_plan: nextPlan,
         subscriptionStartDate: todayIso,
         subscriptionEndDate: addDaysToDate(todayIso, 60),
-      };
+      });
       setProfile(baselineProfile);
       setWorkoutDays(INITIAL_WORKOUT_DAYS);
       setNotes([]);
-      setStreakData(INITIAL_STREAK_DATA);
-      setAthleteRank(INITIAL_ATHLETE_RANK);
+      setStreakData(createNeutralStreakData());
+      setBadges(createNeutralBadges());
+      setAthleteRank(createNeutralAthleteRank());
 
       void hydrateClientWorkspace({
         clientId: resolvedId,
@@ -1440,6 +1466,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<MainPortal />} />
         <Route path="/subscribe" element={<StandaloneSubscribePage />} />
+        <Route path="/s/:token" element={<SubscriberTokenPortal />} />
         <Route path="/standard" element={<StandardDashboard />} />
         <Route path="/vip" element={<VipDashboard />} />
         <Route

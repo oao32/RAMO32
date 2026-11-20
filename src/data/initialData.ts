@@ -721,3 +721,83 @@ export const INITIAL_BADGES: Badge[] = [
   },
 ];
 
+export function createNeutralAthleteRank(): AthleteRank {
+  return {
+    tier: 'bronze',
+    nameAr: 'المستوى الأول (Starter)',
+    nameEn: 'Starter Athlete',
+    level: 1,
+    currentXp: 0,
+    nextLevelXp: 500,
+    accentColor: '#f59e0b',
+    badgeIcon: 'Shield',
+  };
+}
+
+export function createNeutralStreakData(): StreakData {
+  return {
+    currentStreak: 0,
+    longestStreak: 0,
+    lastCompletedDate: '',
+    freezesRemaining: 1,
+    weeklyActivity: [
+      { dayAr: 'السبت', dayEn: 'Sat', shortNameAr: 'سبت', shortNameEn: 'Sa', isCompleted: false, workoutNameAr: 'PUSH DAY' },
+      { dayAr: 'الأحد', dayEn: 'Sun', shortNameAr: 'أحد', shortNameEn: 'Su', isCompleted: false, workoutNameAr: 'PULL DAY' },
+      { dayAr: 'الاثنين', dayEn: 'Mon', shortNameAr: 'اثنين', shortNameEn: 'Mo', isCompleted: false, isRestDay: true, workoutNameAr: 'راحة استشفاء' },
+      { dayAr: 'الثلاثاء', dayEn: 'Tue', shortNameAr: 'ثلاثاء', shortNameEn: 'Tu', isCompleted: false, workoutNameAr: 'LEGS DAY' },
+      { dayAr: 'الأربعاء', dayEn: 'Wed', shortNameAr: 'أربعاء', shortNameEn: 'We', isCompleted: false, isToday: true, workoutNameAr: 'UPPER BODY' },
+      { dayAr: 'الخميس', dayEn: 'Thu', shortNameAr: 'خميس', shortNameEn: 'Th', isCompleted: false, workoutNameAr: 'CORE & CARDIO' },
+      { dayAr: 'الجمعة', dayEn: 'Fri', shortNameAr: 'جمعة', shortNameEn: 'Fr', isCompleted: false, isRestDay: true, workoutNameAr: 'راحة تامة' },
+    ],
+    totalWorkoutsCompleted: 0,
+    totalVolumeLiftedKg: 0,
+    totalMinutesTrained: 0,
+    bestPRWeightKg: 0,
+    bestPRExerciseAr: '-',
+  };
+}
+
+export function createNeutralBadges(): Badge[] {
+  return INITIAL_BADGES.map((badge) => ({
+    ...badge,
+    isUnlocked: false,
+    unlockedDate: undefined,
+    progress: badge.progress ? { ...badge.progress, current: 0 } : undefined,
+  }));
+}
+
+export function createNeutralClientProfile(overrides: Partial<ClientProfile> = {}): ClientProfile {
+  const today = new Date().toISOString().split('T')[0];
+  return {
+    id: '',
+    name: 'مشترك',
+    nameEn: 'Athlete',
+    email: '',
+    phone: '',
+    clientCode: '',
+    accessToken: undefined,
+    subscription_plan: 'standard',
+    weight: 75,
+    height: 175,
+    muscleMass: 32,
+    bodyFat: 20,
+    targetWeight: 70,
+    dailyWaterGoal: 3.0,
+    dailyWaterCurrent: 0,
+    dailyCalories: 2100,
+    macros: {
+      protein: 160,
+      carbs: 210,
+      fats: 65,
+    },
+    subscriptionStatus: 'active',
+    subscriptionDaysLeft: 60,
+    subscriptionStartDate: today,
+    subscriptionEndDate: today,
+    coachName: 'OMAR ADNAN',
+    joinedDate: today,
+    ...overrides,
+  };
+}
+
+

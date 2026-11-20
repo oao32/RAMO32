@@ -45,8 +45,12 @@ import {
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { assignSubscriberPassword, setCurrentUserSession } from '../lib/authStore';
-import { saveDeclarationToSupabase, syncProfileToSupabase } from '../lib/supabase';
-import { INITIAL_CLIENT_PROFILE } from '../data/initialData';
+import {
+  generateSecureAccessToken,
+  saveDeclarationToSupabase,
+  syncProfileToSupabase,
+} from '../lib/supabase';
+import { createNeutralClientProfile } from '../data/initialData';
 
 export const StandaloneSubscribePage: React.FC = () => {
   const navigate = useNavigate();
@@ -461,11 +465,13 @@ export const StandaloneSubscribePage: React.FC = () => {
     try {
       const generatedCode = `OAO-${resolvedPlanTier === 'VIP' ? 'VIP' : 'STD'}-${Math.floor(100 + Math.random() * 900)}`;
       const generatedPass = `OAO-${resolvedPlanTier === 'VIP' ? 'VIP' : 'STD'}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const mintedAccessToken = generateSecureAccessToken();
       const assignRes = await assignSubscriberPassword({
         email: cleanEmail,
         password: generatedPass,
         clientName: cleanFullName,
         clientCode: generatedCode,
+        accessToken: mintedAccessToken,
         plan: resolvedPlanTier,
         phone: phoneWhatsapp.trim(),
         age: Number(age) || undefined,
@@ -477,14 +483,15 @@ export const StandaloneSubscribePage: React.FC = () => {
       });
 
       const canonicalId = assignRes.record?.id || cleanEmail;
-      const updatedProfile = {
-        ...INITIAL_CLIENT_PROFILE,
+      const finalAccessToken = assignRes.record?.accessToken || mintedAccessToken;
+      const updatedProfile = createNeutralClientProfile({
         id: canonicalId,
         name: cleanFullName,
         nameEn: cleanFullName,
         email: cleanEmail,
         phone: phoneWhatsapp.trim(),
         clientCode: assignRes.record?.clientCode || generatedCode,
+        accessToken: finalAccessToken,
         age: Number(age) || undefined,
         bloodType,
         visualGoal,
@@ -493,7 +500,7 @@ export const StandaloneSubscribePage: React.FC = () => {
         subscription_plan: resolvedPlanTier,
         subscriptionStatus: 'active' as const,
         subscriptionDaysLeft: currentDurationInfo.days,
-      };
+      });
       setCurrentUserSession({
         id: canonicalId,
         email: cleanEmail,
@@ -502,6 +509,7 @@ export const StandaloneSubscribePage: React.FC = () => {
         role: 'client',
         clientCode: assignRes.record?.clientCode || generatedCode,
         phone: phoneWhatsapp.trim(),
+        accessToken: finalAccessToken,
       });
       window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
       await syncProfileToSupabase(updatedProfile);

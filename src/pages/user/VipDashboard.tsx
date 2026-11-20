@@ -10,13 +10,14 @@ import {
   StreakData,
   Badge,
   AthleteRank,
+  SubscriptionPlanTier,
 } from '../../types';
 import {
-  INITIAL_CLIENT_PROFILE,
   INITIAL_WORKOUT_DAYS,
-  INITIAL_STREAK_DATA,
-  INITIAL_BADGES,
-  INITIAL_ATHLETE_RANK,
+  createNeutralClientProfile,
+  createNeutralStreakData,
+  createNeutralBadges,
+  createNeutralAthleteRank,
 } from '../../data/initialData';
 import { BrandLogo } from '../../components/BrandLogo';
 import { VIPBadge } from '../../components/VIPBadge';
@@ -41,7 +42,12 @@ import {
   syncProfileToSupabase,
   syncWorkoutDaysToSupabase,
 } from '../../lib/supabase';
-import { getCurrentUserSession, clearCurrentUserSession } from '../../lib/authStore';
+import {
+  getCurrentUserSession,
+  clearCurrentUserSession,
+  fetchSubscribersFromSupabase,
+  isCoachAuthenticated,
+} from '../../lib/authStore';
 import {
   Home,
   LogOut,
@@ -53,58 +59,124 @@ import {
   Dumbbell,
   MessageCircle,
   ShieldCheck,
+  Lock,
+  ArrowRight,
+  Loader2,
 } from 'lucide-react';
 
-export const VipDashboard: React.FC = () => {
+export interface VipDashboardProps {
+  tokenSubscriber?: {
+    id?: string;
+    email: string;
+    name: string;
+    plan: SubscriptionPlanTier;
+    clientCode?: string;
+    phone?: string;
+    accessToken?: string;
+  } | null;
+  isolatedByToken?: boolean;
+  onLogoutOverride?: () => void;
+}
+
+export const VipDashboard: React.FC<VipDashboardProps> = ({
+  tokenSubscriber = null,
+  isolatedByToken = false,
+  onLogoutOverride,
+}) => {
   const navigate = useNavigate();
 
   // Load language & theme
-  const [language, setLanguage] = useState<Language>(() => {
+  const [language] = useState<Language>(() => {
     return (localStorage.getItem('oao_lang') as Language) || 'ar';
   });
-  const [theme, setTheme] = useState<Theme>(() => {
+  const [theme] = useState<Theme>(() => {
     return (localStorage.getItem('oao_theme') as Theme) || 'dark';
   });
 
-  // Client Profile state (Locked as VIP, hydrated strictly from Supabase)
+  const [accessStatus, setAccessStatus] = useState<
+    'checking' | 'authorized' | 'unauthorized' | 'tier_mismatch' | 'suspended'
+  >('checking');
+
+  // Client Profile state (Locked as VIP, hydrated strictly from Supabase with zero demo leakage)
   const [profile, setProfile] = useState<ClientProfile>(() => {
-    const currentUser = getCurrentUserSession();
-    return {
-      ...INITIAL_CLIENT_PROFILE,
-      id: currentUser?.id || INITIAL_CLIENT_PROFILE.id,
-      email: currentUser?.email || INITIAL_CLIENT_PROFILE.email,
-      name: currentUser?.name || INITIAL_CLIENT_PROFILE.name,
-      nameEn: currentUser?.name || INITIAL_CLIENT_PROFILE.nameEn,
+    const activeSub = tokenSubscriber || getCurrentUserSession();
+    return createNeutralClientProfile({
+      id: activeSub?.id || activeSub?.email || '',
+      email: activeSub?.email || '',
+      name: activeSub?.name || 'مشترك VIP',
+      nameEn: activeSub?.name || 'VIP Athlete',
+      clientCode: activeSub?.clientCode,
+      accessToken: activeSub?.accessToken,
+      phone: activeSub?.phone,
       subscription_plan: 'VIP',
-    };
+    });
   });
 
   // Workouts, Notes, Streak, Badges & Rank states (Hydrated strictly from Supabase)
   const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>(INITIAL_WORKOUT_DAYS);
   const [notes, setNotes] = useState<ClientNote[]>([]);
-  const [streakData, setStreakData] = useState<StreakData>(INITIAL_STREAK_DATA);
-  const [badges, setBadges] = useState<Badge[]>(INITIAL_BADGES);
-  const [athleteRank, setAthleteRank] = useState<AthleteRank>(INITIAL_ATHLETE_RANK);
+  const [streakData, setStreakData] = useState<StreakData>(() => createNeutralStreakData());
+  const [badges, setBadges] = useState<Badge[]>(() => createNeutralBadges());
+  const [athleteRank, setAthleteRank] = useState<AthleteRank>(() => createNeutralAthleteRank());
 
-  // Hydrate full subscriber workspace from Supabase on mount
+  // Verify authorization against Supabase & hydrate strictly isolated workspace
   useEffect(() => {
     let mounted = true;
-    const hydrateFromCloud = async () => {
-      const currentUser = getCurrentUserSession();
-      const targetEmail = currentUser?.email || profile.email;
-      const targetId = currentUser?.id || profile.id;
-      if (!targetEmail && (!targetId || targetId === 'client_athlete')) return;
+    const verifyAndHydrate = async () => {
+      setAccessStatus('checking');
+      const sessionUser = getCurrentUserSession();
+      const targetSub = tokenSubscriber || sessionUser;
+
+      if (!targetSub || (!targetSub.email && !targetSub.id)) {
+        if (mounted) setAccessStatus('unauthorized');
+        return;
+      }
+
+      const targetEmail = (targetSub.email || '').trim().toLowerCase();
+      const targetId = (targetSub.id || '').trim();
+      const isCoachSession =
+        !isolatedByToken &&
+        (isCoachAuthenticated() || sessionUser?.role === 'admin' || targetEmail === 'coach.omar@oao.com');
+
+      if (!isolatedByToken && !isCoachSession) {
+        const cloudSubs = await fetchSubscribersFromSupabase();
+        if (!mounted) return;
+        const matched = cloudSubs.find(
+          (u) =>
+            (targetEmail && u.email.toLowerCase() === targetEmail) ||
+            (targetId && u.id === targetId)
+        );
+        if (!matched) {
+          clearCurrentUserSession();
+          setAccessStatus('unauthorized');
+          return;
+        }
+        if (matched.status === 'suspended') {
+          setAccessStatus('suspended');
+          return;
+        }
+        if (matched.plan !== 'VIP') {
+          setAccessStatus('tier_mismatch');
+          return;
+        }
+      }
+
+      if (isolatedByToken && tokenSubscriber && tokenSubscriber.plan !== 'VIP') {
+        if (mounted) setAccessStatus('tier_mismatch');
+        return;
+      }
 
       const workspace = await loadClientWorkspaceFromSupabase({
         clientId: targetId,
         email: targetEmail,
-        fallbackName: currentUser?.name || profile.name,
+        fallbackName: targetSub.name,
         fallbackPlan: 'VIP',
       });
       if (!mounted) return;
 
       const nextProfile: ClientProfile = {
         ...workspace.profile,
+        accessToken: tokenSubscriber?.accessToken || workspace.profile.accessToken,
         subscription_plan: 'VIP',
       };
       setProfile(nextProfile);
@@ -113,37 +185,68 @@ export const VipDashboard: React.FC = () => {
       setStreakData(workspace.streakData);
       setAthleteRank(workspace.athleteRank);
       if (workspace.badges) setBadges(workspace.badges);
+      setAccessStatus('authorized');
     };
 
-    void hydrateFromCloud();
+    void verifyAndHydrate();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [
+    tokenSubscriber?.id,
+    tokenSubscriber?.email,
+    tokenSubscriber?.accessToken,
+    tokenSubscriber?.plan,
+    isolatedByToken,
+  ]);
 
-  // Real-time synchronization for coach replies, profile, streak & rank
+  // Real-time synchronization strictly scoped to THIS subscriber
   useEffect(() => {
+    if (accessStatus !== 'authorized') return;
+    const cleanEmail = (profile.email || '').trim().toLowerCase();
+    const cleanId = (profile.id || '').trim();
+    const canonicalKey = getCanonicalClientKey(cleanId, cleanEmail);
+
+    const isForCurrentSubscriber = (payload?: { id?: string; email?: string; clientId?: string }) => {
+      if (!payload) return true;
+      const pEmail = (payload.email || '').trim().toLowerCase();
+      const pId = (payload.id || payload.clientId || '').trim().toLowerCase();
+      if (pEmail && cleanEmail) return pEmail === cleanEmail;
+      if (pId) {
+        return (
+          (canonicalKey && pId === canonicalKey.toLowerCase()) ||
+          (cleanId && pId === cleanId.toLowerCase()) ||
+          (cleanEmail && pId === cleanEmail)
+        );
+      }
+      return true;
+    };
+
     const handleNotesSync = () => {
-      const currentUser = getCurrentUserSession();
+      if (!cleanEmail && !cleanId) return;
       void fetchNotesFromSupabase({
-        clientId: currentUser?.id || profile.id,
-        clientEmail: currentUser?.email || profile.email,
-        clientName: currentUser?.name || profile.name,
+        clientId: cleanId,
+        clientEmail: cleanEmail,
+        clientName: profile.name,
       }).then(setNotes);
     };
     const handleProfileSync = (e: Event) => {
       const detail = (e as CustomEvent<ClientProfile | undefined>).detail;
-      if (detail) {
+      if (detail && isForCurrentSubscriber(detail)) {
         setProfile((prev) => ({ ...prev, ...detail, subscription_plan: 'VIP' }));
       }
     };
     const handleStreakSync = (e: Event) => {
-      const detail = (e as CustomEvent<StreakData | undefined>).detail;
-      if (detail) setStreakData(detail);
+      const detail = (e as CustomEvent<(StreakData & { clientId?: string; email?: string }) | undefined>).detail;
+      if (detail && isForCurrentSubscriber(detail)) {
+        setStreakData(detail);
+      }
     };
     const handleRankSync = (e: Event) => {
-      const detail = (e as CustomEvent<AthleteRank | undefined>).detail;
-      if (detail) setAthleteRank(detail);
+      const detail = (e as CustomEvent<(AthleteRank & { clientId?: string; email?: string }) | undefined>).detail;
+      if (detail && isForCurrentSubscriber(detail)) {
+        setAthleteRank(detail);
+      }
     };
 
     window.addEventListener('oao_notes_updated', handleNotesSync);
@@ -156,7 +259,7 @@ export const VipDashboard: React.FC = () => {
       window.removeEventListener('oao_streak_updated', handleStreakSync);
       window.removeEventListener('oao_rank_updated', handleRankSync);
     };
-  }, [profile.id, profile.email, profile.name]);
+  }, [accessStatus, profile.id, profile.email, profile.name]);
 
   // Modals state
   const [activeVideoExercise, setActiveVideoExercise] = useState<Exercise | null>(null);
@@ -199,8 +302,55 @@ export const VipDashboard: React.FC = () => {
 
   const handleLogout = () => {
     clearCurrentUserSession();
-    navigate('/');
+    if (onLogoutOverride) {
+      onLogoutOverride();
+    } else {
+      navigate('/');
+    }
   };
+
+  if (accessStatus === 'checking') {
+    return (
+      <div className="min-h-screen bg-[#030712] text-white flex flex-col items-center justify-center p-6 font-['Alexandria',sans-serif]">
+        <Loader2 className="w-10 h-10 text-amber-400 animate-spin mb-4" />
+        <p className="text-sm font-bold text-amber-200">جاري التحقق من صلاحية الحساب وتحميل بياناتك الخاصة...</p>
+      </div>
+    );
+  }
+
+  if (accessStatus !== 'authorized') {
+    const title =
+      accessStatus === 'suspended'
+        ? 'تم تعليق هذا الحساب مؤقتاً'
+        : accessStatus === 'tier_mismatch'
+        ? 'هذا المسار مخصص لباقة VIP النخبوية'
+        : 'مطلوب تسجيل الدخول للوصول للبوابة';
+    const desc =
+      accessStatus === 'suspended'
+        ? 'يرجى التواصل مع الكوتش عمر عدنان لإعادة تفعيل الاشتراك.'
+        : accessStatus === 'tier_mismatch'
+        ? 'حسابك الحالي مسجل على الباقة القياسية أو مسار آخر، أو انتهت الجلسة. استخدم رابطك الخاص أو سجل الدخول من الرئيسية.'
+        : 'لضمان خصوصية وعزل بيانات كل مشترك، لا يمكن فتح هذه الصفحة بدون تسجيل الدخول أو استخدام الرابط الخاص المرسل من الكوتش.';
+
+    return (
+      <div className="min-h-screen bg-[#030712] text-white flex items-center justify-center p-6 font-['Alexandria',sans-serif]" dir="rtl">
+        <div className="max-w-md w-full rounded-3xl p-8 bg-gradient-to-br from-[#0B132B] via-[#070E24] to-[#040817] border-2 border-amber-500/40 shadow-[0_0_50px_rgba(245,158,11,0.18)] text-center space-y-5">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/15 border border-amber-400/40 flex items-center justify-center text-amber-400">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h1 className="text-xl font-black text-white">{title}</h1>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{desc}</p>
+          <button
+            onClick={() => navigate('/')}
+            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-all"
+          >
+            <span>الانتقال لصفحة تسجيل الدخول</span>
+            <ArrowRight className="w-4 h-4 rtl:rotate-180" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#030712] text-white selection:bg-amber-500 selection:text-black font-['Alexandria',sans-serif]">

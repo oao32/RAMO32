@@ -11,8 +11,8 @@ import {
   AIGenerationLog,
 } from '../../types';
 import {
-  INITIAL_CLIENT_PROFILE,
   INITIAL_WORKOUT_DAYS,
+  createNeutralClientProfile,
 } from '../../data/initialData';
 import { BrandLogo } from '../../components/BrandLogo';
 import { SignedDeclarationModal } from '../../components/SignedDeclarationModal';
@@ -122,7 +122,7 @@ export const AdminPanel: React.FC = () => {
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Client Profile & Biometrics State (Hydrated per selected subscriber from Supabase)
-  const [profile, setProfile] = useState<ClientProfile>(INITIAL_CLIENT_PROFILE);
+  const [profile, setProfile] = useState<ClientProfile>(() => createNeutralClientProfile());
   const [savedProfileMessage, setSavedProfileMessage] = useState(false);
 
   // Workouts State (Hydrated per selected subscriber from Supabase)
@@ -189,6 +189,7 @@ export const AdminPanel: React.FC = () => {
 
   const [isLoadingTargetClient, setIsLoadingTargetClient] = useState(false);
   const [isRefreshingSubscribers, setIsRefreshingSubscribers] = useState(false);
+  const loadRequestIdRef = useRef(0);
 
   const selectedTargetClient =
     subscribers.find(
@@ -209,8 +210,13 @@ export const AdminPanel: React.FC = () => {
           getSubscriberSelectorKey(s) === clientKey ||
           s.email.toLowerCase() === clientKey.toLowerCase()
       );
-      if (!target) return;
+      if (!target) {
+        setProfile(createNeutralClientProfile());
+        setWorkoutDays(INITIAL_WORKOUT_DAYS);
+        return;
+      }
 
+      const requestId = ++loadRequestIdRef.current;
       setIsLoadingTargetClient(true);
       try {
         const workspace = await loadClientWorkspaceFromSupabase({
@@ -219,7 +225,9 @@ export const AdminPanel: React.FC = () => {
           fallbackName: target.clientName,
           fallbackPlan: target.plan,
         });
+        if (requestId !== loadRequestIdRef.current) return;
 
+        const canonicalKey = getCanonicalClientKey(workspace.profile.id, target.email);
         setProfile(workspace.profile);
         setWorkoutDays(workspace.workoutDays);
         setSelectedDayKey((prev) =>
@@ -229,10 +237,20 @@ export const AdminPanel: React.FC = () => {
         );
 
         window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: workspace.profile }));
-        window.dispatchEvent(new CustomEvent('oao_streak_updated', { detail: workspace.streakData }));
-        window.dispatchEvent(new CustomEvent('oao_rank_updated', { detail: workspace.athleteRank }));
+        window.dispatchEvent(
+          new CustomEvent('oao_streak_updated', {
+            detail: { ...workspace.streakData, clientId: canonicalKey, email: target.email },
+          })
+        );
+        window.dispatchEvent(
+          new CustomEvent('oao_rank_updated', {
+            detail: { ...workspace.athleteRank, clientId: canonicalKey, email: target.email },
+          })
+        );
       } finally {
-        setIsLoadingTargetClient(false);
+        if (requestId === loadRequestIdRef.current) {
+          setIsLoadingTargetClient(false);
+        }
       }
     },
     [subscribers]
@@ -260,6 +278,12 @@ export const AdminPanel: React.FC = () => {
             const firstActive = remoteSubs.find((s) => s.status !== 'suspended') || remoteSubs[0];
             await selectAndLoadTargetClient(getSubscriberSelectorKey(firstActive), remoteSubs);
           }
+        } else {
+          loadRequestIdRef.current += 1;
+          setSelectedTargetClientKey('');
+          selectedTargetKeyRef.current = '';
+          setProfile(createNeutralClientProfile());
+          setWorkoutDays(INITIAL_WORKOUT_DAYS);
         }
       } finally {
         setIsRefreshingSubscribers(false);
@@ -307,7 +331,27 @@ export const AdminPanel: React.FC = () => {
     };
 
     const syncLiveCredentials = () => {
-      setSubscribers(getAllSubscribersWithCredentials());
+      const latestSubs = getAllSubscribersWithCredentials();
+      setSubscribers(latestSubs);
+      const currentKey = selectedTargetKeyRef.current;
+      if (
+        currentKey &&
+        !latestSubs.some(
+          (s) =>
+            getSubscriberSelectorKey(s) === currentKey ||
+            s.email.toLowerCase() === currentKey.toLowerCase()
+        )
+      ) {
+        if (latestSubs.length > 0) {
+          const firstActive = latestSubs.find((s) => s.status !== 'suspended') || latestSubs[0];
+          void selectAndLoadTargetClient(getSubscriberSelectorKey(firstActive), latestSubs);
+        } else {
+          setSelectedTargetClientKey('');
+          selectedTargetKeyRef.current = '';
+          setProfile(createNeutralClientProfile());
+          setWorkoutDays(INITIAL_WORKOUT_DAYS);
+        }
+      }
     };
 
     window.addEventListener('oao_declarations_updated', syncLiveDeclarations);
@@ -447,14 +491,19 @@ export const AdminPanel: React.FC = () => {
     setIsAddInquiryOpen(false);
   };
 
-  // Delete an inquiry / note
+  // Delete an inquiry / note (verifies Supabase deletion; reverts UI if DB rejected)
   const handleDeleteNote = (noteId: string) => {
+    const previousNotes = notes;
     const updated = notes.filter((n) => n.id !== noteId);
     setNotes(updated);
-    void deleteNoteFromSupabase(noteId).then(() => {
+    setConfirmDeleteNoteId(null);
+    void deleteNoteFromSupabase(noteId).then((ok) => {
+      if (!ok) {
+        setNotes(previousNotes);
+        return;
+      }
       window.dispatchEvent(new CustomEvent('oao_notes_updated'));
     });
-    setConfirmDeleteNoteId(null);
   };
 
   // Resolve active target client identifiers for Supabase writes
@@ -479,16 +528,15 @@ export const AdminPanel: React.FC = () => {
     setTimeout(() => setSavedProfileMessage(false), 3000);
   };
 
-  // Reset Profile measurements to defaults
+  // Reset Profile measurements to neutral defaults
   const handleResetProfile = () => {
-    const resetProfile: ClientProfile = {
-      ...INITIAL_CLIENT_PROFILE,
-      id: targetCanonicalKey || INITIAL_CLIENT_PROFILE.id,
-      name: selectedTargetClient?.clientName || profile.name || INITIAL_CLIENT_PROFILE.name,
-      nameEn: profile.nameEn || selectedTargetClient?.clientName || INITIAL_CLIENT_PROFILE.nameEn,
+    const resetProfile = createNeutralClientProfile({
+      id: targetCanonicalKey || '',
+      name: selectedTargetClient?.clientName || profile.name || 'مشترك',
+      nameEn: profile.nameEn || selectedTargetClient?.clientName || 'Athlete',
       email: targetClientEmail || profile.email,
       subscription_plan: selectedTargetClient?.plan || profile.subscription_plan,
-    };
+    });
     setProfile(resetProfile);
     void syncClientProfileToSupabase(targetCanonicalKey, resetProfile);
     window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: resetProfile }));

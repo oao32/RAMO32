@@ -7,10 +7,11 @@ import {
   Exercise,
   Language,
   Theme,
+  SubscriptionPlanTier,
 } from '../../types';
 import {
-  INITIAL_CLIENT_PROFILE,
   INITIAL_WORKOUT_DAYS,
+  createNeutralClientProfile,
 } from '../../data/initialData';
 import { BrandLogo } from '../../components/BrandLogo';
 import { AthleteBiometricsBar } from '../../components/AthleteBiometricsBar';
@@ -30,7 +31,12 @@ import {
   syncProfileToSupabase,
   syncWorkoutDaysToSupabase,
 } from '../../lib/supabase';
-import { getCurrentUserSession, clearCurrentUserSession } from '../../lib/authStore';
+import {
+  getCurrentUserSession,
+  clearCurrentUserSession,
+  fetchSubscribersFromSupabase,
+  isCoachAuthenticated,
+} from '../../lib/authStore';
 import {
   Home,
   LogOut,
@@ -43,30 +49,56 @@ import {
   Activity,
   Dumbbell,
   CheckCircle2,
+  Lock,
+  Loader2,
 } from 'lucide-react';
 
-export const StandardDashboard: React.FC = () => {
+export interface StandardDashboardProps {
+  tokenSubscriber?: {
+    id?: string;
+    email: string;
+    name: string;
+    plan: SubscriptionPlanTier;
+    clientCode?: string;
+    phone?: string;
+    accessToken?: string;
+  } | null;
+  isolatedByToken?: boolean;
+  onLogoutOverride?: () => void;
+}
+
+export const StandardDashboard: React.FC<StandardDashboardProps> = ({
+  tokenSubscriber = null,
+  isolatedByToken = false,
+  onLogoutOverride,
+}) => {
   const navigate = useNavigate();
 
   // Load language & theme from storage
-  const [language, setLanguage] = useState<Language>(() => {
+  const [language] = useState<Language>(() => {
     return (localStorage.getItem('oao_lang') as Language) || 'ar';
   });
-  const [theme, setTheme] = useState<Theme>(() => {
+  const [theme] = useState<Theme>(() => {
     return (localStorage.getItem('oao_theme') as Theme) || 'dark';
   });
 
-  // Client Profile state (Hydrated strictly from Supabase + active tab session)
+  const [accessStatus, setAccessStatus] = useState<
+    'checking' | 'authorized' | 'unauthorized' | 'tier_mismatch' | 'suspended'
+  >('checking');
+
+  // Client Profile state (Hydrated strictly from Supabase + active session)
   const [profile, setProfile] = useState<ClientProfile>(() => {
-    const currentUser = getCurrentUserSession();
-    return {
-      ...INITIAL_CLIENT_PROFILE,
-      id: currentUser?.id || INITIAL_CLIENT_PROFILE.id,
-      email: currentUser?.email || INITIAL_CLIENT_PROFILE.email,
-      name: currentUser?.name || INITIAL_CLIENT_PROFILE.name,
-      nameEn: currentUser?.name || INITIAL_CLIENT_PROFILE.nameEn,
+    const activeSub = tokenSubscriber || getCurrentUserSession();
+    return createNeutralClientProfile({
+      id: activeSub?.id || activeSub?.email || '',
+      email: activeSub?.email || '',
+      name: activeSub?.name || 'مشترك',
+      nameEn: activeSub?.name || 'Athlete',
+      clientCode: activeSub?.clientCode,
+      accessToken: activeSub?.accessToken,
+      phone: activeSub?.phone,
       subscription_plan: 'standard',
-    };
+    });
   });
 
   // Workouts state (Hydrated strictly from Supabase)
@@ -75,52 +107,98 @@ export const StandardDashboard: React.FC = () => {
   // Notes state (Hydrated strictly from Supabase)
   const [notes, setNotes] = useState<ClientNote[]>([]);
 
-  // Hydrate full subscriber workspace from Supabase on mount
+  // Verify authorization against Supabase & hydrate strictly isolated workspace
   useEffect(() => {
     let mounted = true;
-    const hydrateFromCloud = async () => {
-      const currentUser = getCurrentUserSession();
-      const targetEmail = currentUser?.email || profile.email;
-      const targetId = currentUser?.id || profile.id;
-      if (!targetEmail && (!targetId || targetId === 'client_athlete')) return;
+    const verifyAndHydrate = async () => {
+      setAccessStatus('checking');
+      const sessionUser = getCurrentUserSession();
+      const targetSub = tokenSubscriber || sessionUser;
+
+      if (!targetSub || (!targetSub.email && !targetSub.id)) {
+        if (mounted) setAccessStatus('unauthorized');
+        return;
+      }
+
+      const targetEmail = (targetSub.email || '').trim().toLowerCase();
+      const targetId = (targetSub.id || '').trim();
+      const isCoachSession =
+        !isolatedByToken &&
+        (isCoachAuthenticated() || sessionUser?.role === 'admin' || targetEmail === 'coach.omar@oao.com');
+
+      if (!isolatedByToken && !isCoachSession) {
+        const cloudSubs = await fetchSubscribersFromSupabase();
+        if (!mounted) return;
+        const matched = cloudSubs.find(
+          (u) =>
+            (targetEmail && u.email.toLowerCase() === targetEmail) ||
+            (targetId && u.id === targetId)
+        );
+        if (!matched) {
+          clearCurrentUserSession();
+          setAccessStatus('unauthorized');
+          return;
+        }
+        if (matched.status === 'suspended') {
+          setAccessStatus('suspended');
+          return;
+        }
+      }
 
       const workspace = await loadClientWorkspaceFromSupabase({
         clientId: targetId,
         email: targetEmail,
-        fallbackName: currentUser?.name || profile.name,
+        fallbackName: targetSub.name,
         fallbackPlan: 'standard',
       });
       if (!mounted) return;
 
       const nextProfile: ClientProfile = {
         ...workspace.profile,
+        accessToken: tokenSubscriber?.accessToken || workspace.profile.accessToken,
         subscription_plan: 'standard',
       };
       setProfile(nextProfile);
       setWorkoutDays(workspace.workoutDays);
       setNotes(workspace.notes);
+      setAccessStatus('authorized');
     };
 
-    void hydrateFromCloud();
+    void verifyAndHydrate();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [
+    tokenSubscriber?.id,
+    tokenSubscriber?.email,
+    tokenSubscriber?.accessToken,
+    tokenSubscriber?.plan,
+    isolatedByToken,
+  ]);
 
-  // Real-time synchronization for coach replies and profile updates
+  // Real-time synchronization strictly scoped to THIS subscriber
   useEffect(() => {
+    if (accessStatus !== 'authorized') return;
+    const cleanEmail = (profile.email || '').trim().toLowerCase();
+    const cleanId = (profile.id || '').trim();
+
     const handleNotesSync = () => {
-      const currentUser = getCurrentUserSession();
+      if (!cleanEmail && !cleanId) return;
       void fetchNotesFromSupabase({
-        clientId: currentUser?.id || profile.id,
-        clientEmail: currentUser?.email || profile.email,
-        clientName: currentUser?.name || profile.name,
+        clientId: cleanId,
+        clientEmail: cleanEmail,
+        clientName: profile.name,
       }).then(setNotes);
     };
 
     const handleProfileSync = (e: Event) => {
       const detail = (e as CustomEvent<ClientProfile | undefined>).detail;
       if (detail) {
+        const dEmail = (detail.email || '').trim().toLowerCase();
+        const dId = (detail.id || '').trim().toLowerCase();
+        if ((dEmail && cleanEmail && dEmail !== cleanEmail) || (dId && cleanId && dId !== cleanId.toLowerCase())) {
+          return;
+        }
         setProfile((prev) => ({ ...prev, ...detail, subscription_plan: 'standard' }));
       }
     };
@@ -131,7 +209,7 @@ export const StandardDashboard: React.FC = () => {
       window.removeEventListener('oao_notes_updated', handleNotesSync);
       window.removeEventListener('oao_profile_updated', handleProfileSync);
     };
-  }, [profile.id, profile.email, profile.name]);
+  }, [accessStatus, profile.id, profile.email, profile.name]);
 
   // Modals state
   const [activeVideoExercise, setActiveVideoExercise] = useState<Exercise | null>(null);
@@ -173,8 +251,51 @@ export const StandardDashboard: React.FC = () => {
 
   const handleLogout = () => {
     clearCurrentUserSession();
-    navigate('/');
+    if (onLogoutOverride) {
+      onLogoutOverride();
+    } else {
+      navigate('/');
+    }
   };
+
+  if (accessStatus === 'checking') {
+    return (
+      <div className="min-h-screen bg-[#030712] text-white flex flex-col items-center justify-center p-6 font-['Alexandria',sans-serif]">
+        <Loader2 className="w-10 h-10 text-orange-400 animate-spin mb-4" />
+        <p className="text-sm font-bold text-slate-300">جاري التحقق من صلاحية الحساب وتحميل بياناتك الخاصة...</p>
+      </div>
+    );
+  }
+
+  if (accessStatus !== 'authorized') {
+    const title =
+      accessStatus === 'suspended'
+        ? 'تم تعليق هذا الحساب مؤقتاً'
+        : 'مطلوب تسجيل الدخول للوصول للبوابة';
+    const desc =
+      accessStatus === 'suspended'
+        ? 'يرجى التواصل مع الكوتش عمر عدنان لإعادة تفعيل الاشتراك.'
+        : 'لضمان خصوصية وعزل بيانات كل مشترك، لا يمكن فتح هذه الصفحة بدون تسجيل الدخول أو استخدام الرابط الخاص المرسل من الكوتش.';
+
+    return (
+      <div className="min-h-screen bg-[#030712] text-white flex items-center justify-center p-6 font-['Alexandria',sans-serif]" dir="rtl">
+        <div className="max-w-md w-full rounded-3xl p-8 bg-gradient-to-br from-[#0B132B] via-[#070E24] to-[#040817] border border-orange-500/35 shadow-2xl text-center space-y-5">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-orange-500/15 border border-orange-500/40 flex items-center justify-center text-orange-400">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h1 className="text-xl font-black text-white">{title}</h1>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{desc}</p>
+          <button
+            onClick={() => navigate('/')}
+            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-all"
+          >
+            <span>الانتقال لصفحة تسجيل الدخول</span>
+            <ArrowRight className="w-4 h-4 rtl:rotate-180" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#030712] text-white selection:bg-orange-500 selection:text-white font-['Alexandria',sans-serif]">

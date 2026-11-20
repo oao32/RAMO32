@@ -348,12 +348,13 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
     });
 
     setCategories(updatedCategories);
-    saveDietCategories(tier, updatedCategories);
     if (activeTargetClient) {
       const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
+      saveDietCategories(tier, updatedCategories, canonicalKey);
       void syncNutritionPlanToSupabase(canonicalKey, updatedCategories, tier, activeTargetClient.email);
       window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: updatedCategories } }));
     } else {
+      saveDietCategories(tier, updatedCategories);
       void syncTierNutritionPlanToSupabase(tier, updatedCategories);
       window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories: updatedCategories } }));
     }
@@ -379,12 +380,13 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
     });
 
     setCategories(updatedCategories);
-    saveDietCategories(tier, updatedCategories);
     if (activeTargetClient) {
       const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
+      saveDietCategories(tier, updatedCategories, canonicalKey);
       void syncNutritionPlanToSupabase(canonicalKey, updatedCategories, tier, activeTargetClient.email);
       window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: updatedCategories } }));
     } else {
+      saveDietCategories(tier, updatedCategories);
       void syncTierNutritionPlanToSupabase(tier, updatedCategories);
       window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories: updatedCategories } }));
     }
@@ -403,12 +405,14 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
       setTimeout(() => setConfirmReset(false), 4000);
       return;
     }
-    let defaults = resetDietCategories(tier);
+    let defaults: MealCategory[];
     if (activeTargetClient) {
       const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
+      resetDietCategories(tier, canonicalKey);
       defaults = await resetNutritionPlanInSupabase(canonicalKey, tier, activeTargetClient.email);
       window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: defaults } }));
     } else {
+      resetDietCategories(tier);
       defaults = await resetTierNutritionPlanInSupabase(tier);
       window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories: defaults } }));
     }
@@ -455,12 +459,13 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
   const handleApplyTemplate = (tmpl: MealPlanTemplate) => {
     if (tmpl.categories && tmpl.categories.length > 0) {
       setCategories(tmpl.categories);
-      saveDietCategories(tier, tmpl.categories);
       if (activeTargetClient) {
         const canonicalKey = getCanonicalClientKey(activeTargetClient.id, activeTargetClient.email);
+        saveDietCategories(tier, tmpl.categories, canonicalKey);
         void syncNutritionPlanToSupabase(canonicalKey, tmpl.categories, tier, activeTargetClient.email);
         window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { clientId: canonicalKey, categories: tmpl.categories } }));
       } else {
+        saveDietCategories(tier, tmpl.categories);
         void syncTierNutritionPlanToSupabase(tier, tmpl.categories);
         window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories: tmpl.categories } }));
       }

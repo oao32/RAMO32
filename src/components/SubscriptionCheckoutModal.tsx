@@ -9,6 +9,7 @@ import {
 import { BrandLogo } from './BrandLogo';
 import { VIPBadge } from './VIPBadge';
 import {
+  generateSecureAccessToken,
   normalizeSubscriptionPlan,
   saveDeclarationToSupabase,
   syncProfileToSupabase,
@@ -44,7 +45,7 @@ import {
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { assignSubscriberPassword, setCurrentUserSession } from '../lib/authStore';
-import { INITIAL_CLIENT_PROFILE } from '../data/initialData';
+import { createNeutralClientProfile } from '../data/initialData';
 
 export interface PlanDetails {
   id: string;
@@ -486,11 +487,13 @@ export const SubscriptionCheckoutModal: React.FC<SubscriptionCheckoutModalProps>
       const cleanEmail = email.trim().toLowerCase();
       const generatedCode = `OAO-${resolvedPlanTier === 'VIP' ? 'VIP' : 'STD'}-${Math.floor(100 + Math.random() * 900)}`;
       const generatedPass = `OAO-${resolvedPlanTier === 'VIP' ? 'VIP' : 'STD'}-${Math.floor(1000 + Math.random() * 9000)}`;
-      await assignSubscriberPassword({
+      const mintedAccessToken = generateSecureAccessToken();
+      const assignRes = await assignSubscriberPassword({
         email: cleanEmail,
         password: generatedPass,
         clientName: fullName.trim(),
         clientCode: generatedCode,
+        accessToken: mintedAccessToken,
         plan: resolvedPlanTier,
         phone: phoneWhatsapp.trim(),
         age: Number(age) || undefined,
@@ -501,13 +504,16 @@ export const SubscriptionCheckoutModal: React.FC<SubscriptionCheckoutModalProps>
         status: 'active',
       });
 
-      const updatedProfile = {
-        ...INITIAL_CLIENT_PROFILE,
-        id: cleanEmail,
+      const canonicalId = assignRes.record?.id || cleanEmail;
+      const finalAccessToken = assignRes.record?.accessToken || mintedAccessToken;
+      const updatedProfile = createNeutralClientProfile({
+        id: canonicalId,
         name: fullName.trim(),
         nameEn: fullName.trim(),
         email: cleanEmail,
         phone: phoneWhatsapp.trim(),
+        clientCode: assignRes.record?.clientCode || generatedCode,
+        accessToken: finalAccessToken,
         age: Number(age) || undefined,
         bloodType,
         visualGoal,
@@ -516,15 +522,16 @@ export const SubscriptionCheckoutModal: React.FC<SubscriptionCheckoutModalProps>
         subscription_plan: resolvedPlanTier,
         subscriptionStatus: 'active' as const,
         subscriptionDaysLeft: currentDurationInfo.days,
-      };
+      });
       setCurrentUserSession({
-        id: cleanEmail,
+        id: canonicalId,
         email: cleanEmail,
         name: fullName.trim(),
         plan: resolvedPlanTier,
         role: 'client',
-        clientCode: generatedCode,
+        clientCode: assignRes.record?.clientCode || generatedCode,
         phone: phoneWhatsapp.trim(),
+        accessToken: finalAccessToken,
       });
       window.dispatchEvent(new CustomEvent('oao_profile_updated', { detail: updatedProfile }));
       await syncProfileToSupabase(updatedProfile);

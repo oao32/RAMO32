@@ -14,11 +14,11 @@ import {
   WorkoutDay,
 } from '../types';
 import {
-  INITIAL_ATHLETE_RANK,
-  INITIAL_BADGES,
-  INITIAL_CLIENT_PROFILE,
-  INITIAL_STREAK_DATA,
   INITIAL_WORKOUT_DAYS,
+  createNeutralAthleteRank,
+  createNeutralBadges,
+  createNeutralClientProfile,
+  createNeutralStreakData,
 } from '../data/initialData';
 import {
   MealCategory,
@@ -44,7 +44,7 @@ export function getCanonicalClientKey(clientId?: string | null, email?: string |
   if (cleanEmail) {
     return cleanEmail;
   }
-  return cleanId || 'global';
+  return '';
 }
 
 export function buildCandidateClientKeys(clientId?: string | null, email?: string | null): string[] {
@@ -57,10 +57,24 @@ export function buildCandidateClientKeys(clientId?: string | null, email?: strin
   if (cleanEmail) {
     keys.add(cleanEmail);
   }
-  if (keys.size === 0 && cleanId) {
-    keys.add(cleanId);
-  }
   return Array.from(keys);
+}
+
+/**
+ * Generate a non-guessable URL-safe access token (`oao_` + 24 hex chars) for isolated `/s/<token>` portals
+ */
+export function generateSecureAccessToken(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(12);
+    crypto.getRandomValues(bytes);
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return `oao_${hex}`;
+  }
+  let hex = '';
+  for (let i = 0; i < 24; i++) {
+    hex += Math.floor(Math.random() * 16).toString(16);
+  }
+  return `oao_${hex}`;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -691,6 +705,7 @@ export async function syncNoteToSupabase(note: ClientNote): Promise<boolean> {
   if (!client) return false;
   try {
     const canonicalClientId = getCanonicalClientKey(note.clientId, note.clientEmail);
+    if (!canonicalClientId) return false;
     const fullPayload: Record<string, unknown> = {
       id: note.id,
       client_id: canonicalClientId,
@@ -731,7 +746,7 @@ export async function fetchNotesFromSupabase(filter?: {
 
     const mapped: ClientNote[] = data.map((row: Record<string, unknown>) => ({
       id: String(row.id),
-      clientId: row.client_id ? String(row.client_id) : 'client_athlete',
+      clientId: row.client_id ? String(row.client_id) : '',
       clientName: String(row.client_name || 'مشترك'),
       clientEmail: row.client_email ? String(row.client_email).trim().toLowerCase() : undefined,
       subject: String(row.subject || ''),
@@ -743,14 +758,19 @@ export async function fetchNotesFromSupabase(filter?: {
       isResolved: Boolean(row.is_resolved),
     }));
 
-    if (filter && (filter.clientId || filter.clientEmail || filter.clientName)) {
+    if (filter) {
       const candidates = buildCandidateClientKeys(filter.clientId, filter.clientEmail);
       const cleanEmail = (filter.clientEmail || '').trim().toLowerCase();
-      const cleanName = (filter.clientName || '').trim().toLowerCase();
+      if (candidates.length === 0 && !cleanEmail) {
+        return [];
+      }
       return mapped.filter((n) => {
-        if (n.clientId && candidates.includes(n.clientId)) return true;
-        if (cleanEmail && n.clientEmail && n.clientEmail.trim().toLowerCase() === cleanEmail) return true;
-        if (cleanName && n.clientName && n.clientName.trim().toLowerCase() === cleanName) return true;
+        if (n.clientId && !LEGACY_PLACEHOLDER_IDS.has(n.clientId) && candidates.includes(n.clientId)) {
+          return true;
+        }
+        if (cleanEmail && n.clientEmail && n.clientEmail.trim().toLowerCase() === cleanEmail) {
+          return true;
+        }
         return false;
       });
     }
@@ -1065,6 +1085,7 @@ export interface SaveSubscriberPlanInput {
   targetWeightKg?: number;
   subscriptionPlan: SubscriptionPlanTier;
   clientCode?: string;
+  accessToken?: string;
   status?: string;
   subscriptionStartDate?: string;
   subscriptionEndDate?: string;
@@ -1073,11 +1094,17 @@ export interface SaveSubscriberPlanInput {
 
 /**
  * Persist subscriber registration & `subscription_plan` ('standard' | 'VIP')
- * directly into Supabase `public.clients` (and `public.profiles` if present).
+ * directly into Supabase `public.clients` (and preserve or assign `access_token`).
  */
 export async function saveSubscriberToSupabase(
   input: SaveSubscriberPlanInput
-): Promise<{ synced: boolean; subscriptionPlan: SubscriptionPlanTier; id?: string; error?: string }> {
+): Promise<{
+  synced: boolean;
+  subscriptionPlan: SubscriptionPlanTier;
+  id?: string;
+  accessToken?: string;
+  error?: string;
+}> {
   const normalizedPlan = normalizeSubscriptionPlan(input.subscriptionPlan);
   const packageTypeAr =
     normalizedPlan === 'VIP' ? 'الباقة البلاتينية (VIP)' : 'الباقة القياسية (Standard)';
@@ -1097,17 +1124,32 @@ export async function saveSubscriberToSupabase(
     // Check if a subscriber row with this email already exists in `public.clients`
     let existingUuid: string | null =
       input.id && UUID_REGEX.test(input.id) ? input.id : null;
+    let existingAccessToken: string | undefined = input.accessToken?.trim() || undefined;
 
-    if (!existingUuid && cleanEmail) {
+    if (cleanEmail) {
       const { data: found } = await client
         .from('clients')
-        .select('id')
+        .select('id, access_token')
         .ilike('email', cleanEmail)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (found && typeof found.id === 'string') {
-        existingUuid = found.id;
+
+      if (found) {
+        if (!existingUuid && typeof found.id === 'string') existingUuid = found.id;
+        if (!existingAccessToken && typeof found.access_token === 'string' && found.access_token.trim()) {
+          existingAccessToken = found.access_token.trim();
+        }
+      } else {
+        const { data: foundIdOnly } = await client
+          .from('clients')
+          .select('id')
+          .ilike('email', cleanEmail)
+          .limit(1)
+          .maybeSingle();
+        if (!existingUuid && foundIdOnly && typeof foundIdOnly.id === 'string') {
+          existingUuid = foundIdOnly.id;
+        }
       }
     }
 
@@ -1125,11 +1167,13 @@ export async function saveSubscriberToSupabase(
     }
 
     const rowId = existingRowId || existingUuid || generateUUID();
+    const resolvedAccessToken = existingAccessToken || generateSecureAccessToken();
 
-    // Primary payload including `subscription_plan` ('standard' | 'VIP') and subscription duration
+    // Primary payload including `subscription_plan` ('standard' | 'VIP') and `access_token`
     const fullClientPayload: Record<string, unknown> = {
       id: rowId,
       client_code: clientCode,
+      access_token: resolvedAccessToken,
       name_ar: input.nameAr,
       name_en: input.nameEn || input.nameAr,
       email: cleanEmail || null,
@@ -1144,45 +1188,25 @@ export async function saveSubscriberToSupabase(
       status: input.status || 'active',
     };
 
-    let { error } = await writeClientRowSafely(client, fullClientPayload, existingRowId, input.coachId);
-
-    // Adaptive fallback if extended columns haven't been added via SQL Editor yet
-    if (
-      error &&
-      (error.code === 'PGRST204' ||
-        error.code === '42703' ||
-        error.message.includes('subscription_plan') ||
-        error.message.includes('subscription_start_date') ||
-        error.message.includes('subscription_end_date') ||
-        error.message.includes('column'))
-    ) {
-      const fallbackPayload: Record<string, unknown> = {
-        id: rowId,
-        client_code: clientCode,
-        name_ar: input.nameAr,
-        name_en: input.nameEn || input.nameAr,
-        email: cleanEmail || null,
-        phone: input.phone || null,
-        height_cm: input.heightCm ?? 175,
-        target_weight_kg: input.targetWeightKg ?? 70,
-        package_type_ar: packageTypeAr,
-        package_type_en: packageTypeEn,
-        status: input.status || 'active',
-      };
-      const retryRes = await writeClientRowSafely(client, fallbackPayload, existingRowId, input.coachId);
-      error = retryRes.error;
-    }
+    const writeRes = await writeClientRowSafely(client, fullClientPayload, existingRowId, input.coachId);
+    const error = writeRes.error;
 
     if (error) {
       return {
         synced: false,
         subscriptionPlan: normalizedPlan,
         id: rowId,
+        accessToken: resolvedAccessToken,
         error: formatSupabaseErrorMessage(error),
       };
     }
 
-    return { synced: true, subscriptionPlan: normalizedPlan, id: rowId };
+    return {
+      synced: true,
+      subscriptionPlan: normalizedPlan,
+      id: rowId,
+      accessToken: resolvedAccessToken,
+    };
   } catch (err) {
     return {
       synced: false,
@@ -1256,6 +1280,7 @@ export async function fetchSubscriberPlanFromSupabase(
 export async function syncProfileToSupabase(profile: ClientProfile): Promise<boolean> {
   const normalizedPlan = normalizeSubscriptionPlan(profile.subscription_plan);
   const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
+  if (!canonicalKey) return false;
 
   // 1. Sync to live `public.clients` table
   const clientRes = await saveSubscriberToSupabase({
@@ -1268,6 +1293,7 @@ export async function syncProfileToSupabase(profile: ClientProfile): Promise<boo
     targetWeightKg: profile.targetWeight,
     subscriptionPlan: normalizedPlan,
     clientCode: profile.clientCode,
+    accessToken: profile.accessToken,
     status: profile.subscriptionStatus,
     subscriptionStartDate: profile.subscriptionStartDate,
     subscriptionEndDate: profile.subscriptionEndDate,
@@ -1314,6 +1340,7 @@ export async function syncProfileToSupabase(profile: ClientProfile): Promise<boo
         workout_data: {
           ...profile,
           id: resolvedId,
+          accessToken: profile.accessToken || clientRes.accessToken,
           subscription_plan: normalizedPlan,
         },
         updated_at: new Date().toISOString(),
@@ -1333,6 +1360,7 @@ export async function syncClientProfileToSupabase(
   profile: ClientProfile
 ): Promise<boolean> {
   const canonicalKey = getCanonicalClientKey(clientKey || profile.id, profile.email);
+  if (!canonicalKey) return false;
   return syncProfileToSupabase({
     ...profile,
     id: canonicalKey,
@@ -1348,15 +1376,14 @@ export async function fetchClientProfileFromSupabase(
   const candidates = buildCandidateClientKeys(clientId, cleanEmail);
   const canonicalKey = getCanonicalClientKey(clientId, cleanEmail);
 
-  const baseProfile: ClientProfile = {
-    ...INITIAL_CLIENT_PROFILE,
+  const baseProfile: ClientProfile = createNeutralClientProfile({
     ...fallback,
-    id: canonicalKey || INITIAL_CLIENT_PROFILE.id,
-    email: cleanEmail || fallback?.email || INITIAL_CLIENT_PROFILE.email,
-    subscription_plan: normalizeSubscriptionPlan(
-      fallback?.subscription_plan || INITIAL_CLIENT_PROFILE.subscription_plan
-    ),
-  };
+    id: canonicalKey || fallback?.id || '',
+    email: cleanEmail || fallback?.email || '',
+    name: fallback?.name || 'مشترك',
+    nameEn: fallback?.nameEn || fallback?.name || 'Athlete',
+    subscription_plan: normalizeSubscriptionPlan(fallback?.subscription_plan || 'standard'),
+  });
 
   const client = getSupabaseClient();
   if (!client || candidates.length === 0) {
@@ -1428,6 +1455,7 @@ export async function fetchClientProfileFromSupabase(
       if (sRow.email) merged.email = String(sRow.email).trim().toLowerCase();
       if (sRow.phone) merged.phone = String(sRow.phone);
       if (sRow.client_code) merged.clientCode = String(sRow.client_code);
+      if (sRow.access_token) merged.accessToken = String(sRow.access_token);
       if (sRow.tier) merged.subscription_plan = normalizeSubscriptionPlan(String(sRow.tier));
       if (sRow.goals) merged.visualGoal = String(sRow.goals);
       if (sRow.status) merged.subscriptionStatus = sRow.status as ClientProfile['subscriptionStatus'];
@@ -1449,6 +1477,7 @@ export async function fetchClientProfileFromSupabase(
       if (row.email) merged.email = String(row.email).trim().toLowerCase();
       if (row.phone && !merged.phone) merged.phone = String(row.phone);
       if (row.client_code && !merged.clientCode) merged.clientCode = String(row.client_code);
+      if (row.access_token && !merged.accessToken) merged.accessToken = String(row.access_token);
       if (row.height_cm) merged.height = Number(row.height_cm);
       if (row.target_weight_kg) merged.targetWeight = Number(row.target_weight_kg);
       if (!subscribersRes.data && (row.subscription_plan || row.package_type_en)) {
@@ -1480,6 +1509,7 @@ export async function fetchClientProfileFromSupabase(
       const authData = (authRes.data as Record<string, unknown>).workout_data as Record<string, unknown>;
       if (authData.clientName && !clientsRes.data && !subscribersRes.data) merged.name = String(authData.clientName);
       if (authData.plan && !subscribersRes.data) merged.subscription_plan = normalizeSubscriptionPlan(String(authData.plan));
+      if (authData.accessToken && !merged.accessToken) merged.accessToken = String(authData.accessToken);
       if (authData.nutritionPlanLocked !== undefined && !subscribersRes.data) {
         merged.nutritionPlanLocked = Boolean(authData.nutritionPlanLocked);
       }
@@ -1502,6 +1532,7 @@ export async function fetchClientProfileFromSupabase(
 
     if (!extRes.error && extRes.data && (extRes.data as Record<string, unknown>).workout_data) {
       const ext = (extRes.data as Record<string, unknown>).workout_data as Partial<ClientProfile>;
+      if (ext.accessToken && !merged.accessToken) merged.accessToken = ext.accessToken;
       if (ext.weight !== undefined) merged.weight = ext.weight;
       if (ext.height !== undefined) merged.height = ext.height;
       if (ext.muscleMass !== undefined) merged.muscleMass = ext.muscleMass;
@@ -1660,13 +1691,20 @@ export async function deleteDeclarationFromSupabase(id: string): Promise<boolean
 }
 
 /**
- * Delete inquiry/note from Supabase & local storage
+ * Delete inquiry/note permanently from Supabase
  */
 export async function deleteNoteFromSupabase(noteId: string): Promise<boolean> {
   const client = getSupabaseClient();
-  if (!client) return true;
+  if (!client || !noteId) return false;
   try {
-    await client.from('notes').delete().eq('id', noteId);
+    const { error } = await client.from('notes').delete().eq('id', noteId);
+    if (error && !isMissingTableError(error)) {
+      console.warn('Supabase delete note error:', error);
+      return false;
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('oao_notes_updated'));
+    }
     return true;
   } catch {
     return false;
@@ -1683,7 +1721,7 @@ export async function syncWorkoutDaysToSupabase(
 ): Promise<boolean> {
   const canonicalKey = getCanonicalClientKey(clientId, email);
   const client = getSupabaseClient();
-  if (!client) return false;
+  if (!client || !canonicalKey) return false;
   try {
     const payload = {
       id: `workouts_${canonicalKey}`,
@@ -1852,7 +1890,7 @@ export async function syncNutritionPlanToSupabase(
 ): Promise<boolean> {
   const canonicalKey = getCanonicalClientKey(clientKey, email);
   const client = getSupabaseClient();
-  if (!client) return false;
+  if (!client || !canonicalKey) return false;
   try {
     const payload = {
       id: `nutrition_${canonicalKey}`,
@@ -2028,7 +2066,7 @@ export async function syncAssessmentToSupabase(
 ): Promise<boolean> {
   const canonicalKey = getCanonicalClientKey(clientKey, email);
   const client = getSupabaseClient();
-  if (!client) return false;
+  if (!client || !canonicalKey) return false;
   try {
     const { error } = await client.from('workouts').upsert(
       {
@@ -2068,9 +2106,9 @@ export async function fetchAssessmentFromSupabase(
         const w = (data as Record<string, unknown>).workout_data as Partial<ClientAssessmentBundle>;
         return {
           analysisData: w.analysisData,
-          streakData: w.streakData || INITIAL_STREAK_DATA,
-          athleteRank: w.athleteRank || INITIAL_ATHLETE_RANK,
-          badges: Array.isArray(w.badges) && w.badges.length > 0 ? w.badges : INITIAL_BADGES,
+          streakData: w.streakData || createNeutralStreakData(),
+          athleteRank: w.athleteRank || createNeutralAthleteRank(),
+          badges: Array.isArray(w.badges) && w.badges.length > 0 ? w.badges : createNeutralBadges(),
         };
       }
     } catch {
@@ -2080,9 +2118,9 @@ export async function fetchAssessmentFromSupabase(
 
   return {
     analysisData: undefined,
-    streakData: JSON.parse(JSON.stringify(INITIAL_STREAK_DATA)),
-    athleteRank: JSON.parse(JSON.stringify(INITIAL_ATHLETE_RANK)),
-    badges: JSON.parse(JSON.stringify(INITIAL_BADGES)),
+    streakData: createNeutralStreakData(),
+    athleteRank: createNeutralAthleteRank(),
+    badges: createNeutralBadges(),
   };
 }
 
@@ -2123,14 +2161,13 @@ export async function loadClientWorkspaceFromSupabase(params: {
     fetchNotesFromSupabase({
       clientId: resolvedId,
       clientEmail: resolvedEmail,
-      clientName: profile.name,
     }),
   ]);
 
   const analysisData = assessment.analysisData || profile.analysisData;
-  const streakData = assessment.streakData || profile.streakData || INITIAL_STREAK_DATA;
-  const athleteRank = assessment.athleteRank || profile.athleteRank || INITIAL_ATHLETE_RANK;
-  const badges = Array.isArray(assessment.badges) && assessment.badges.length > 0 ? assessment.badges : INITIAL_BADGES;
+  const streakData = assessment.streakData || profile.streakData || createNeutralStreakData();
+  const athleteRank = assessment.athleteRank || profile.athleteRank || createNeutralAthleteRank();
+  const badges = Array.isArray(assessment.badges) && assessment.badges.length > 0 ? assessment.badges : createNeutralBadges();
 
   const hydratedProfile: ClientProfile = {
     ...profile,
@@ -2214,6 +2251,7 @@ CREATE TABLE IF NOT EXISTS public.subscribers (
   email TEXT UNIQUE NOT NULL,
   passcode TEXT NOT NULL,
   client_code TEXT,
+  access_token TEXT,
   tier TEXT NOT NULL DEFAULT 'standard' CHECK (tier IN ('standard', 'VIP')),
   goals TEXT,
   phone TEXT,
@@ -2227,6 +2265,7 @@ CREATE TABLE IF NOT EXISTS public.subscribers (
 
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS passcode TEXT;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS client_code TEXT;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS access_token TEXT;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'standard';
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS goals TEXT;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS phone TEXT;
@@ -2237,11 +2276,16 @@ ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS nutrition_plan_locked BO
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS inbody_filename TEXT;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS inbody_file_url TEXT;
 
+CREATE UNIQUE INDEX IF NOT EXISTS subscribers_access_token_key
+  ON public.subscribers(access_token)
+  WHERE access_token IS NOT NULL AND access_token <> '';
+
 -- 1. جدول المشتركين التفصيلي (clients)
 CREATE TABLE IF NOT EXISTS public.clients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
   client_code TEXT,
+  access_token TEXT,
   name_ar TEXT NOT NULL,
   name_en TEXT,
   email TEXT UNIQUE,
@@ -2265,6 +2309,7 @@ CREATE TABLE IF NOT EXISTS public.clients (
   coach_id UUID
 );
 
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS access_token TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS assigned_password TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS blood_type TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS visual_goal TEXT;
@@ -2280,6 +2325,10 @@ ALTER TABLE public.clients ALTER COLUMN height_cm SET DEFAULT 175;
 ALTER TABLE public.clients ALTER COLUMN height_cm DROP NOT NULL;
 ALTER TABLE public.clients ALTER COLUMN target_weight_kg SET DEFAULT 70;
 ALTER TABLE public.clients ALTER COLUMN target_weight_kg DROP NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS clients_access_token_key
+  ON public.clients(access_token)
+  WHERE access_token IS NOT NULL AND access_token <> '';
 
 ALTER TABLE public.clients DROP CONSTRAINT IF EXISTS clients_subscription_plan_check;
 ALTER TABLE public.clients
@@ -2378,7 +2427,76 @@ CREATE TABLE IF NOT EXISTS public.notes (
 
 ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS client_email TEXT;
 
--- 6. فتح صلاحيات الإدخال والتعديل وإيقاف RLS المقيد للجداول الإدارية
+-- 6. تعبئة روابط access_token للمشتركين الحاليين فقط عند غيابها (دون مساس بأي بيانات حقيقية)
+UPDATE public.subscribers
+SET access_token = 'oao_' || substr(md5(random()::text || clock_timestamp()::text || id::text), 1, 24)
+WHERE access_token IS NULL OR trim(access_token) = '';
+
+UPDATE public.clients c
+SET access_token = COALESCE(
+  (SELECT s.access_token FROM public.subscribers s WHERE lower(s.email) = lower(c.email) LIMIT 1),
+  'oao_' || substr(md5(random()::text || clock_timestamp()::text || c.id::text), 1, 24)
+)
+WHERE c.access_token IS NULL OR trim(c.access_token) = '';
+
+-- 7. إزالة آمنة ومحددة لسجلات الاختبار القديمة المطابقة للاسم التجريبي (عبدالرحمن الشمري) فقط دون أي مساس بالمشتركين الحقيقيين
+DO $$
+DECLARE
+  test_client_ids TEXT[];
+  test_emails TEXT[];
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'subscribers') THEN
+    SELECT COALESCE(array_agg(DISTINCT id::text), ARRAY[]::TEXT[]),
+           COALESCE(array_agg(DISTINCT lower(email)), ARRAY[]::TEXT[])
+    INTO test_client_ids, test_emails
+    FROM public.subscribers
+    WHERE trim(name) = 'عبدالرحمن الشمري' OR lower(email) = 'abdulrahman@oao.com';
+
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'notes') THEN
+      DELETE FROM public.notes
+      WHERE trim(client_name) = 'عبدالرحمن الشمري'
+         OR lower(COALESCE(client_email, '')) = ANY(test_emails)
+         OR client_id = ANY(test_client_ids)
+         OR client_id = 'client_abdulrahman';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'workouts') THEN
+      DELETE FROM public.workouts
+      WHERE client_id = 'client_abdulrahman'
+         OR client_id = ANY(test_client_ids)
+         OR client_id = ANY(test_emails)
+         OR id IN ('workouts_client_abdulrahman', 'nutrition_client_abdulrahman', 'assessment_client_abdulrahman', 'profile_ext_client_abdulrahman', 'auth_abdulrahman@oao.com');
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'profiles') THEN
+      DELETE FROM public.profiles
+      WHERE trim(name) = 'عبدالرحمن الشمري'
+         OR id = 'client_abdulrahman'
+         OR id = ANY(test_client_ids)
+         OR id = ANY(test_emails);
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'declarations') THEN
+      DELETE FROM public.declarations
+      WHERE trim(full_name) = 'عبدالرحمن الشمري'
+         OR lower(COALESCE(email, '')) = ANY(test_emails)
+         OR lower(COALESCE(email, '')) = 'abdulrahman@oao.com';
+    END IF;
+
+    DELETE FROM public.subscribers
+    WHERE trim(name) = 'عبدالرحمن الشمري' OR lower(email) = 'abdulrahman@oao.com';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'clients') THEN
+    DELETE FROM public.clients
+    WHERE trim(COALESCE(name_ar, '')) = 'عبدالرحمن الشمري'
+       OR trim(COALESCE(name_en, '')) = 'Abdulrahman Al-Shammari'
+       OR lower(COALESCE(email, '')) = 'abdulrahman@oao.com';
+  END IF;
+END $$;
+
+-- 8. فتح صلاحيات الإدخال والتعديل وإيقاف RLS المقيد للجداول الإدارية
 ${SUPABASE_RLS_FIX_SQL}
 `;
+
 

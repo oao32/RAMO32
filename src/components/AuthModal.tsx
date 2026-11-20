@@ -143,6 +143,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         role: authResult.role,
         clientCode: authResult.clientCode,
         phone: authResult.phone,
+        accessToken: authResult.accessToken,
       });
 
       setSuccessNotice(
@@ -197,6 +198,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         role: authByCode.role,
         clientCode: authByCode.clientCode,
         phone: authByCode.phone,
+        accessToken: authByCode.accessToken,
       });
       setSuccessNotice(
         language === 'ar'

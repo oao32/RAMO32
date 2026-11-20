@@ -1151,35 +1151,51 @@ function isVipTier(tier?: string | null): boolean {
 }
 
 /**
- * تحديث الكاش في الذاكرة للخطة الغذائية وتنبيه المكونات (يتم الحفظ الفعلي في Supabase)
+ * تحديث الكاش في الذاكرة للخطة الغذائية وتنبيه المكونات (الكاش مخصص فقط لقوالب الباقات العامة وليس للملفات الفردية)
  */
-export function saveDietCategories(tier: string, categories: MealCategory[]): void {
+export function saveDietCategories(
+  tier: string,
+  categories: MealCategory[],
+  clientId?: string
+): void {
   const isVip = isVipTier(tier);
-  if (isVip) {
-    tierDietMemoryCache.VIP = categories;
-  } else {
-    tierDietMemoryCache.standard = categories;
+  if (!clientId) {
+    if (isVip) {
+      tierDietMemoryCache.VIP = categories;
+    } else {
+      tierDietMemoryCache.standard = categories;
+    }
   }
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories } }));
+    window.dispatchEvent(
+      new CustomEvent('oao_diet_updated', {
+        detail: { tier, categories, clientId: clientId || undefined },
+      })
+    );
   }
 }
 
 /**
  * استرجاع الخطة الغذائية الافتراضية
  */
-export function resetDietCategories(tier: string): MealCategory[] {
+export function resetDietCategories(tier: string, clientId?: string): MealCategory[] {
   const isVip = isVipTier(tier);
   const defaults = JSON.parse(
     JSON.stringify(isVip ? VIP_PLATINUM_DIET_CATEGORIES : STANDARD_DIET_CATEGORIES)
   ) as MealCategory[];
-  if (isVip) {
-    delete tierDietMemoryCache.VIP;
-  } else {
-    delete tierDietMemoryCache.standard;
+  if (!clientId) {
+    if (isVip) {
+      delete tierDietMemoryCache.VIP;
+    } else {
+      delete tierDietMemoryCache.standard;
+    }
   }
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('oao_diet_updated', { detail: { tier, categories: defaults } }));
+    window.dispatchEvent(
+      new CustomEvent('oao_diet_updated', {
+        detail: { tier, categories: defaults, clientId: clientId || undefined },
+      })
+    );
   }
   return defaults;
 }

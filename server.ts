@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -17,6 +18,24 @@ function getServiceSupabaseClient(): SupabaseClient | null {
   return createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+function generateServerAccessToken(): string {
+  return `oao_${crypto.randomBytes(12).toString('hex')}`;
+}
+
+function isIgnorableMissingDbObject(err: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!err) return true;
+  const msg = (err.message || '').toLowerCase();
+  return (
+    err.code === '42P01' ||
+    err.code === 'PGRST205' ||
+    err.code === 'PGRST204' ||
+    err.code === '42703' ||
+    msg.includes('could not find the table') ||
+    (msg.includes('relation') && msg.includes('does not exist')) ||
+    msg.includes('does not exist')
+  );
 }
 
 function getGenAIClient() {
@@ -86,11 +105,36 @@ async function startServer() {
       const nowIso = new Date().toISOString();
       const clientName = String(record.clientName || 'مشترك').trim();
 
+      const { data: existingSub, error: lookupSubErr } = await adminSupabase
+        .from('subscribers')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .limit(1)
+        .maybeSingle();
+
+      const { data: existingClient } = await adminSupabase
+        .from('clients')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .limit(1)
+        .maybeSingle();
+
+      const existingToken =
+        (typeof record.accessToken === 'string' && record.accessToken.trim()) ||
+        (existingSub && typeof (existingSub as Record<string, unknown>).access_token === 'string'
+          ? String((existingSub as Record<string, unknown>).access_token).trim()
+          : '') ||
+        (existingClient && typeof (existingClient as Record<string, unknown>).access_token === 'string'
+          ? String((existingClient as Record<string, unknown>).access_token).trim()
+          : '') ||
+        generateServerAccessToken();
+
       const fullSubPayload: Record<string, unknown> = {
         name: clientName,
         email: cleanEmail,
         passcode: cleanPass,
         client_code: record.clientCode || cleanPass,
+        access_token: existingToken,
         tier: normalizedPlan,
         goals: record.visualGoal || null,
         phone: record.phone || null,
@@ -102,13 +146,6 @@ async function startServer() {
         inbody_file_url: record.inBodyFileUrl || null,
         updated_at: nowIso,
       };
-
-      const { data: existingSub, error: lookupSubErr } = await adminSupabase
-        .from('subscribers')
-        .select('id')
-        .ilike('email', cleanEmail)
-        .limit(1)
-        .maybeSingle();
 
       let targetId = String(record.id || '');
       const isSubTableMissing =
@@ -152,13 +189,6 @@ async function startServer() {
         }
       }
 
-      const { data: existingClient } = await adminSupabase
-        .from('clients')
-        .select('id')
-        .ilike('email', cleanEmail)
-        .limit(1)
-        .maybeSingle();
-
       const resolvedClientId =
         (existingClient && typeof existingClient.id === 'string' ? existingClient.id : '') || targetId;
 
@@ -168,6 +198,7 @@ async function startServer() {
       const clientPayload: Record<string, unknown> = {
         ...(resolvedClientId ? { id: resolvedClientId } : {}),
         email: cleanEmail,
+        access_token: existingToken,
         name_ar: clientName,
         name_en: clientName,
         height_cm: 175,
@@ -283,14 +314,19 @@ async function startServer() {
             id: `auth_${cleanEmail}`,
             client_id: resolvedClientId || cleanEmail,
             day_key: 'client_auth',
-            workout_data: { ...record, id: resolvedClientId || record.id, syncedToSupabase: true },
+            workout_data: {
+              ...record,
+              id: resolvedClientId || record.id,
+              accessToken: existingToken,
+              syncedToSupabase: true,
+            },
             updated_at: nowIso,
           },
           { onConflict: 'id' }
         )
         .then(() => undefined, () => undefined);
 
-      res.json({ success: true, id: resolvedClientId || targetId });
+      res.json({ success: true, id: resolvedClientId || targetId, accessToken: existingToken });
     } catch (err) {
       res.status(500).json({
         error: err instanceof Error ? err.message : 'Service role subscriber sync failed',
@@ -356,26 +392,91 @@ async function startServer() {
 
     try {
       const cleanEmail = String(req.body?.email || '').trim().toLowerCase();
-      const candidateId = req.body?.id ? String(req.body.id) : undefined;
-      if (!cleanEmail) {
-        res.status(400).json({ error: 'Missing email' });
+      const candidateId = req.body?.id ? String(req.body.id).trim() : undefined;
+      const accessToken = req.body?.accessToken ? String(req.body.accessToken).trim() : undefined;
+      if (!cleanEmail && !candidateId) {
+        res.status(400).json({ error: 'Missing email or id' });
         return;
       }
 
-      await Promise.all([
-        adminSupabase.from('subscribers').delete().ilike('email', cleanEmail),
-        adminSupabase.from('clients').delete().ilike('email', cleanEmail),
-        adminSupabase.from('declarations').delete().ilike('email', cleanEmail),
-        adminSupabase.from('workouts').delete().eq('id', `auth_${cleanEmail}`),
+      const [{ data: subRows }, { data: clientRows }] = await Promise.all([
+        cleanEmail
+          ? adminSupabase.from('subscribers').select('id').ilike('email', cleanEmail)
+          : Promise.resolve({ data: null }),
+        cleanEmail
+          ? adminSupabase.from('clients').select('id').ilike('email', cleanEmail)
+          : Promise.resolve({ data: null }),
       ]);
 
-      const keys = [candidateId, cleanEmail].filter((k): k is string => Boolean(k));
+      const keySet = new Set<string>();
+      if (candidateId) keySet.add(candidateId);
+      if (cleanEmail) keySet.add(cleanEmail);
+      for (const r of (subRows || []) as Array<Record<string, unknown>>) {
+        if (r.id) keySet.add(String(r.id));
+      }
+      for (const r of (clientRows || []) as Array<Record<string, unknown>>) {
+        if (r.id) keySet.add(String(r.id));
+      }
+
+      const keys = Array.from(keySet);
+      const childErrors: string[] = [];
+
       for (const k of keys) {
-        await Promise.all([
-          adminSupabase.from('workouts').delete().eq('client_id', k),
+        const resList = await Promise.all([
           adminSupabase.from('notes').delete().eq('client_id', k),
+          adminSupabase.from('workouts').delete().eq('client_id', k),
+          adminSupabase.from('workouts').delete().eq('id', `workouts_${k}`),
+          adminSupabase.from('workouts').delete().eq('id', `nutrition_${k}`),
+          adminSupabase.from('workouts').delete().eq('id', `assessment_${k}`),
+          adminSupabase.from('workouts').delete().eq('id', `profile_ext_${k}`),
           adminSupabase.from('profiles').delete().eq('id', k),
+          adminSupabase.from('ai_generation_logs').delete().eq('client_id', k),
         ]);
+        for (const r of resList) {
+          if (r.error && !isIgnorableMissingDbObject(r.error)) {
+            childErrors.push(r.error.message);
+          }
+        }
+      }
+
+      if (cleanEmail) {
+        const emailDeleteList = await Promise.all([
+          adminSupabase.from('notes').delete().ilike('client_email', cleanEmail),
+          adminSupabase.from('declarations').delete().ilike('email', cleanEmail),
+          adminSupabase.from('workouts').delete().eq('id', `auth_${cleanEmail}`),
+          adminSupabase.from('subscribers').delete().ilike('email', cleanEmail),
+          adminSupabase.from('clients').delete().ilike('email', cleanEmail),
+        ]);
+        for (const r of emailDeleteList) {
+          if (r.error && !isIgnorableMissingDbObject(r.error)) {
+            childErrors.push(r.error.message);
+          }
+        }
+      }
+
+      for (const k of keys) {
+        if (k === cleanEmail) continue;
+        const idDeletes = await Promise.all([
+          adminSupabase.from('subscribers').delete().eq('id', k),
+          adminSupabase.from('clients').delete().eq('id', k),
+        ]);
+        for (const r of idDeletes) {
+          if (r.error && !isIgnorableMissingDbObject(r.error)) {
+            childErrors.push(r.error.message);
+          }
+        }
+      }
+
+      if (accessToken) {
+        await Promise.all([
+          adminSupabase.from('subscribers').delete().eq('access_token', accessToken),
+          adminSupabase.from('clients').delete().eq('access_token', accessToken),
+        ]);
+      }
+
+      if (childErrors.length > 0) {
+        res.status(500).json({ error: childErrors[0] });
+        return;
       }
 
       res.json({ success: true });

@@ -7,6 +7,7 @@ import {
   deleteSubscriberRecord,
   toggleSubscriberStatus,
   toggleSubscriberNutritionLock,
+  ensureSubscriberAccessToken,
   generateWhatsAppWelcomeMessage,
   UserCredentialRecord,
 } from '../../lib/authStore';
@@ -41,6 +42,7 @@ import {
   Download,
   AlertTriangle,
   FileSpreadsheet,
+  Link2,
 } from 'lucide-react';
 
 interface AdminSubscribersManagerProps {
@@ -112,6 +114,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
 
   // WhatsApp share notification & inline delete confirmation states
   const [whatsappCopiedFor, setWhatsappCopiedFor] = useState<string | null>(null);
+  const [copiedPortalFor, setCopiedPortalFor] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null);
   const [confirmDeleteDeclId, setConfirmDeleteDeclId] = useState<string | null>(null);
@@ -207,6 +210,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       password: trimmedNewPass,
       clientName: editName.trim(),
       clientCode: nextClientCode,
+      accessToken: editingSubscriber.accessToken,
       plan: editPlan,
       phone: editPhone.trim() || undefined,
       age: editAge ? Number(editAge) : undefined,
@@ -255,7 +259,9 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
   };
 
   // Delete Subscriber permanently (inline 2-step confirmation)
-  const handleDeleteSubscriber = async (email: string, clientName: string) => {
+  const handleDeleteSubscriber = async (user: UserCredentialRecord) => {
+    const email = user.email;
+    const clientName = user.clientName;
     if (confirmDeleteEmail !== email) {
       setConfirmDeleteEmail(email);
       setTimeout(() => setConfirmDeleteEmail((prev) => (prev === email ? null : prev)), 4000);
@@ -263,13 +269,17 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     }
 
     setConfirmDeleteEmail(null);
-    const deleted = await deleteSubscriberRecord(email);
-    if (!deleted) {
-      showNotice('⚠️ تعذر حذف المشترك من Supabase. يرجى التحقق من الاتصال.');
+    const deleteRes = await deleteSubscriberRecord({
+      email,
+      id: user.id,
+      accessToken: user.accessToken,
+    });
+    if (!deleteRes.success) {
+      showNotice(`⚠️ ${deleteRes.error || 'تعذر حذف المشترك نهائياً من Supabase.'}`);
       return;
     }
     await refreshList(true);
-    showNotice(`🗑️ تم حذف المشترك (${clientName}) نهائياً من قاعدة البيانات السحابية.`);
+    showNotice(`🗑️ تم حذف المشترك (${clientName}) وجميع بياناته نهائياً من Supabase.`);
   };
 
   // Delete Declaration permanently (inline 2-step confirmation + Supabase sync)
@@ -308,6 +318,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       password: newPasswordVal.trim(),
       clientName: resetModalUser.clientName,
       clientCode: newPasswordVal.trim(),
+      accessToken: resetModalUser.accessToken,
       plan: resetModalUser.plan,
       phone: resetModalUser.phone,
       age: resetModalUser.age,
@@ -380,14 +391,38 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     }, 1000);
   };
 
-  const handleCopyWhatsAppMessage = (user: {
+  const handleCopySubscriberPortalLink = async (user: UserCredentialRecord) => {
+    const tokenRes = await ensureSubscriberAccessToken(user);
+    if (!tokenRes.success || !tokenRes.accessToken) {
+      showNotice(`⚠️ ${tokenRes.error || 'تعذر تجهيز رابط المشترك الخاص.'}`);
+      return;
+    }
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const portalLink = `${origin}/s/${tokenRes.accessToken}`;
+    await navigator.clipboard.writeText(portalLink);
+    setCopiedPortalFor(user.email);
+    setTimeout(() => setCopiedPortalFor((prev) => (prev === user.email ? null : prev)), 2500);
+    showNotice(`🔗 تم نسخ رابط المشترك الخاص لـ (${user.clientName}) بنجاح!`);
+  };
+
+  const handleCopyWhatsAppMessage = async (user: {
+    id?: string;
     clientName: string;
     email: string;
     password?: string;
     plan: SubscriptionPlanTier;
     clientCode?: string;
     phone?: string;
+    accessToken?: string;
   }) => {
+    let accessToken = user.accessToken;
+    if (!accessToken) {
+      const tokenRes = await ensureSubscriberAccessToken(user);
+      if (tokenRes.success && tokenRes.accessToken) {
+        accessToken = tokenRes.accessToken;
+      }
+    }
+
     const msg = generateWhatsAppWelcomeMessage({
       clientName: user.clientName,
       email: user.email,
@@ -395,9 +430,10 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       plan: user.plan,
       clientCode: user.clientCode,
       phone: user.phone,
+      accessToken,
     });
 
-    navigator.clipboard.writeText(msg);
+    await navigator.clipboard.writeText(msg);
     setWhatsappCopiedFor(user.email);
     setTimeout(() => setWhatsappCopiedFor(null), 3000);
   };
@@ -618,6 +654,29 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                         )}
                       </button>
 
+                      {/* 1-Click Copy Isolated Subscriber /s/token Link Button */}
+                      <button
+                        onClick={() => handleCopySubscriberPortalLink(user)}
+                        className={`px-2 py-1.5 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                          copiedPortalFor === user.email
+                            ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200'
+                            : 'bg-orange-500/15 hover:bg-orange-500/25 border-orange-500/40 text-orange-300 hover:text-white'
+                        }`}
+                        title="نسخ رابط المشترك الخاص (/s/token)"
+                      >
+                        {copiedPortalFor === user.email ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>تم النسخ!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Link2 className="w-3.5 h-3.5" />
+                            <span className="hidden xl:inline">نسخ رابط المشترك الخاص</span>
+                          </>
+                        )}
+                      </button>
+
                       {/* WhatsApp Quick Share Button */}
                       <button
                         onClick={() => handleCopyWhatsAppMessage(user)}
@@ -638,7 +697,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
 
                       {/* Permanent Delete Button (Inline 2-Step Confirmation) */}
                       <button
-                        onClick={() => handleDeleteSubscriber(user.email, user.clientName)}
+                        onClick={() => handleDeleteSubscriber(user)}
                         className={`px-2 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
                           confirmDeleteEmail === user.email
                             ? 'bg-rose-600 border-rose-400 text-white font-black text-[10px] animate-pulse'

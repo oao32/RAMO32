@@ -9,7 +9,10 @@ import {
   isSubscriberNutritionLocked,
   fetchSubscriberNutritionLockFromSupabase,
 } from '../../lib/authStore';
-import { fetchNutritionPlanFromSupabase } from '../../lib/supabase';
+import {
+  fetchNutritionPlanFromSupabase,
+  getCanonicalClientKey,
+} from '../../lib/supabase';
 import {
   Utensils,
   Flame,
@@ -57,12 +60,19 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
   useEffect(() => {
     let active = true;
     const tier = isVIP ? 'VIP' : 'standard';
+    const cleanEmail = (subscriberEmail || '').trim().toLowerCase();
+    const cleanId = (clientId || '').trim();
+    const canonicalKey = getCanonicalClientKey(cleanId, cleanEmail);
+
+    // Reset immediately when switching subscriber/tier so previous user's diet never flashes
+    setCategories(getDietPlanCategories(tier));
+    setSelectedMealIndex(0);
 
     const syncFromCloud = async () => {
-      setStoredLocked(isSubscriberNutritionLocked(subscriberEmail));
+      setStoredLocked(isSubscriberNutritionLocked(cleanEmail));
       const [cloudLocked, cloudCategories] = await Promise.all([
-        fetchSubscriberNutritionLockFromSupabase(clientId, subscriberEmail),
-        fetchNutritionPlanFromSupabase(clientId, subscriberEmail, tier),
+        fetchSubscriberNutritionLockFromSupabase(cleanId, cleanEmail),
+        fetchNutritionPlanFromSupabase(cleanId, cleanEmail, tier),
       ]);
       if (!active) return;
       setStoredLocked(cloudLocked);
@@ -73,22 +83,56 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
 
     void syncFromCloud();
 
-    const handleReactiveSync = () => {
+    const handleDietUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<{ clientId?: string; tier?: string } | undefined>).detail;
+      if (detail?.clientId) {
+        const target = detail.clientId.trim().toLowerCase();
+        const matches =
+          (canonicalKey && target === canonicalKey.toLowerCase()) ||
+          (cleanId && target === cleanId.toLowerCase()) ||
+          (cleanEmail && target === cleanEmail);
+        if (!matches) return;
+      } else if (detail?.tier && detail.tier !== tier) {
+        return;
+      }
       void syncFromCloud();
     };
 
-    window.addEventListener('oao_diet_updated', handleReactiveSync);
-    window.addEventListener('oao_nutrition_lock_updated', handleReactiveSync);
-    window.addEventListener('oao_credentials_updated', handleReactiveSync);
-    window.addEventListener('oao_profile_updated', handleReactiveSync);
-    window.addEventListener('storage', handleReactiveSync);
+    const handleLockUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<{ email?: string } | undefined>).detail;
+      if (detail?.email && cleanEmail && detail.email.trim().toLowerCase() !== cleanEmail) {
+        return;
+      }
+      void syncFromCloud();
+    };
+
+    const handleProfileUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<{ id?: string; email?: string } | undefined>).detail;
+      if (detail) {
+        const dEmail = (detail.email || '').trim().toLowerCase();
+        const dId = (detail.id || '').trim().toLowerCase();
+        const matches =
+          (cleanEmail && dEmail === cleanEmail) ||
+          (cleanId && dId === cleanId.toLowerCase());
+        if (!matches) return;
+      }
+      void syncFromCloud();
+    };
+
+    const handleCredentialsUpdated = () => {
+      void syncFromCloud();
+    };
+
+    window.addEventListener('oao_diet_updated', handleDietUpdated);
+    window.addEventListener('oao_nutrition_lock_updated', handleLockUpdated);
+    window.addEventListener('oao_credentials_updated', handleCredentialsUpdated);
+    window.addEventListener('oao_profile_updated', handleProfileUpdated);
     return () => {
       active = false;
-      window.removeEventListener('oao_diet_updated', handleReactiveSync);
-      window.removeEventListener('oao_nutrition_lock_updated', handleReactiveSync);
-      window.removeEventListener('oao_credentials_updated', handleReactiveSync);
-      window.removeEventListener('oao_profile_updated', handleReactiveSync);
-      window.removeEventListener('storage', handleReactiveSync);
+      window.removeEventListener('oao_diet_updated', handleDietUpdated);
+      window.removeEventListener('oao_nutrition_lock_updated', handleLockUpdated);
+      window.removeEventListener('oao_credentials_updated', handleCredentialsUpdated);
+      window.removeEventListener('oao_profile_updated', handleProfileUpdated);
     };
   }, [clientId, subscriberEmail, isVIP]);
 

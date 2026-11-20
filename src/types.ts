@@ -50,6 +50,7 @@ export interface ClientProfile {
   email?: string;
   phone?: string;
   clientCode?: string;
+  accessToken?: string;
   avatar?: string;
   subscription_plan: SubscriptionPlanTier;
   weight: number; // in KG
