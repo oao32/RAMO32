@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ClientProfile,
@@ -42,6 +42,13 @@ import {
   syncProfileToSupabase,
   syncWorkoutDaysToSupabase,
 } from '../../lib/supabase';
+import { normalizeWorkoutDays } from '../../lib/workoutUtils';
+import {
+  applyAutomaticVipDailyStreakAward,
+  computeDailyWorkoutProgress,
+  findNewlyCompletedWorkoutDay,
+  isStreakAwardedToday,
+} from '../../lib/streakUtils';
 import {
   getCurrentUserSession,
   clearCurrentUserSession,
@@ -114,10 +121,21 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
 
   // Workouts, Notes, Streak, Badges & Rank states (Hydrated strictly from Supabase)
   const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>(INITIAL_WORKOUT_DAYS);
+  const [activeWorkoutDayKey, setActiveWorkoutDayKey] = useState<string>('upper');
   const [notes, setNotes] = useState<ClientNote[]>([]);
   const [streakData, setStreakData] = useState<StreakData>(() => createNeutralStreakData());
   const [badges, setBadges] = useState<Badge[]>(() => createNeutralBadges());
   const [athleteRank, setAthleteRank] = useState<AthleteRank>(() => createNeutralAthleteRank());
+
+  // Synchronous refs to enforce strict once-per-day lock across rapid events/re-renders
+  const workoutDaysRef = useRef<WorkoutDay[]>(workoutDays);
+  workoutDaysRef.current = workoutDays;
+  const streakDataRef = useRef<StreakData>(streakData);
+  streakDataRef.current = streakData;
+  const athleteRankRef = useRef<AthleteRank>(athleteRank);
+  athleteRankRef.current = athleteRank;
+  const badgesRef = useRef<Badge[]>(badges);
+  badgesRef.current = badges;
 
   // Verify authorization against Supabase & hydrate strictly isolated workspace
   useEffect(() => {
@@ -180,11 +198,22 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
         subscription_plan: 'VIP',
       };
       setProfile(nextProfile);
+      workoutDaysRef.current = workspace.workoutDays;
       setWorkoutDays(workspace.workoutDays);
+      setActiveWorkoutDayKey((prev) =>
+        workspace.workoutDays.some((d) => d.key === prev && !d.isRestDay)
+          ? prev
+          : workspace.workoutDays.find((d) => !d.isRestDay)?.key || 'upper'
+      );
       setNotes(workspace.notes);
+      streakDataRef.current = workspace.streakData;
       setStreakData(workspace.streakData);
+      athleteRankRef.current = workspace.athleteRank;
       setAthleteRank(workspace.athleteRank);
-      if (workspace.badges) setBadges(workspace.badges);
+      if (workspace.badges) {
+        badgesRef.current = workspace.badges;
+        setBadges(workspace.badges);
+      }
       setAccessStatus('authorized');
     };
 
@@ -239,13 +268,26 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
     const handleStreakSync = (e: Event) => {
       const detail = (e as CustomEvent<(StreakData & { clientId?: string; email?: string }) | undefined>).detail;
       if (detail && isForCurrentSubscriber(detail)) {
+        streakDataRef.current = detail;
         setStreakData(detail);
       }
     };
     const handleRankSync = (e: Event) => {
       const detail = (e as CustomEvent<(AthleteRank & { clientId?: string; email?: string }) | undefined>).detail;
       if (detail && isForCurrentSubscriber(detail)) {
+        athleteRankRef.current = detail;
         setAthleteRank(detail);
+      }
+    };
+
+    const handleWorkoutsSync = (e: Event) => {
+      const detail = (
+        e as CustomEvent<{ clientId?: string; email?: string; days?: WorkoutDay[] } | undefined>
+      ).detail;
+      if (detail && Array.isArray(detail.days) && isForCurrentSubscriber(detail)) {
+        const norm = normalizeWorkoutDays(detail.days);
+        workoutDaysRef.current = norm;
+        setWorkoutDays(norm);
       }
     };
 
@@ -253,11 +295,13 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
     window.addEventListener('oao_profile_updated', handleProfileSync);
     window.addEventListener('oao_streak_updated', handleStreakSync);
     window.addEventListener('oao_rank_updated', handleRankSync);
+    window.addEventListener('oao_workouts_updated', handleWorkoutsSync);
     return () => {
       window.removeEventListener('oao_notes_updated', handleNotesSync);
       window.removeEventListener('oao_profile_updated', handleProfileSync);
       window.removeEventListener('oao_streak_updated', handleStreakSync);
       window.removeEventListener('oao_rank_updated', handleRankSync);
+      window.removeEventListener('oao_workouts_updated', handleWorkoutsSync);
     };
   }, [accessStatus, profile.id, profile.email, profile.name]);
 
@@ -275,10 +319,65 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
     void syncProfileToSupabase(updated);
   };
 
-  const handleUpdateWorkouts = (updatedDays: WorkoutDay[]) => {
-    setWorkoutDays(updatedDays);
+  const handleUpdateWorkouts = async (
+    updatedDays: WorkoutDay[],
+    preferredDayKey?: string
+  ): Promise<boolean> => {
+    const prevDays = workoutDaysRef.current;
+    const normalized = normalizeWorkoutDays(updatedDays);
+    workoutDaysRef.current = normalized;
+    setWorkoutDays(normalized);
+    if (preferredDayKey) {
+      setActiveWorkoutDayKey(preferredDayKey);
+    }
+
     const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
-    void syncWorkoutDaysToSupabase(canonicalKey, updatedDays, profile.email);
+    const workoutSynced = await syncWorkoutDaysToSupabase(canonicalKey, normalized, profile.email);
+
+    // Strictly VIP-only automatic streak upon 100% completion of a workout day (once per calendar day)
+    if (!isStreakAwardedToday(streakDataRef.current)) {
+      const completedDay = findNewlyCompletedWorkoutDay(
+        prevDays,
+        normalized,
+        preferredDayKey || activeWorkoutDayKey
+      );
+      if (completedDay) {
+        const awardResult = applyAutomaticVipDailyStreakAward({
+          plan: 'VIP',
+          completedDay,
+          streakData: streakDataRef.current,
+          athleteRank: athleteRankRef.current,
+          badges: badgesRef.current,
+        });
+
+        if (awardResult.awarded) {
+          streakDataRef.current = awardResult.streakData;
+          athleteRankRef.current = awardResult.athleteRank;
+          badgesRef.current = awardResult.badges;
+          setStreakData(awardResult.streakData);
+          setAthleteRank(awardResult.athleteRank);
+          setBadges(awardResult.badges);
+          setProfile((prev) => ({
+            ...prev,
+            streakData: awardResult.streakData,
+            athleteRank: awardResult.athleteRank,
+          }));
+
+          await syncAssessmentToSupabase(
+            canonicalKey,
+            {
+              analysisData: profile.analysisData,
+              streakData: awardResult.streakData,
+              athleteRank: awardResult.athleteRank,
+              badges: awardResult.badges,
+            },
+            profile.email
+          );
+        }
+      }
+    }
+
+    return workoutSynced;
   };
 
   const handleAddNote = (newNote: Omit<ClientNote, 'id' | 'timestamp' | 'isResolved'>) => {
@@ -491,6 +590,7 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
           <WorkoutSchedule
             days={workoutDays}
             onUpdateWorkout={handleUpdateWorkouts}
+            onActiveDayChange={setActiveWorkoutDayKey}
             onOpenVideo={(exercise: Exercise) => {
               setActiveVideoExercise(exercise);
               setIsVideoModalOpen(true);
@@ -557,38 +657,24 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
           </div>
         </section>
 
-        {/* GAMIFICATION, STREAKS & BADGES */}
+        {/* GAMIFICATION, STREAKS & BADGES (VIP-ONLY AUTOMATIC) */}
         <section className="space-y-4">
           <GamificationStreakSection
             streakData={streakData}
             badges={badges}
             athleteRank={athleteRank}
-            onLogTodayWorkout={() => {
-              const nextStreak: StreakData = {
-                ...streakData,
-                currentStreak: streakData.currentStreak + 1,
-                longestStreak: Math.max(streakData.currentStreak + 1, streakData.longestStreak),
-                lastCompletedDate: new Date().toISOString().split('T')[0],
-                totalWorkoutsCompleted: streakData.totalWorkoutsCompleted + 1,
-              };
-              setStreakData(nextStreak);
-              const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
-              syncAssessmentToSupabase(
-                canonicalKey,
-                {
-                  analysisData: profile.analysisData,
-                  streakData: nextStreak,
-                  athleteRank,
-                  badges,
-                },
-                profile.email
-              ).catch(() => {});
-            }}
+            dailyProgress={computeDailyWorkoutProgress(
+              workoutDays,
+              streakData,
+              activeWorkoutDayKey
+            )}
             onUseStreakFreeze={() => {
+              if (streakDataRef.current.freezesRemaining <= 0) return;
               const nextStreak: StreakData = {
-                ...streakData,
-                freezesRemaining: Math.max(0, streakData.freezesRemaining - 1),
+                ...streakDataRef.current,
+                freezesRemaining: Math.max(0, streakDataRef.current.freezesRemaining - 1),
               };
+              streakDataRef.current = nextStreak;
               setStreakData(nextStreak);
               const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
               syncAssessmentToSupabase(
@@ -596,8 +682,8 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
                 {
                   analysisData: profile.analysisData,
                   streakData: nextStreak,
-                  athleteRank,
-                  badges,
+                  athleteRank: athleteRankRef.current,
+                  badges: badgesRef.current,
                 },
                 profile.email
               ).catch(() => {});

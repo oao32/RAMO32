@@ -59,6 +59,7 @@ import {
   WorkoutTemplate,
 } from '../../lib/templateStore';
 import { toYouTubeEmbedUrl } from '../../lib/youtube';
+import { normalizeExerciseSets, normalizeWorkoutDays } from '../../lib/workoutUtils';
 import {
   Users,
   Dumbbell,
@@ -637,25 +638,27 @@ export const AdminPanel: React.FC = () => {
     const normalizedVideoUrl = toYouTubeEmbedUrl(newExVideo) || undefined;
     const normalizedCoachWarning = newExCoachWarning.trim() || undefined;
 
+    const targetSetsCount = Math.max(1, Math.round(Number(newExSets) || 3));
+
     if (editingExercise) {
-      // Editing existing exercise
+      // Editing existing exercise — resize sets array to match setsCount while keeping logged weights/reps & subscriberGoal
       const updated = workoutDays.map((day) => {
         if (day.key !== selectedDayKey) return day;
         return {
           ...day,
           exercises: day.exercises.map((ex) => {
             if (ex.id !== editingExercise.id) return ex;
-            return {
+            return normalizeExerciseSets({
               ...ex,
               nameAr: newExNameAr.trim(),
               nameEn: newExNameEn.trim() || newExNameAr.trim(),
               targetMuscleAr: newExMuscle.trim() || 'العضلات المستهدفة',
               targetMuscleEn: newExMuscle.trim() || 'Target Muscle',
-              setsCount: Number(newExSets) || 3,
+              setsCount: targetSetsCount,
               repsRange: newExReps.trim() || '10 - 12',
               videoUrl: normalizedVideoUrl,
               coachWarning: normalizedCoachWarning,
-            };
+            });
           }),
         };
       });
@@ -663,28 +666,28 @@ export const AdminPanel: React.FC = () => {
       void syncWorkoutDaysToSupabase(targetCanonicalKey, updated, targetClientEmail);
     } else {
       // Adding new exercise
-      const newEx: Exercise = {
+      const newEx: Exercise = normalizeExerciseSets({
         id: `ex_${Date.now()}`,
         nameAr: newExNameAr.trim(),
         nameEn: newExNameEn.trim() || newExNameAr.trim(),
         targetMuscleAr: newExMuscle.trim() || 'العضلات المستهدفة',
         targetMuscleEn: newExMuscle.trim() || 'Target Muscle',
-        setsCount: Number(newExSets) || 3,
+        setsCount: targetSetsCount,
         repsRange: newExReps.trim() || '10 - 12',
         recommendedRestSeconds: 90,
         videoUrl: normalizedVideoUrl,
         coachWarning: normalizedCoachWarning,
         formTipsAr: ['أداء منضبط وتحكم كامل في المدى الحركي'],
         formTipsEn: ['Controlled cadence and full range of motion'],
-        sets: Array.from({ length: Number(newExSets) || 3 }, (_, idx) => ({
+        subscriberGoal: '',
+        sets: Array.from({ length: targetSetsCount }, (_, idx) => ({
           setNumber: idx + 1,
-          targetReps: newExReps.trim() || '10',
-          targetWeightKg: 20,
+          targetReps: '',
           completedWeightKg: '',
           completedReps: '',
           isCompleted: false,
         })),
-      };
+      });
 
       const updated = workoutDays.map((day) =>
         day.key === selectedDayKey ? { ...day, exercises: [...day.exercises, newEx] } : day
@@ -2215,10 +2218,11 @@ export const AdminPanel: React.FC = () => {
                   <button
                     onClick={() => {
                       if (tmpl.workoutDays && tmpl.workoutDays.length > 0) {
-                        setWorkoutDays(tmpl.workoutDays);
+                        const normalizedTemplateDays = normalizeWorkoutDays(tmpl.workoutDays);
+                        setWorkoutDays(normalizedTemplateDays);
                         void syncWorkoutDaysToSupabase(
                           targetCanonicalKey,
-                          tmpl.workoutDays,
+                          normalizedTemplateDays,
                           targetClientEmail
                         );
                       }

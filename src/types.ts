@@ -109,6 +109,7 @@ export interface Exercise {
   formTipsAr: string[];
   formTipsEn: string[];
   tempo?: string;
+  subscriberGoal?: string;
   sets: ExerciseSet[];
 }
 
@@ -184,6 +185,7 @@ export interface StreakData {
   currentStreak: number;
   longestStreak: number;
   lastCompletedDate: string;
+  last_streak_date?: string;
   freezesRemaining: number;
   weeklyActivity: WeeklyStreakDay[];
   totalWorkoutsCompleted: number;

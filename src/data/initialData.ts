@@ -63,9 +63,9 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Exhale on press, inhale on controlled 3-second descent',
         ],
         sets: [
-          { setNumber: 1, targetReps: '12', targetWeightKg: 50, completedWeightKg: '50', completedReps: '12', isCompleted: true },
-          { setNumber: 2, targetReps: '10', targetWeightKg: 55, completedWeightKg: '55', completedReps: '10', isCompleted: true },
-          { setNumber: 3, targetReps: '10', targetWeightKg: 60, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -90,9 +90,9 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Lower smoothly to chest level before driving up',
         ],
         sets: [
-          { setNumber: 1, targetReps: '10', targetWeightKg: 22.5, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '8', targetWeightKg: 25, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '8', targetWeightKg: 25, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -115,9 +115,9 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Avoid clanking dumbbells at the peak, keep continuous tension',
         ],
         sets: [
-          { setNumber: 1, targetReps: '12', targetWeightKg: 18, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '10', targetWeightKg: 20, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '10', targetWeightKg: 20, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -142,10 +142,10 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Pause for 1 second at the peak contraction',
         ],
         sets: [
-          { setNumber: 1, targetReps: '15', targetWeightKg: 7.5, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '15', targetWeightKg: 7.5, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '12', targetWeightKg: 10, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 4, targetReps: '12', targetWeightKg: 10, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 4, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -168,9 +168,9 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Squeeze triceps forcefully at full bottom lockout',
         ],
         sets: [
-          { setNumber: 1, targetReps: '15', targetWeightKg: 25, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '12', targetWeightKg: 30, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '12', targetWeightKg: 30, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
     ],
@@ -206,9 +206,9 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Control the eccentric stretch all the way up',
         ],
         sets: [
-          { setNumber: 1, targetReps: '12', targetWeightKg: 55, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '10', targetWeightKg: 60, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '10', targetWeightKg: 65, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -231,10 +231,10 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Squeeze shoulder blades tightly at peak contraction',
         ],
         sets: [
-          { setNumber: 1, targetReps: '11', targetWeightKg: 40, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '9', targetWeightKg: 45, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '9', targetWeightKg: 50, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 4, targetReps: '9', targetWeightKg: 50, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 4, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -257,9 +257,9 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Curl smoothly with controlled supination at the top',
         ],
         sets: [
-          { setNumber: 1, targetReps: '12', targetWeightKg: 12, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '12', targetWeightKg: 12, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '10', targetWeightKg: 14, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
     ],
@@ -292,7 +292,7 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Drink 500ml water with electrolyte minerals',
         ],
         sets: [
-          { setNumber: 1, targetReps: '40 دقيقة', targetWeightKg: 0, completedWeightKg: '0', completedReps: '40m', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -313,7 +313,7 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Breathe deeply to activate parasympathetic recovery',
         ],
         sets: [
-          { setNumber: 1, targetReps: '20 دقيقة', targetWeightKg: 0, completedWeightKg: '0', completedReps: '20m', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
     ],
@@ -347,10 +347,10 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Drive through mid-foot, keeping knees tracked with toes',
         ],
         sets: [
-          { setNumber: 1, targetReps: '10', targetWeightKg: 80, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '10', targetWeightKg: 100, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '8', targetWeightKg: 110, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 4, targetReps: '8', targetWeightKg: 120, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 4, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -373,9 +373,9 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Keep spine neutral and feel the intense hamstring stretch',
         ],
         sets: [
-          { setNumber: 1, targetReps: '12', targetWeightKg: 24, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '10', targetWeightKg: 28, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '10', targetWeightKg: 28, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -398,10 +398,10 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Drive up high on the balls of your feet and hold for 1s',
         ],
         sets: [
-          { setNumber: 1, targetReps: '15', targetWeightKg: 40, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '15', targetWeightKg: 45, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '15', targetWeightKg: 50, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 4, targetReps: '15', targetWeightKg: 50, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 4, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
     ],
@@ -435,9 +435,9 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Squeeze chest together at peak extension',
         ],
         sets: [
-          { setNumber: 1, targetReps: '12', targetWeightKg: 55, completedWeightKg: '55', completedReps: '12', isCompleted: true },
-          { setNumber: 2, targetReps: '10', targetWeightKg: 60, completedWeightKg: '60', completedReps: '10', isCompleted: true },
-          { setNumber: 3, targetReps: '10', targetWeightKg: 65, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -460,9 +460,9 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Solid trunk stability with zero backwards swinging',
         ],
         sets: [
-          { setNumber: 1, targetReps: '12', targetWeightKg: 50, completedWeightKg: '50', completedReps: '12', isCompleted: true },
-          { setNumber: 2, targetReps: '12', targetWeightKg: 55, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '12', targetWeightKg: 55, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -485,10 +485,10 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Hold 1 second at shoulder line',
         ],
         sets: [
-          { setNumber: 1, targetReps: '15', targetWeightKg: 8, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '15', targetWeightKg: 8, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '12', targetWeightKg: 10, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 4, targetReps: '12', targetWeightKg: 10, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 4, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
       {
@@ -511,9 +511,9 @@ export const INITIAL_WORKOUT_DAYS: WorkoutDay[] = [
           'Complete isolation on triceps long head',
         ],
         sets: [
-          { setNumber: 1, targetReps: '15', targetWeightKg: 20, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 2, targetReps: '12', targetWeightKg: 25, completedWeightKg: '', completedReps: '', isCompleted: false },
-          { setNumber: 3, targetReps: '12', targetWeightKg: 25, completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 1, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 2, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
+          { setNumber: 3, targetReps: '', completedWeightKg: '', completedReps: '', isCompleted: false },
         ],
       },
     ],

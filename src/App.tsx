@@ -104,6 +104,13 @@ import {
   syncWorkoutDaysToSupabase,
   normalizeSubscriptionPlan,
 } from './lib/supabase';
+import { normalizeWorkoutDays } from './lib/workoutUtils';
+import {
+  applyAutomaticVipDailyStreakAward,
+  computeDailyWorkoutProgress,
+  findNewlyCompletedWorkoutDay,
+  isStreakAwardedToday,
+} from './lib/streakUtils';
 import {
   isCoachAuthenticated,
   setCoachAuthenticated,
@@ -190,11 +197,22 @@ function MainPortal() {
       const workspace = await loadClientWorkspaceFromSupabase(params);
       if (requestId !== workspaceRequestRef.current) return;
       setProfile(workspace.profile);
+      workoutDaysRef.current = workspace.workoutDays;
       setWorkoutDays(workspace.workoutDays);
+      setActiveWorkoutDayKey((prev) =>
+        workspace.workoutDays.some((d) => d.key === prev && !d.isRestDay)
+          ? prev
+          : workspace.workoutDays.find((d) => !d.isRestDay)?.key || 'upper'
+      );
       setNotes(workspace.notes);
+      streakDataRef.current = workspace.streakData;
       setStreakData(workspace.streakData);
+      athleteRankRef.current = workspace.athleteRank;
       setAthleteRank(workspace.athleteRank);
-      if (workspace.badges) setBadges(workspace.badges);
+      if (workspace.badges) {
+        badgesRef.current = workspace.badges;
+        setBadges(workspace.badges);
+      }
     },
     []
   );
@@ -279,10 +297,20 @@ function MainPortal() {
     return params.get('view') === 'plans';
   });
 
-  // Gamification & Streak State (Hydrated strictly from Supabase)
+  // Gamification & Streak State (VIP-only, hydrated strictly from Supabase)
+  const [activeWorkoutDayKey, setActiveWorkoutDayKey] = useState<string>('upper');
   const [streakData, setStreakData] = useState<StreakData>(() => createNeutralStreakData());
   const [badges, setBadges] = useState<Badge[]>(() => createNeutralBadges());
   const [athleteRank, setAthleteRank] = useState<AthleteRank>(() => createNeutralAthleteRank());
+
+  const workoutDaysRef = useRef<WorkoutDay[]>(workoutDays);
+  workoutDaysRef.current = workoutDays;
+  const streakDataRef = useRef<StreakData>(streakData);
+  streakDataRef.current = streakData;
+  const athleteRankRef = useRef<AthleteRank>(athleteRank);
+  athleteRankRef.current = athleteRank;
+  const badgesRef = useRef<Badge[]>(badges);
+  badgesRef.current = badges;
 
   // Section references for smooth scrolling
   const portalRef = useRef<HTMLDivElement | null>(null);
@@ -332,11 +360,67 @@ function MainPortal() {
     void syncProfileToSupabase(newProfile);
   };
 
-  // Auto-Save Workouts to Supabase
-  const handleUpdateWorkouts = (newDays: WorkoutDay[]) => {
-    setWorkoutDays(newDays);
+  // Auto-Save Workouts to Supabase (+ VIP-Only Automatic Daily Streak)
+  const handleUpdateWorkouts = async (
+    newDays: WorkoutDay[],
+    preferredDayKey?: string
+  ): Promise<boolean> => {
+    const prevDays = workoutDaysRef.current;
+    const normalized = normalizeWorkoutDays(newDays);
+    workoutDaysRef.current = normalized;
+    setWorkoutDays(normalized);
+    if (preferredDayKey) {
+      setActiveWorkoutDayKey(preferredDayKey);
+    }
+
     const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
-    void syncWorkoutDaysToSupabase(canonicalKey, newDays, profile.email);
+    const workoutSynced = await syncWorkoutDaysToSupabase(canonicalKey, normalized, profile.email);
+
+    // Strictly VIP-only automatic streak award; Standard subscribers never trigger streaks
+    const planTier = normalizeSubscriptionPlan(profile.subscription_plan);
+    if (planTier === 'VIP' && !isStreakAwardedToday(streakDataRef.current)) {
+      const completedDay = findNewlyCompletedWorkoutDay(
+        prevDays,
+        normalized,
+        preferredDayKey || activeWorkoutDayKey
+      );
+      if (completedDay) {
+        const awardResult = applyAutomaticVipDailyStreakAward({
+          plan: 'VIP',
+          completedDay,
+          streakData: streakDataRef.current,
+          athleteRank: athleteRankRef.current,
+          badges: badgesRef.current,
+        });
+
+        if (awardResult.awarded) {
+          streakDataRef.current = awardResult.streakData;
+          athleteRankRef.current = awardResult.athleteRank;
+          badgesRef.current = awardResult.badges;
+          setStreakData(awardResult.streakData);
+          setAthleteRank(awardResult.athleteRank);
+          setBadges(awardResult.badges);
+          setProfile((prev) => ({
+            ...prev,
+            streakData: awardResult.streakData,
+            athleteRank: awardResult.athleteRank,
+          }));
+
+          await syncAssessmentToSupabase(
+            canonicalKey,
+            {
+              analysisData: profile.analysisData,
+              streakData: awardResult.streakData,
+              athleteRank: awardResult.athleteRank,
+              badges: awardResult.badges,
+            },
+            profile.email
+          );
+        }
+      }
+    }
+
+    return workoutSynced;
   };
 
   // Auto-Save Water
@@ -345,118 +429,23 @@ function MainPortal() {
     handleUpdateProfile(updated);
   };
 
-  // Gamification & Streak Handlers
-  const handleUpdateStreakData = (newStreak: StreakData) => {
-    setStreakData(newStreak);
-  };
-
-  const handleUpdateBadges = (newBadges: Badge[]) => {
-    setBadges(newBadges);
-  };
-
-  const handleUpdateAthleteRank = (newRank: AthleteRank) => {
-    setAthleteRank(newRank);
-  };
-
-  const handleLogTodayWorkout = () => {
-    const today = new Date().toISOString().split('T')[0];
-
-    // Mark today as completed in weekly activity
-    const updatedWeekly = streakData.weeklyActivity.map((day) => {
-      if (day.isToday) {
-        return { ...day, isCompleted: true };
-      }
-      return day;
-    });
-
-    const newStreakCount = streakData.currentStreak + 1;
-    const newLongest = Math.max(newStreakCount, streakData.longestStreak);
-    const newWorkouts = streakData.totalWorkoutsCompleted + 1;
-    const newVolume = streakData.totalVolumeLiftedKg + 450;
-
-    const newStreakData: StreakData = {
-      ...streakData,
-      currentStreak: newStreakCount,
-      longestStreak: newLongest,
-      lastCompletedDate: today,
-      weeklyActivity: updatedWeekly,
-      totalWorkoutsCompleted: newWorkouts,
-      totalVolumeLiftedKg: newVolume,
-    };
-    handleUpdateStreakData(newStreakData);
-
-    // Add +50 XP and check level progression
-    const newXp = athleteRank.currentXp + 50;
-    let newLevel = athleteRank.level;
-    let newNextXp = athleteRank.nextLevelXp;
-    let newTier = athleteRank.tier;
-    let newNameAr = athleteRank.nameAr;
-
-    if (newXp >= athleteRank.nextLevelXp) {
-      newLevel += 1;
-      newNextXp += 500;
-      if (newLevel >= 15) {
-        newTier = 'legend';
-        newNameAr = 'الأسطوري الخارق (Legend Aura 🔥)';
-      }
-    }
-
-    const updatedRank: AthleteRank = {
-      ...athleteRank,
-      level: newLevel,
-      currentXp: newXp,
-      nextLevelXp: newNextXp,
-      tier: newTier,
-      nameAr: newNameAr,
-    };
-    handleUpdateAthleteRank(updatedRank);
-
-    const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
-    void syncAssessmentToSupabase(
-      canonicalKey,
-      {
-        analysisData: profile.analysisData,
-        streakData: newStreakData,
-        athleteRank: updatedRank,
-      },
-      profile.email
-    );
-
-    // Update Badges Progress & Unlocks
-    const updatedBadges = badges.map((b) => {
-      if (b.id === 'badge_unbreakable' && newStreakCount >= 30) {
-        return { ...b, isUnlocked: true, unlockedDate: today };
-      }
-      if (b.id === 'badge_volume_titan' && newVolume >= 25000) {
-        return { ...b, isUnlocked: true, unlockedDate: today };
-      }
-      if (b.progress) {
-        if (b.id === 'badge_unbreakable') {
-          return { ...b, progress: { ...b.progress, current: Math.min(30, newStreakCount) } };
-        }
-        if (b.id === 'badge_volume_titan') {
-          return { ...b, progress: { ...b.progress, current: Math.min(25000, newVolume) } };
-        }
-      }
-      return b;
-    });
-    handleUpdateBadges(updatedBadges);
-  };
-
   const handleUseStreakFreeze = () => {
-    if (streakData.freezesRemaining <= 0) return;
+    if (normalizeSubscriptionPlan(profile.subscription_plan) !== 'VIP') return;
+    if (streakDataRef.current.freezesRemaining <= 0) return;
     const updatedStreakData: StreakData = {
-      ...streakData,
-      freezesRemaining: streakData.freezesRemaining - 1,
+      ...streakDataRef.current,
+      freezesRemaining: streakDataRef.current.freezesRemaining - 1,
     };
-    handleUpdateStreakData(updatedStreakData);
+    streakDataRef.current = updatedStreakData;
+    setStreakData(updatedStreakData);
     const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
     void syncAssessmentToSupabase(
       canonicalKey,
       {
         analysisData: profile.analysisData,
         streakData: updatedStreakData,
-        athleteRank,
+        athleteRank: athleteRankRef.current,
+        badges: badgesRef.current,
       },
       profile.email
     );
@@ -1289,6 +1278,7 @@ function MainPortal() {
               <WorkoutSchedule
                 days={workoutDays}
                 onUpdateWorkout={handleUpdateWorkouts}
+                onActiveDayChange={setActiveWorkoutDayKey}
                 onOpenVideo={handleOpenVideo}
                 onStartRestTimer={handleStartRestTimer}
                 language={language}
@@ -1347,7 +1337,11 @@ function MainPortal() {
                 streakData={streakData}
                 badges={badges}
                 athleteRank={athleteRank}
-                onLogTodayWorkout={handleLogTodayWorkout}
+                dailyProgress={computeDailyWorkoutProgress(
+                  workoutDays,
+                  streakData,
+                  activeWorkoutDayKey
+                )}
                 onUseStreakFreeze={handleUseStreakFreeze}
                 onOpenShareCard={() => setIsShareCardModalOpen(true)}
                 language={language}

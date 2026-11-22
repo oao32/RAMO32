@@ -124,11 +124,18 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
       targetClient?.email || profile.email
     );
 
+    const syncedDate = streakData.last_streak_date || streakData.lastCompletedDate || '';
+    const normalizedStreakData: StreakData = {
+      ...streakData,
+      lastCompletedDate: syncedDate,
+      last_streak_date: syncedDate,
+    };
+
     const updatedProfile: ClientProfile = {
       ...profile,
       id: canonicalKey || profile.id,
       analysisData,
-      streakData,
+      streakData: normalizedStreakData,
       athleteRank,
     };
 
@@ -138,7 +145,7 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
     await Promise.all([
       syncAssessmentToSupabase(
         canonicalKey,
-        { analysisData, streakData, athleteRank },
+        { analysisData, streakData: normalizedStreakData, athleteRank },
         updatedProfile.email
       ),
       syncClientProfileToSupabase(canonicalKey, updatedProfile),

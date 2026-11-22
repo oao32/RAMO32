@@ -26,6 +26,7 @@ import {
   VIP_PLATINUM_DIET_CATEGORIES,
   saveDietCategories,
 } from '../data/nutrition/dietPlanData';
+import { normalizeWorkoutDays } from './workoutUtils';
 
 // Read exclusively from environment variables (No hardcoded credentials)
 export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string) || '';
@@ -558,26 +559,29 @@ export function mapGeneratedDaysToSchedule(
       subtitleEn: gDay.subtitleEn,
       isRestDay: false,
       iconName: 'Dumbbell',
-      exercises: gDay.exercises.map((ex, exIdx) => ({
-        id: `ai_ex_${validKey}_${Date.now()}_${exIdx}`,
-        nameAr: ex.nameAr,
-        nameEn: ex.nameEn,
-        targetMuscleAr: ex.targetMuscleAr,
-        targetMuscleEn: ex.targetMuscleEn,
-        setsCount: ex.setsCount || 3,
-        repsRange: ex.repsRange || '8 - 12',
-        recommendedRestSeconds: ex.restSeconds || 90,
-        formTipsAr: [ex.tipAr || 'تحكم كامل في المدى الحركي مع ثبات الجذع'],
-        formTipsEn: [ex.tipEn || 'Full range of motion with controlled tempo'],
-        sets: Array.from({ length: ex.setsCount || 3 }, (_, sIdx) => ({
-          setNumber: sIdx + 1,
-          targetReps: ex.repsRange || '10',
-          targetWeightKg: ex.targetWeightKg || 30,
-          completedWeightKg: '',
-          completedReps: '',
-          isCompleted: false,
-        })),
-      })),
+      exercises: gDay.exercises.map((ex, exIdx) => {
+        const setsCount = Math.max(1, Math.round(Number(ex.setsCount) || 3));
+        return {
+          id: `ai_ex_${validKey}_${Date.now()}_${exIdx}`,
+          nameAr: ex.nameAr,
+          nameEn: ex.nameEn,
+          targetMuscleAr: ex.targetMuscleAr,
+          targetMuscleEn: ex.targetMuscleEn,
+          setsCount,
+          repsRange: ex.repsRange || '8 - 12',
+          recommendedRestSeconds: ex.restSeconds || 90,
+          formTipsAr: [ex.tipAr || 'تحكم كامل في المدى الحركي مع ثبات الجذع'],
+          formTipsEn: [ex.tipEn || 'Full range of motion with controlled tempo'],
+          subscriberGoal: '',
+          sets: Array.from({ length: setsCount }, (_, sIdx) => ({
+            setNumber: sIdx + 1,
+            targetReps: '',
+            completedWeightKg: '',
+            completedReps: '',
+            isCompleted: false,
+          })),
+        };
+      }),
     };
   });
 
@@ -1711,8 +1715,13 @@ export async function deleteNoteFromSupabase(noteId: string): Promise<boolean> {
   }
 }
 
+const activeWorkoutSyncPromises = new Map<string, Promise<boolean>>();
+const pendingWorkoutSyncPayloads = new Map<string, { days: WorkoutDay[]; email?: string }>();
+
 /**
- * Sync workout days exclusively to Supabase `workouts` table scoped to target client key
+ * Sync workout days exclusively to Supabase `workouts` table scoped to target client key.
+ * Uses a per-subscriber sequential latest-wins queue so rapid edits never get overwritten
+ * by stale in-flight network requests.
  */
 export async function syncWorkoutDaysToSupabase(
   clientId: string,
@@ -1722,19 +1731,55 @@ export async function syncWorkoutDaysToSupabase(
   const canonicalKey = getCanonicalClientKey(clientId, email);
   const client = getSupabaseClient();
   if (!client || !canonicalKey) return false;
-  try {
-    const payload = {
-      id: `workouts_${canonicalKey}`,
-      client_id: canonicalKey,
-      day_key: 'all_days',
-      workout_data: days,
-      updated_at: new Date().toISOString(),
-    };
-    const { error } = await client.from('workouts').upsert(payload, { onConflict: 'id' });
-    return !error;
-  } catch {
-    return false;
+
+  const normalizedDays = normalizeWorkoutDays(days);
+  pendingWorkoutSyncPayloads.set(canonicalKey, { days: normalizedDays, email });
+
+  const existingPromise = activeWorkoutSyncPromises.get(canonicalKey);
+  if (existingPromise) {
+    return existingPromise;
   }
+
+  const flushLoop = async (): Promise<boolean> => {
+    let lastSuccess = false;
+    while (pendingWorkoutSyncPayloads.has(canonicalKey)) {
+      const next = pendingWorkoutSyncPayloads.get(canonicalKey);
+      pendingWorkoutSyncPayloads.delete(canonicalKey);
+      if (!next) break;
+
+      try {
+        const payload = {
+          id: `workouts_${canonicalKey}`,
+          client_id: canonicalKey,
+          day_key: 'all_days',
+          workout_data: next.days,
+          updated_at: new Date().toISOString(),
+        };
+        const { error } = await client.from('workouts').upsert(payload, { onConflict: 'id' });
+        lastSuccess = !error;
+        if (!error && typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('oao_workouts_updated', {
+              detail: {
+                clientId: canonicalKey,
+                email: next.email,
+                days: next.days,
+              },
+            })
+          );
+        }
+      } catch {
+        lastSuccess = false;
+      }
+    }
+    return lastSuccess;
+  };
+
+  const syncPromise = flushLoop().finally(() => {
+    activeWorkoutSyncPromises.delete(canonicalKey);
+  });
+  activeWorkoutSyncPromises.set(canonicalKey, syncPromise);
+  return syncPromise;
 }
 
 export async function fetchWorkoutDaysFromSupabase(
@@ -1758,7 +1803,7 @@ export async function fetchWorkoutDaysFromSupabase(
       if (!error && data && Array.isArray((data as Record<string, unknown>).workout_data)) {
         const cloudDays = (data as Record<string, unknown>).workout_data as WorkoutDay[];
         if (cloudDays.length > 0) {
-          return cloudDays;
+          return normalizeWorkoutDays(cloudDays);
         }
       }
     } catch {
@@ -1766,7 +1811,7 @@ export async function fetchWorkoutDaysFromSupabase(
     }
   }
 
-  return JSON.parse(JSON.stringify(INITIAL_WORKOUT_DAYS));
+  return normalizeWorkoutDays(JSON.parse(JSON.stringify(INITIAL_WORKOUT_DAYS)));
 }
 
 export async function fetchAverageWorkoutCompletionFromSupabase(): Promise<number> {
@@ -2059,6 +2104,12 @@ export interface ClientAssessmentBundle {
   badges?: Badge[];
 }
 
+const activeAssessmentSyncPromises = new Map<string, Promise<boolean>>();
+const pendingAssessmentSyncPayloads = new Map<
+  string,
+  { bundle: ClientAssessmentBundle; email?: string }
+>();
+
 export async function syncAssessmentToSupabase(
   clientKey: string,
   bundle: ClientAssessmentBundle,
@@ -2067,21 +2118,55 @@ export async function syncAssessmentToSupabase(
   const canonicalKey = getCanonicalClientKey(clientKey, email);
   const client = getSupabaseClient();
   if (!client || !canonicalKey) return false;
-  try {
-    const { error } = await client.from('workouts').upsert(
-      {
-        id: `assessment_${canonicalKey}`,
-        client_id: canonicalKey,
-        day_key: 'assessment_bundle',
-        workout_data: bundle,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'id' }
-    );
-    return !error;
-  } catch {
-    return false;
+
+  const lastDate = bundle.streakData.last_streak_date || bundle.streakData.lastCompletedDate || '';
+  const normalizedBundle: ClientAssessmentBundle = {
+    ...bundle,
+    streakData: {
+      ...bundle.streakData,
+      lastCompletedDate: lastDate,
+      last_streak_date: lastDate,
+    },
+  };
+
+  pendingAssessmentSyncPayloads.set(canonicalKey, { bundle: normalizedBundle, email });
+
+  const existingPromise = activeAssessmentSyncPromises.get(canonicalKey);
+  if (existingPromise) {
+    return existingPromise;
   }
+
+  const flushLoop = async (): Promise<boolean> => {
+    let lastSuccess = false;
+    while (pendingAssessmentSyncPayloads.has(canonicalKey)) {
+      const next = pendingAssessmentSyncPayloads.get(canonicalKey);
+      pendingAssessmentSyncPayloads.delete(canonicalKey);
+      if (!next) break;
+
+      try {
+        const { error } = await client.from('workouts').upsert(
+          {
+            id: `assessment_${canonicalKey}`,
+            client_id: canonicalKey,
+            day_key: 'assessment_bundle',
+            workout_data: next.bundle,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+        lastSuccess = !error;
+      } catch {
+        lastSuccess = false;
+      }
+    }
+    return lastSuccess;
+  };
+
+  const syncPromise = flushLoop().finally(() => {
+    activeAssessmentSyncPromises.delete(canonicalKey);
+  });
+  activeAssessmentSyncPromises.set(canonicalKey, syncPromise);
+  return syncPromise;
 }
 
 export async function fetchAssessmentFromSupabase(
@@ -2104,9 +2189,15 @@ export async function fetchAssessmentFromSupabase(
 
       if (!error && data && (data as Record<string, unknown>).workout_data) {
         const w = (data as Record<string, unknown>).workout_data as Partial<ClientAssessmentBundle>;
+        const rawStreak = w.streakData || createNeutralStreakData();
+        const syncedDate = rawStreak.last_streak_date || rawStreak.lastCompletedDate || '';
         return {
           analysisData: w.analysisData,
-          streakData: w.streakData || createNeutralStreakData(),
+          streakData: {
+            ...rawStreak,
+            lastCompletedDate: syncedDate,
+            last_streak_date: syncedDate,
+          },
           athleteRank: w.athleteRank || createNeutralAthleteRank(),
           badges: Array.isArray(w.badges) && w.badges.length > 0 ? w.badges : createNeutralBadges(),
         };

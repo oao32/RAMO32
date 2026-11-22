@@ -31,6 +31,7 @@ import {
   syncProfileToSupabase,
   syncWorkoutDaysToSupabase,
 } from '../../lib/supabase';
+import { normalizeWorkoutDays } from '../../lib/workoutUtils';
 import {
   getCurrentUserSession,
   clearCurrentUserSession,
@@ -203,11 +204,32 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
       }
     };
 
+    const handleWorkoutsSync = (e: Event) => {
+      const detail = (
+        e as CustomEvent<{ clientId?: string; email?: string; days?: WorkoutDay[] } | undefined>
+      ).detail;
+      if (detail && Array.isArray(detail.days)) {
+        const dEmail = (detail.email || '').trim().toLowerCase();
+        const dId = (detail.clientId || '').trim().toLowerCase();
+        const canonicalKey = getCanonicalClientKey(cleanId, cleanEmail).toLowerCase();
+        const matchesEmail = dEmail && cleanEmail && dEmail === cleanEmail;
+        const matchesId =
+          dId &&
+          ((canonicalKey && dId === canonicalKey) ||
+            (cleanId && dId === cleanId.toLowerCase()) ||
+            (cleanEmail && dId === cleanEmail));
+        if (!matchesEmail && !matchesId) return;
+        setWorkoutDays(normalizeWorkoutDays(detail.days));
+      }
+    };
+
     window.addEventListener('oao_notes_updated', handleNotesSync);
     window.addEventListener('oao_profile_updated', handleProfileSync);
+    window.addEventListener('oao_workouts_updated', handleWorkoutsSync);
     return () => {
       window.removeEventListener('oao_notes_updated', handleNotesSync);
       window.removeEventListener('oao_profile_updated', handleProfileSync);
+      window.removeEventListener('oao_workouts_updated', handleWorkoutsSync);
     };
   }, [accessStatus, profile.id, profile.email, profile.name]);
 
@@ -224,10 +246,11 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
     void syncProfileToSupabase(updated);
   };
 
-  const handleUpdateWorkouts = (updatedDays: WorkoutDay[]) => {
-    setWorkoutDays(updatedDays);
+  const handleUpdateWorkouts = async (updatedDays: WorkoutDay[]): Promise<boolean> => {
+    const normalized = normalizeWorkoutDays(updatedDays);
+    setWorkoutDays(normalized);
     const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
-    void syncWorkoutDaysToSupabase(canonicalKey, updatedDays, profile.email);
+    return syncWorkoutDaysToSupabase(canonicalKey, normalized, profile.email);
   };
 
   const handleAddNote = (newNote: Omit<ClientNote, 'id' | 'timestamp' | 'isResolved'>) => {

@@ -163,10 +163,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       videoUrl: newExVideo.trim() || undefined,
       formTipsAr: ['أداء منضبط ومحكوم مع ثبات لوحي الكتف', 'تنفس سليم عند الانقباض والانبساط'],
       formTipsEn: ['Controlled form with steady core', 'Exhale on exertion, inhale on release'],
-      sets: Array.from({ length: Number(newExSets) || 3 }, (_, i) => ({
+      sets: Array.from({ length: Math.max(1, Number(newExSets) || 3) }, (_, i) => ({
         setNumber: i + 1,
-        targetReps: newExReps,
-        targetWeightKg: 40,
+        targetReps: '',
         completedWeightKg: '',
         completedReps: '',
         isCompleted: false,
