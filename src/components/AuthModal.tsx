@@ -144,6 +144,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         clientCode: authResult.clientCode,
         phone: authResult.phone,
         accessToken: authResult.accessToken,
+        subscriptionStartDate: authResult.subscriptionStartDate,
+        subscriptionEndDate: authResult.subscriptionEndDate,
+        subscriptionStatus: authResult.status,
       });
 
       setSuccessNotice(
@@ -199,6 +202,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         clientCode: authByCode.clientCode,
         phone: authByCode.phone,
         accessToken: authByCode.accessToken,
+        subscriptionStartDate: authByCode.subscriptionStartDate,
+        subscriptionEndDate: authByCode.subscriptionEndDate,
+        subscriptionStatus: authByCode.status,
       });
       setSuccessNotice(
         language === 'ar'

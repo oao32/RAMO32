@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   Lock,
-  ArrowUpRight,
   MessageCircle,
   Sparkles,
   Shield,
@@ -19,7 +18,7 @@ interface SubscriptionDurationBannerProps {
   profile: ClientProfile;
   language: Language;
   theme?: Theme;
-  onOpenRenewModal: () => void;
+  onOpenRenewModal?: () => void;
   onOpenUpgradeToVIP?: () => void;
   onScrollToCoachChat?: () => void;
   onCoachEditDates?: () => void;
@@ -41,26 +40,22 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
 
   const isLight = theme === 'light';
 
-  // Badge styling according to status
   const statusConfig = {
     active: {
       labelAr: 'الاشتراك نشط',
       labelEn: 'Subscription Active',
-      color: 'emerald',
       bgClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
       icon: CheckCircle2,
     },
     expiring: {
       labelAr: `ينتهي قريباً (${details.daysRemaining} يوم متبقي)`,
       labelEn: `Expiring Soon (${details.daysRemaining} days left)`,
-      color: 'amber',
       bgClass: 'bg-amber-500/15 text-amber-300 border-amber-500/40 animate-pulse',
       icon: AlertTriangle,
     },
     expired: {
       labelAr: 'الاشتراك منتهي ومقفل',
       labelEn: 'Expired & Locked',
-      color: 'rose',
       bgClass: 'bg-rose-500/15 text-rose-400 border-rose-500/40',
       icon: Lock,
     },
@@ -124,8 +119,8 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
               </div>
               <p className="text-xs text-slate-400">
                 {language === 'ar'
-                  ? 'محدد وموثق من الكوتش عمر عدنان — تتبع الأيام المتبقية وتاريخ التجديد'
-                  : 'Coordinated by Coach Omar Adnan — track remaining days and renewal'}
+                  ? `المدة المعتمدة: ${details.formattedTotalDurationAr}`
+                  : `Total Period: ${details.formattedTotalDurationEn}`}
               </p>
             </div>
           </div>
@@ -151,26 +146,20 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
           </div>
         </div>
 
-        {/* Row 2: Metrics Grid (Start Date, End Date, Days Remaining) */}
+        {/* Row 2: Metrics Grid (Start Date, End Date, Remaining Days & Months) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* Box 1: Start Date */}
           <div
             className={`p-3.5 rounded-2xl border ${
-              isLight
-                ? 'bg-slate-50 border-slate-200'
-                : 'bg-[#070a14]/80 border-white/5'
+              isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#070a14]/80 border-white/5'
             }`}
           >
             <span className="text-[11px] font-medium text-slate-400 block mb-0.5">
-              {language === 'ar' ? 'تاريخ بداية الاشتراك' : 'Start Date'}
+              {language === 'ar' ? 'من تاريخ (بداية الاشتراك)' : 'Start Date'}
             </span>
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-slate-400" />
-              <span
-                className={`text-sm font-bold ${
-                  isLight ? 'text-slate-800' : 'text-slate-100'
-                }`}
-              >
+              <span className={`text-sm font-bold ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>
                 {language === 'ar' ? details.formattedStartDateAr : details.formattedStartDateEn}
               </span>
             </div>
@@ -192,7 +181,7 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
             }`}
           >
             <span className="text-[11px] font-medium text-slate-400 block mb-0.5">
-              {language === 'ar' ? 'تاريخ نهاية الاشتراك' : 'End Date (Expiration)'}
+              {language === 'ar' ? 'إلى تاريخ (نهاية الاشتراك)' : 'End Date (Expiration)'}
             </span>
             <div className="flex items-center gap-2">
               <Clock
@@ -223,7 +212,7 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
             </span>
           </div>
 
-          {/* Box 3: Days Remaining & Countdown */}
+          {/* Box 3: Days & Months Remaining + Countdown */}
           <div
             className={`p-3.5 rounded-2xl border flex flex-col justify-between ${
               isVip
@@ -237,27 +226,41 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
               </span>
               <span className="text-[10px] text-slate-400">
                 {details.daysElapsed} / {details.totalDays}{' '}
-                {language === 'ar' ? 'يوم مكتمل' : 'days passed'}
+                {language === 'ar' ? 'يوم منقضي' : 'days passed'}
               </span>
             </div>
 
-            <div className="flex items-baseline gap-1.5 my-1">
-              <span
-                className={`text-2xl font-black font-mono ${
-                  details.isExpired
-                    ? 'text-rose-400'
-                    : details.isExpiringSoon
-                    ? 'text-amber-300'
-                    : isVip
-                    ? 'text-amber-400'
-                    : 'text-orange-400'
-                }`}
-              >
-                {details.daysRemaining}
-              </span>
-              <span className="text-xs font-bold text-slate-300">
-                {language === 'ar' ? 'يوم متبقي' : 'days left'}
-              </span>
+            <div className="my-1 space-y-0.5">
+              <div className="flex items-baseline gap-1.5">
+                <span
+                  className={`text-2xl font-black font-mono ${
+                    details.isExpired
+                      ? 'text-rose-400'
+                      : details.isExpiringSoon
+                      ? 'text-amber-300'
+                      : isVip
+                      ? 'text-amber-400'
+                      : 'text-orange-400'
+                  }`}
+                >
+                  {details.daysRemaining}
+                </span>
+                <span className="text-xs font-bold text-slate-300">
+                  {language === 'ar' ? 'يوم متبقي' : 'days left'}
+                </span>
+              </div>
+
+              {!details.isExpired && details.remainingMonths > 0 && (
+                <div
+                  className={`text-[11px] font-bold ${
+                    isVip ? 'text-amber-200/90' : 'text-orange-300/90'
+                  }`}
+                >
+                  {language === 'ar'
+                    ? `(${details.formattedRemainingDurationAr})`
+                    : `(${details.formattedRemainingDurationEn})`}
+                </div>
+              )}
             </div>
 
             {/* Visual Progress Bar */}
@@ -281,17 +284,17 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
         {/* Row 3: Quick Action Buttons */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-white/5">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Renew Button */}
-            <button
-              type="button"
-              onClick={onOpenRenewModal}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white text-xs font-black shadow-md hover:shadow-orange-500/25 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
-            >
-              <CreditCard className="w-3.5 h-3.5" />
-              <span>{language === 'ar' ? 'تجديد الاشتراك الآن' : 'Renew Subscription'}</span>
-            </button>
+            {onOpenRenewModal && (
+              <button
+                type="button"
+                onClick={onOpenRenewModal}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white text-xs font-black shadow-md hover:shadow-orange-500/25 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'تجديد الاشتراك' : 'Renew Subscription'}</span>
+              </button>
+            )}
 
-            {/* Upgrade to VIP Button (if standard) */}
             {!isVip && onOpenUpgradeToVIP && (
               <button
                 type="button"
@@ -303,7 +306,6 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
               </button>
             )}
 
-            {/* Contact Coach Button */}
             {onScrollToCoachChat && (
               <button
                 type="button"
@@ -324,7 +326,7 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
             <Shield className="w-3.5 h-3.5 text-slate-400" />
             <span>
               {language === 'ar'
-                ? 'ينتهي الاشتراك تلقائياً ويقفل الموقع عند نهاية المدة'
+                ? 'ينتهي الاشتراك تلقائياً ويقفل الحساب عند نهاية المدة'
                 : 'Portal auto-locks upon expiration until renewed'}
             </span>
           </div>

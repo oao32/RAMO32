@@ -61,6 +61,12 @@ import {
 import { toYouTubeEmbedUrl } from '../../lib/youtube';
 import { normalizeExerciseSets, normalizeWorkoutDays } from '../../lib/workoutUtils';
 import {
+  addMonthsToDate,
+  calculateDateSpanBreakdown,
+  calculateSubscriptionDetails,
+  getTodayIsoString,
+} from '../../lib/subscriptionUtils';
+import {
   Users,
   Dumbbell,
   MessageSquare,
@@ -88,6 +94,8 @@ import {
   Layers,
   X,
   RotateCcw,
+  Calendar,
+  Clock,
 } from 'lucide-react';
 
 export const AdminPanel: React.FC = () => {
@@ -514,13 +522,30 @@ export const AdminPanel: React.FC = () => {
     targetClientEmail
   );
 
-  // Save Profile measurements (Weight, Height, Body Fat, Muscle Mass, etc.)
+  // Save Profile measurements (Weight, Height, Body Fat, Muscle Mass, Subscription Dates)
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    const subDetails = calculateSubscriptionDetails({
+      ...profile,
+      subscriptionStartDate: profile.subscriptionStartDate,
+      subscriptionEndDate: profile.subscriptionEndDate,
+      subscriptionStatus: profile.subscriptionStatus === 'suspended' ? 'suspended' : 'active',
+    });
+    const nextStatus: ClientProfile['subscriptionStatus'] =
+      profile.subscriptionStatus === 'suspended'
+        ? 'suspended'
+        : subDetails.isExpired
+        ? 'expired'
+        : 'active';
+
     const updatedProfile: ClientProfile = {
       ...profile,
       id: targetCanonicalKey,
       email: targetClientEmail || profile.email,
+      subscriptionDaysLeft: subDetails.hasExplicitEndDate
+        ? subDetails.daysRemaining
+        : profile.subscriptionDaysLeft,
+      subscriptionStatus: nextStatus,
     };
     setProfile(updatedProfile);
     void syncClientProfileToSupabase(targetCanonicalKey, updatedProfile);
@@ -1331,6 +1356,136 @@ export const AdminPanel: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* Subscription Dates & Duration Calculator */}
+              {(() => {
+                const startIso = profile.subscriptionStartDate || getTodayIsoString();
+                const endIso = profile.subscriptionEndDate || addMonthsToDate(startIso, 1);
+                const span = calculateDateSpanBreakdown(startIso, endIso);
+                const bioSub = calculateSubscriptionDetails({
+                  ...profile,
+                  subscriptionStartDate: profile.subscriptionStartDate,
+                  subscriptionEndDate: profile.subscriptionEndDate,
+                  subscriptionStatus: profile.subscriptionStatus === 'suspended' ? 'suspended' : 'active',
+                });
+                return (
+                  <div className="p-4 sm:p-5 rounded-2xl bg-[#070e24]/90 border border-orange-500/30 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2 text-xs font-black text-orange-300">
+                        <Calendar className="w-4 h-4 text-orange-400" />
+                        <span>تواريخ وفترة اشتراك المتدرب (يُحسب بالأشهر والأيام تلقائياً):</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {[
+                          { label: 'شهر', months: 1 },
+                          { label: '3 شهور', months: 3 },
+                          { label: '6 شهور', months: 6 },
+                          { label: 'سنة', months: 12 },
+                        ].map((preset) => (
+                          <button
+                            key={preset.months}
+                            type="button"
+                            onClick={() => {
+                              const base = profile.subscriptionStartDate || getTodayIsoString();
+                              const nextEnd = addMonthsToDate(base, preset.months);
+                              const nextCalc = calculateSubscriptionDetails({
+                                ...profile,
+                                subscriptionStartDate: base,
+                                subscriptionEndDate: nextEnd,
+                                subscriptionStatus: 'active',
+                              });
+                              setProfile({
+                                ...profile,
+                                subscriptionStartDate: base,
+                                subscriptionEndDate: nextEnd,
+                                subscriptionDaysLeft: nextCalc.daysRemaining,
+                                subscriptionStatus: nextCalc.isExpired ? 'expired' : 'active',
+                              });
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-orange-500/15 hover:bg-orange-500/30 border border-orange-500/30 text-[11px] font-bold text-orange-200 cursor-pointer transition-colors"
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                          من تاريخ (بداية الاشتراك):
+                        </label>
+                        <input
+                          type="date"
+                          value={profile.subscriptionStartDate || ''}
+                          onChange={(e) => {
+                            const nextStart = e.target.value;
+                            const nextCalc = calculateSubscriptionDetails({
+                              ...profile,
+                              subscriptionStartDate: nextStart,
+                              subscriptionEndDate: profile.subscriptionEndDate,
+                              subscriptionStatus: 'active',
+                            });
+                            setProfile({
+                              ...profile,
+                              subscriptionStartDate: nextStart,
+                              subscriptionDaysLeft: nextCalc.daysRemaining,
+                              subscriptionStatus: nextCalc.isExpired ? 'expired' : 'active',
+                            });
+                          }}
+                          className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white text-xs font-mono outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                          إلى تاريخ (نهاية الاشتراك):
+                        </label>
+                        <input
+                          type="date"
+                          value={profile.subscriptionEndDate || ''}
+                          onChange={(e) => {
+                            const nextEnd = e.target.value;
+                            const nextCalc = calculateSubscriptionDetails({
+                              ...profile,
+                              subscriptionStartDate: profile.subscriptionStartDate,
+                              subscriptionEndDate: nextEnd,
+                              subscriptionStatus: 'active',
+                            });
+                            setProfile({
+                              ...profile,
+                              subscriptionEndDate: nextEnd,
+                              subscriptionDaysLeft: nextCalc.daysRemaining,
+                              subscriptionStatus: nextCalc.isExpired ? 'expired' : 'active',
+                            });
+                          }}
+                          className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white text-xs font-mono outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {profile.subscriptionEndDate && (
+                      <div
+                        className={`p-3 rounded-xl border text-xs font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                          bioSub.isExpired
+                            ? 'bg-rose-500/15 border-rose-500/40 text-rose-200'
+                            : 'bg-black/40 border-white/10 text-slate-200'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>المدة الكلية المحسوبة: {span.formattedWithTotalAr}</span>
+                        </span>
+                        <span className={bioSub.isExpired ? 'text-rose-300' : 'text-emerald-300'}>
+                          {bioSub.isExpired
+                            ? 'منتهي — سيتم قفل الحساب عن المشترك تلقائياً 🔒'
+                            : `المتبقي من اليوم: ${bioSub.daysRemaining} يوم (${bioSub.formattedRemainingDurationAr})`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <span className="text-xs text-slate-400">

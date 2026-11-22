@@ -20,6 +20,9 @@ interface AuthenticatedTokenSubscriber {
   clientCode?: string;
   phone?: string;
   accessToken: string;
+  subscriptionStartDate?: string;
+  subscriptionEndDate?: string;
+  status?: 'active' | 'suspended' | 'expiring' | 'expired';
 }
 
 export const SubscriberTokenPortal: React.FC = () => {
@@ -74,6 +77,9 @@ export const SubscriberTokenPortal: React.FC = () => {
         clientCode: authRes.clientCode,
         phone: authRes.phone,
         accessToken: resolvedToken,
+        subscriptionStartDate: authRes.subscriptionStartDate,
+        subscriptionEndDate: authRes.subscriptionEndDate,
+        status: authRes.status,
       };
 
       setCurrentUserSession({
@@ -85,6 +91,9 @@ export const SubscriberTokenPortal: React.FC = () => {
         clientCode: authRes.clientCode,
         phone: authRes.phone,
         accessToken: resolvedToken,
+        subscriptionStartDate: authRes.subscriptionStartDate,
+        subscriptionEndDate: authRes.subscriptionEndDate,
+        subscriptionStatus: authRes.status,
       });
 
       setSubscriber(verifiedSub);

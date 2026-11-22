@@ -141,6 +141,10 @@ async function startServer() {
         age: record.age ?? null,
         blood_type: record.bloodType || null,
         status: record.status || 'active',
+        subscription_start_date: record.subscriptionStartDate || null,
+        subscription_end_date: record.subscriptionEndDate || null,
+        subscription_days_left:
+          typeof record.subscriptionDaysLeft === 'number' ? record.subscriptionDaysLeft : null,
         nutrition_plan_locked: Boolean(record.nutritionPlanLocked),
         inbody_filename: record.inBodyFileName || null,
         inbody_file_url: record.inBodyFileUrl || null,
@@ -209,6 +213,10 @@ async function startServer() {
         phone: record.phone || null,
         client_code: record.clientCode || cleanPass,
         status: record.status || 'active',
+        subscription_start_date: record.subscriptionStartDate || null,
+        subscription_end_date: record.subscriptionEndDate || null,
+        subscription_days_left:
+          typeof record.subscriptionDaysLeft === 'number' ? record.subscriptionDaysLeft : null,
         assigned_password: cleanPass,
         age: record.age ?? null,
         blood_type: record.bloodType || null,

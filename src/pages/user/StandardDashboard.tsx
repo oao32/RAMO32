@@ -22,6 +22,9 @@ import { BMIGauge } from '../../components/BMIGauge';
 import { ClientNotesSection } from '../../components/ClientNotesSection';
 import { RestTimer } from '../../components/RestTimer';
 import { VideoModal } from '../../components/VideoModal';
+import { SubscriptionDurationBanner } from '../../components/SubscriptionDurationBanner';
+import { SubscriptionExpiredLockScreen } from '../../components/SubscriptionExpiredLockScreen';
+import { CoachPasskeyModal } from '../../components/CoachPasskeyModal';
 import { calculateSubscriptionDetails } from '../../lib/subscriptionUtils';
 import {
   fetchNotesFromSupabase,
@@ -37,6 +40,7 @@ import {
   clearCurrentUserSession,
   fetchSubscribersFromSupabase,
   isCoachAuthenticated,
+  setCoachAuthenticated,
 } from '../../lib/authStore';
 import {
   Home,
@@ -45,11 +49,7 @@ import {
   Crown,
   Clock,
   ArrowRight,
-  Sparkles,
-  Calendar,
-  Activity,
   Dumbbell,
-  CheckCircle2,
   Lock,
   Loader2,
 } from 'lucide-react';
@@ -63,6 +63,9 @@ export interface StandardDashboardProps {
     clientCode?: string;
     phone?: string;
     accessToken?: string;
+    subscriptionStartDate?: string;
+    subscriptionEndDate?: string;
+    status?: 'active' | 'suspended' | 'expiring' | 'expired';
   } | null;
   isolatedByToken?: boolean;
   onLogoutOverride?: () => void;
@@ -90,6 +93,8 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
   // Client Profile state (Hydrated strictly from Supabase + active session)
   const [profile, setProfile] = useState<ClientProfile>(() => {
     const activeSub = tokenSubscriber || getCurrentUserSession();
+    const subStatus =
+      tokenSubscriber?.status || getCurrentUserSession()?.subscriptionStatus || 'active';
     return createNeutralClientProfile({
       id: activeSub?.id || activeSub?.email || '',
       email: activeSub?.email || '',
@@ -99,6 +104,9 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
       accessToken: activeSub?.accessToken,
       phone: activeSub?.phone,
       subscription_plan: 'standard',
+      subscriptionStartDate: activeSub?.subscriptionStartDate,
+      subscriptionEndDate: activeSub?.subscriptionEndDate,
+      subscriptionStatus: subStatus,
     });
   });
 
@@ -238,8 +246,14 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [isRestTimerOpen, setIsRestTimerOpen] = useState(false);
   const [restTimerSeconds, setRestTimerSeconds] = useState(90);
+  const [isCoachPasskeyModalOpen, setIsCoachPasskeyModalOpen] = useState(false);
+  const notesSectionRef = React.useRef<HTMLElement | null>(null);
 
   const subDetails = calculateSubscriptionDetails(profile);
+  const isCoachViewingAsAdmin =
+    !isolatedByToken &&
+    (isCoachAuthenticated() || getCurrentUserSession()?.role === 'admin');
+  const isSubscriptionLocked = subDetails.isExpired && !isCoachViewingAsAdmin;
 
   const handleUpdateProfile = (updated: ClientProfile) => {
     setProfile(updated);
@@ -320,6 +334,36 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
     );
   }
 
+  if (isSubscriptionLocked) {
+    return (
+      <div
+        className="min-h-screen bg-[#030712] text-white font-['Alexandria',sans-serif]"
+        dir={language === 'ar' ? 'rtl' : 'ltr'}
+      >
+        <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-rose-600/10 rounded-full blur-[160px] pointer-events-none" />
+        <main className="relative z-10 max-w-4xl mx-auto px-4 py-8">
+          <SubscriptionExpiredLockScreen
+            profile={profile}
+            language={language}
+            theme={theme}
+            onOpenCoachPasskeyModal={() => setIsCoachPasskeyModalOpen(true)}
+            onSignOut={handleLogout}
+          />
+        </main>
+        <CoachPasskeyModal
+          isOpen={isCoachPasskeyModalOpen}
+          onClose={() => setIsCoachPasskeyModalOpen(false)}
+          onSuccess={() => {
+            setCoachAuthenticated(true);
+            navigate('/admin');
+          }}
+          language={language}
+          theme={theme}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#030712] text-white selection:bg-orange-500 selection:text-white font-['Alexandria',sans-serif]">
       {/* Top Background Ambient Glow */}
@@ -353,10 +397,17 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
 
         {/* Center / Right Status & Actions */}
         <div className="flex items-center gap-2.5">
-          {/* Subscription remaining days */}
-          <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-xs font-mono text-slate-300">
+          {/* Subscription remaining days & months */}
+          <div
+            className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-xs font-mono text-slate-300"
+            title={`من ${subDetails.startDate} إلى ${subDetails.endDate}`}
+          >
             <Clock className="w-3.5 h-3.5 text-orange-400" />
-            <span>{subDetails.daysRemaining} يوم متبقي</span>
+            <span>
+              {subDetails.remainingMonths > 0
+                ? `${subDetails.formattedRemainingDurationAr} (${subDetails.daysRemaining} يوم)`
+                : `${subDetails.daysRemaining} يوم متبقي`}
+            </span>
           </div>
 
           {/* Upgrade to VIP Button */}
@@ -419,6 +470,15 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
             />
           </div>
         </div>
+
+        {/* Subscription Duration & Remaining Days/Months Banner */}
+        <SubscriptionDurationBanner
+          profile={profile}
+          language={language}
+          theme={theme}
+          onOpenUpgradeToVIP={() => navigate('/subscribe')}
+          onScrollToCoachChat={() => notesSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+        />
 
         {/* Upgrade to VIP Callout Banner */}
         <div className="rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-amber-500/10 via-[#0B132B] to-orange-500/10 border border-amber-400/40 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -498,7 +558,7 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
         />
 
         {/* COACH NOTES & INQUIRIES */}
-        <section className="space-y-4">
+        <section ref={notesSectionRef} className="space-y-4">
           <ClientNotesSection
             notes={notes}
             onAddNote={handleAddNote}

@@ -27,6 +27,7 @@ import {
   saveDietCategories,
 } from '../data/nutrition/dietPlanData';
 import { normalizeWorkoutDays } from './workoutUtils';
+import { calculateSubscriptionDetails, normalizeIsoDateOnly } from './subscriptionUtils';
 
 // Read exclusively from environment variables (No hardcoded credentials)
 export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string) || '';
@@ -1093,6 +1094,7 @@ export interface SaveSubscriberPlanInput {
   status?: string;
   subscriptionStartDate?: string;
   subscriptionEndDate?: string;
+  subscriptionDaysLeft?: number;
   coachId?: string | null;
 }
 
@@ -1185,8 +1187,10 @@ export async function saveSubscriberToSupabase(
       height_cm: input.heightCm ?? 175,
       target_weight_kg: input.targetWeightKg ?? 70,
       subscription_plan: normalizedPlan,
-      subscription_start_date: input.subscriptionStartDate || null,
-      subscription_end_date: input.subscriptionEndDate || null,
+      subscription_start_date: normalizeIsoDateOnly(input.subscriptionStartDate) || null,
+      subscription_end_date: normalizeIsoDateOnly(input.subscriptionEndDate) || null,
+      subscription_days_left:
+        typeof input.subscriptionDaysLeft === 'number' ? input.subscriptionDaysLeft : null,
       package_type_ar: packageTypeAr,
       package_type_en: packageTypeEn,
       status: input.status || 'active',
@@ -1286,6 +1290,10 @@ export async function syncProfileToSupabase(profile: ClientProfile): Promise<boo
   const canonicalKey = getCanonicalClientKey(profile.id, profile.email);
   if (!canonicalKey) return false;
 
+  const subDetails = calculateSubscriptionDetails(profile);
+  const cleanStart = normalizeIsoDateOnly(profile.subscriptionStartDate) || undefined;
+  const cleanEnd = normalizeIsoDateOnly(profile.subscriptionEndDate) || undefined;
+
   // 1. Sync to live `public.clients` table
   const clientRes = await saveSubscriberToSupabase({
     id: profile.id,
@@ -1299,13 +1307,47 @@ export async function syncProfileToSupabase(profile: ClientProfile): Promise<boo
     clientCode: profile.clientCode,
     accessToken: profile.accessToken,
     status: profile.subscriptionStatus,
-    subscriptionStartDate: profile.subscriptionStartDate,
-    subscriptionEndDate: profile.subscriptionEndDate,
+    subscriptionStartDate: cleanStart,
+    subscriptionEndDate: cleanEnd,
+    subscriptionDaysLeft: subDetails.hasExplicitEndDate ? subDetails.daysRemaining : profile.subscriptionDaysLeft,
   });
 
   const resolvedId = clientRes.id || canonicalKey;
   const client = getSupabaseClient();
   if (!client) return clientRes.synced;
+
+  // 1b. Keep matching row in `public.subscribers` synced with dates & status
+  if (profile.email) {
+    try {
+      const cleanEmail = profile.email.trim().toLowerCase();
+      const { data: subRow } = await client
+        .from('subscribers')
+        .select('id')
+        .ilike('email', cleanEmail)
+        .limit(1)
+        .maybeSingle();
+      if (subRow && (subRow as Record<string, unknown>).id !== undefined) {
+        await writeTableRowSafely(
+          client,
+          'subscribers',
+          {
+            name: profile.name,
+            tier: normalizedPlan,
+            status: profile.subscriptionStatus || 'active',
+            subscription_start_date: cleanStart || null,
+            subscription_end_date: cleanEnd || null,
+            subscription_days_left: subDetails.hasExplicitEndDate
+              ? subDetails.daysRemaining
+              : profile.subscriptionDaysLeft ?? null,
+            updated_at: new Date().toISOString(),
+          },
+          { matchColumn: 'id', matchValue: (subRow as Record<string, unknown>).id as string | number }
+        );
+      }
+    } catch {
+      // ignore if subscribers table is absent
+    }
+  }
 
   let profilesSynced = false;
   let extSynced = false;
@@ -1448,6 +1490,8 @@ export async function fetchClientProfileFromSupabase(
     ]);
 
     const merged: ClientProfile = { ...baseProfile };
+    let dbStartDate = '';
+    let dbEndDate = '';
 
     if (!subscribersRes.error && subscribersRes.data) {
       const sRow = subscribersRes.data as Record<string, unknown>;
@@ -1463,6 +1507,23 @@ export async function fetchClientProfileFromSupabase(
       if (sRow.tier) merged.subscription_plan = normalizeSubscriptionPlan(String(sRow.tier));
       if (sRow.goals) merged.visualGoal = String(sRow.goals);
       if (sRow.status) merged.subscriptionStatus = sRow.status as ClientProfile['subscriptionStatus'];
+      if (sRow.subscription_start_date) {
+        const normStart = normalizeIsoDateOnly(String(sRow.subscription_start_date));
+        if (normStart) {
+          dbStartDate = normStart;
+          merged.subscriptionStartDate = normStart;
+        }
+      }
+      if (sRow.subscription_end_date) {
+        const normEnd = normalizeIsoDateOnly(String(sRow.subscription_end_date));
+        if (normEnd) {
+          dbEndDate = normEnd;
+          merged.subscriptionEndDate = normEnd;
+        }
+      }
+      if (sRow.subscription_days_left !== null && sRow.subscription_days_left !== undefined) {
+        merged.subscriptionDaysLeft = Number(sRow.subscription_days_left);
+      }
       if (sRow.age !== null && sRow.age !== undefined) merged.age = Number(sRow.age);
       if (sRow.blood_type) merged.bloodType = String(sRow.blood_type);
       if (sRow.nutrition_plan_locked !== undefined) {
@@ -1492,11 +1553,22 @@ export async function fetchClientProfileFromSupabase(
       if (row.status && !subscribersRes.data) {
         merged.subscriptionStatus = row.status as ClientProfile['subscriptionStatus'];
       }
-      if (row.subscription_start_date) {
-        merged.subscriptionStartDate = String(row.subscription_start_date);
+      if (row.subscription_start_date && !dbStartDate) {
+        const normStart = normalizeIsoDateOnly(String(row.subscription_start_date));
+        if (normStart) {
+          dbStartDate = normStart;
+          merged.subscriptionStartDate = normStart;
+        }
       }
-      if (row.subscription_end_date) {
-        merged.subscriptionEndDate = String(row.subscription_end_date);
+      if (row.subscription_end_date && !dbEndDate) {
+        const normEnd = normalizeIsoDateOnly(String(row.subscription_end_date));
+        if (normEnd) {
+          dbEndDate = normEnd;
+          merged.subscriptionEndDate = normEnd;
+        }
+      }
+      if (row.subscription_days_left !== null && row.subscription_days_left !== undefined && !subscribersRes.data) {
+        merged.subscriptionDaysLeft = Number(row.subscription_days_left);
       }
       if (row.age !== null && row.age !== undefined && !merged.age) merged.age = Number(row.age);
       if (row.blood_type && !merged.bloodType) merged.bloodType = String(row.blood_type);
@@ -1521,6 +1593,20 @@ export async function fetchClientProfileFromSupabase(
       if (authData.age && !merged.age) merged.age = Number(authData.age);
       if (authData.bloodType && !merged.bloodType) merged.bloodType = String(authData.bloodType);
       if (authData.password && !merged.assignedPassword) merged.assignedPassword = String(authData.password);
+      if (authData.subscriptionStartDate && !dbStartDate) {
+        const normStart = normalizeIsoDateOnly(String(authData.subscriptionStartDate));
+        if (normStart) {
+          dbStartDate = normStart;
+          merged.subscriptionStartDate = normStart;
+        }
+      }
+      if (authData.subscriptionEndDate && !dbEndDate) {
+        const normEnd = normalizeIsoDateOnly(String(authData.subscriptionEndDate));
+        if (normEnd) {
+          dbEndDate = normEnd;
+          merged.subscriptionEndDate = normEnd;
+        }
+      }
     }
 
     if (!profilesRes.error && profilesRes.data) {
@@ -1552,8 +1638,23 @@ export async function fetchClientProfileFromSupabase(
       if (ext.visualGoal) merged.visualGoal = ext.visualGoal;
       if (ext.age !== undefined) merged.age = ext.age;
       if (ext.bloodType) merged.bloodType = ext.bloodType;
-      if (ext.subscriptionStartDate) merged.subscriptionStartDate = ext.subscriptionStartDate;
-      if (ext.subscriptionEndDate) merged.subscriptionEndDate = ext.subscriptionEndDate;
+      // Preserve authoritative DB dates from `subscribers`/`clients`; use `ext` only if DB columns are empty
+      if (ext.subscriptionStartDate && !dbStartDate) {
+        const normStart = normalizeIsoDateOnly(ext.subscriptionStartDate);
+        if (normStart) merged.subscriptionStartDate = normStart;
+      }
+      if (ext.subscriptionEndDate && !dbEndDate) {
+        const normEnd = normalizeIsoDateOnly(ext.subscriptionEndDate);
+        if (normEnd) merged.subscriptionEndDate = normEnd;
+      }
+    }
+
+    const calculated = calculateSubscriptionDetails(merged);
+    if (calculated.hasExplicitEndDate) {
+      merged.subscriptionDaysLeft = calculated.daysRemaining;
+      if (calculated.isExpired && merged.subscriptionStatus !== 'suspended') {
+        merged.subscriptionStatus = 'expired';
+      }
     }
 
     return merged;
@@ -2349,6 +2450,9 @@ CREATE TABLE IF NOT EXISTS public.subscribers (
   age INTEGER,
   blood_type TEXT,
   status TEXT DEFAULT 'active',
+  subscription_start_date DATE,
+  subscription_end_date DATE,
+  subscription_days_left INTEGER,
   nutrition_plan_locked BOOLEAN DEFAULT false,
   inbody_filename TEXT,
   inbody_file_url TEXT
@@ -2363,6 +2467,9 @@ ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS age INTEGER;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS blood_type TEXT;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS subscription_start_date DATE;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS subscription_end_date DATE;
+ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS subscription_days_left INTEGER;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS nutrition_plan_locked BOOLEAN DEFAULT false;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS inbody_filename TEXT;
 ALTER TABLE public.subscribers ADD COLUMN IF NOT EXISTS inbody_file_url TEXT;
@@ -2394,6 +2501,7 @@ CREATE TABLE IF NOT EXISTS public.clients (
   subscription_plan TEXT NOT NULL DEFAULT 'standard' CHECK (subscription_plan IN ('standard', 'VIP')),
   subscription_start_date DATE,
   subscription_end_date DATE,
+  subscription_days_left INTEGER,
   package_type_ar TEXT DEFAULT 'الباقة القياسية (Standard)',
   package_type_en TEXT DEFAULT 'standard',
   status TEXT DEFAULT 'active',
@@ -2410,6 +2518,7 @@ ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS inbody_file_url TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_plan TEXT NOT NULL DEFAULT 'standard';
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_start_date DATE;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_end_date DATE;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS subscription_days_left INTEGER;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS coach_id UUID;
 ALTER TABLE public.clients ALTER COLUMN coach_id DROP NOT NULL;
 ALTER TABLE public.clients ALTER COLUMN height_cm SET DEFAULT 175;

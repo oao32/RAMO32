@@ -16,6 +16,12 @@ import {
   deleteDeclarationFromSupabase,
 } from '../../lib/supabase';
 import {
+  addMonthsToDate,
+  calculateDateSpanBreakdown,
+  calculateSubscriptionDetails,
+  getTodayIsoString,
+} from '../../lib/subscriptionUtils';
+import {
   Users,
   ShieldCheck,
   Share2,
@@ -43,6 +49,8 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Link2,
+  Calendar,
+  Clock,
 } from 'lucide-react';
 
 interface AdminSubscribersManagerProps {
@@ -93,6 +101,8 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
   const [editBloodType, setEditBloodType] = useState<string>('');
   const [editVisualGoal, setEditVisualGoal] = useState<string>('');
   const [editStatus, setEditStatus] = useState<'active' | 'suspended'>('active');
+  const [editStartDate, setEditStartDate] = useState<string>(() => getTodayIsoString());
+  const [editEndDate, setEditEndDate] = useState<string>(() => addMonthsToDate(getTodayIsoString(), 1));
   const [editMessage, setEditMessage] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -107,10 +117,26 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
   const [addAge, setAddAge] = useState<string>('');
   const [addBloodType, setAddBloodType] = useState<string>('');
   const [addVisualGoal, setAddVisualGoal] = useState<string>('تضخيم وبناء عضلي (Bulking)');
+  const [addStartDate, setAddStartDate] = useState<string>(() => getTodayIsoString());
+  const [addEndDate, setAddEndDate] = useState<string>(() => addMonthsToDate(getTodayIsoString(), 1));
   const [addMessage, setAddMessage] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [isSavingAdd, setIsSavingAdd] = useState(false);
   const [isRefreshingCloud, setIsRefreshingCloud] = useState(false);
+
+  const editDateSpan = calculateDateSpanBreakdown(editStartDate, editEndDate);
+  const editSubDetails = calculateSubscriptionDetails({
+    subscriptionStartDate: editStartDate,
+    subscriptionEndDate: editEndDate,
+    subscriptionStatus: editStatus,
+  });
+
+  const addDateSpan = calculateDateSpanBreakdown(addStartDate, addEndDate);
+  const addSubDetails = calculateSubscriptionDetails({
+    subscriptionStartDate: addStartDate,
+    subscriptionEndDate: addEndDate,
+    subscriptionStatus: 'active',
+  });
 
   // WhatsApp share notification & inline delete confirmation states
   const [whatsappCopiedFor, setWhatsappCopiedFor] = useState<string | null>(null);
@@ -176,6 +202,8 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
 
   // Open Edit Profile Modal
   const handleOpenEditModal = (user: UserCredentialRecord) => {
+    const defaultStart = user.subscriptionStartDate || getTodayIsoString();
+    const defaultEnd = user.subscriptionEndDate || addMonthsToDate(defaultStart, 1);
     setEditingSubscriber(user);
     setEditName(user.clientName);
     setEditEmail(user.email);
@@ -185,7 +213,9 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     setEditAge(user.age);
     setEditBloodType(user.bloodType || '');
     setEditVisualGoal(user.visualGoal || 'تضخيم وبناء عضلي (Bulking)');
-    setEditStatus((user.status as 'active' | 'suspended') || 'active');
+    setEditStatus(user.status === 'suspended' ? 'suspended' : 'active');
+    setEditStartDate(defaultStart);
+    setEditEndDate(defaultEnd);
     setEditMessage(null);
     setEditError(null);
   };
@@ -204,6 +234,18 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
         ? editPassword.trim()
         : editingSubscriber.clientCode;
 
+    const computedSub = calculateSubscriptionDetails({
+      subscriptionStartDate: editStartDate,
+      subscriptionEndDate: editEndDate,
+      subscriptionStatus: editStatus,
+    });
+    const nextStatus: UserCredentialRecord['status'] =
+      editStatus === 'suspended'
+        ? 'suspended'
+        : computedSub.isExpired
+        ? 'expired'
+        : 'active';
+
     const res = await assignSubscriberPassword({
       id: editingSubscriber.id,
       email: editEmail.trim(),
@@ -216,7 +258,10 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       age: editAge ? Number(editAge) : undefined,
       bloodType: editBloodType || undefined,
       visualGoal: editVisualGoal || undefined,
-      status: editStatus,
+      status: nextStatus,
+      subscriptionStartDate: editStartDate || undefined,
+      subscriptionEndDate: editEndDate || undefined,
+      subscriptionDaysLeft: computedSub.daysRemaining,
       nutritionPlanLocked: editingSubscriber.nutritionPlanLocked,
     });
 
@@ -227,12 +272,27 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       return;
     }
 
+    window.dispatchEvent(
+      new CustomEvent('oao_profile_updated', {
+        detail: {
+          id: res.record?.id || editingSubscriber.id,
+          email: editEmail.trim().toLowerCase(),
+          name: editName.trim(),
+          subscription_plan: editPlan,
+          subscriptionStartDate: editStartDate,
+          subscriptionEndDate: editEndDate,
+          subscriptionDaysLeft: computedSub.daysRemaining,
+          subscriptionStatus: nextStatus,
+        },
+      })
+    );
+
     await refreshList(true);
-    setEditMessage('تم حفظ وتحديث بيانات المشترك في Supabase بنجاح!');
+    setEditMessage('تم حفظ وتحديث بيانات المشترك وتواريخ الاشتراك في Supabase بنجاح!');
     setTimeout(() => {
       setEditingSubscriber(null);
       setEditMessage(null);
-      showNotice('تم تحديث ملف المشترك وحفظه سحابياً في Supabase.');
+      showNotice('تم تحديث ملف المشترك وفترة الاشتراك وحفظها سحابياً في Supabase.');
     }, 1000);
   };
 
@@ -352,6 +412,12 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     setAddMessage(null);
     setIsSavingAdd(true);
 
+    const computedAddSub = calculateSubscriptionDetails({
+      subscriptionStartDate: addStartDate,
+      subscriptionEndDate: addEndDate,
+      subscriptionStatus: 'active',
+    });
+
     const res = await assignSubscriberPassword({
       email: addEmail.trim(),
       password: addPassword.trim(),
@@ -362,7 +428,10 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       age: addAge ? Number(addAge) : undefined,
       bloodType: addBloodType || undefined,
       visualGoal: addVisualGoal || undefined,
-      status: 'active',
+      status: computedAddSub.isExpired ? 'expired' : 'active',
+      subscriptionStartDate: addStartDate || undefined,
+      subscriptionEndDate: addEndDate || undefined,
+      subscriptionDaysLeft: computedAddSub.daysRemaining,
       nutritionPlanLocked: false,
     });
 
@@ -376,8 +445,9 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     }
 
     await refreshList(true);
-    setAddMessage('تم حفظ المشترك وبياناته مباشرة في قاعدة بيانات Supabase بنجاح!');
+    setAddMessage('تم حفظ المشترك وبياناته وفترة الاشتراك مباشرة في Supabase بنجاح!');
     setTimeout(() => {
+      const today = getTodayIsoString();
       setIsAddModalOpen(false);
       setAddMessage(null);
       setAddError(null);
@@ -387,7 +457,9 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       setAddPhone('');
       setAddAge('');
       setAddBloodType('');
-      showNotice('تمت إضافة المشترك الجديد ومزامنته مع Supabase بنجاح.');
+      setAddStartDate(today);
+      setAddEndDate(addMonthsToDate(today, 1));
+      showNotice('تمت إضافة المشترك الجديد ومزامنة تواريخ اشتراكه مع Supabase بنجاح.');
     }, 1000);
   };
 
@@ -455,9 +527,12 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => {
+              const today = getTodayIsoString();
               setAddError(null);
               setAddMessage(null);
               setAddPassword(handleGenerateRandomPassword());
+              setAddStartDate(today);
+              setAddEndDate(addMonthsToDate(today, 1));
               setIsAddModalOpen(true);
             }}
             className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer"
@@ -577,17 +652,51 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                     )}
                   </td>
                   <td className="p-3.5">
-                    {user.status === 'suspended' ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold text-[11px]">
-                        <UserX className="w-3 h-3 text-rose-400" />
-                        <span>موقوف / معلق</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-[11px]">
-                        <UserCheck className="w-3 h-3 text-emerald-400" />
-                        <span>نشط</span>
-                      </span>
-                    )}
+                    {(() => {
+                      const rowSub = calculateSubscriptionDetails({
+                        subscriptionStartDate: user.subscriptionStartDate,
+                        subscriptionEndDate: user.subscriptionEndDate,
+                        subscriptionDaysLeft: user.subscriptionDaysLeft,
+                        subscriptionStatus: user.status,
+                      });
+                      return (
+                        <div className="flex flex-col items-start gap-1">
+                          {user.status === 'suspended' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold text-[11px]">
+                              <UserX className="w-3 h-3 text-rose-400" />
+                              <span>موقوف / معلق</span>
+                            </span>
+                          ) : rowSub.isExpired || user.status === 'expired' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold text-[11px]">
+                              <Lock className="w-3 h-3 text-rose-400" />
+                              <span>منتهي ومقفل 🔒</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-[11px]">
+                              <UserCheck className="w-3 h-3 text-emerald-400" />
+                              <span>نشط</span>
+                            </span>
+                          )}
+
+                          {user.subscriptionEndDate && (
+                            <span
+                              className={`text-[10px] font-mono ${
+                                rowSub.isExpired
+                                  ? 'text-rose-400/90'
+                                  : rowSub.isExpiringSoon
+                                  ? 'text-amber-300'
+                                  : 'text-slate-400'
+                              }`}
+                              title={`من ${rowSub.startDate} إلى ${rowSub.endDate}`}
+                            >
+                              {rowSub.isExpired
+                                ? `انتهى ${rowSub.endDate}`
+                                : `متبقي ${rowSub.daysRemaining} يوم (${rowSub.formattedRemainingDurationAr})`}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="p-3.5 text-slate-300">
                     <span className="px-2 py-0.5 rounded bg-black/40 border border-white/5 text-[11px] font-medium text-orange-300">
@@ -1028,6 +1137,82 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                 </div>
               </div>
 
+              {/* Subscription Start & End Date Calculator */}
+              <div className="p-4 rounded-2xl bg-[#070e24]/90 border border-orange-500/30 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-xs font-black text-orange-300 flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-orange-400" />
+                    <span>تواريخ ومدة الاشتراك (بالأشهر والأيام):</span>
+                  </label>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      { label: 'شهر', months: 1 },
+                      { label: '3 شهور', months: 3 },
+                      { label: '6 شهور', months: 6 },
+                      { label: 'سنة', months: 12 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.months}
+                        type="button"
+                        onClick={() => {
+                          const base = editStartDate || getTodayIsoString();
+                          setEditStartDate(base);
+                          setEditEndDate(addMonthsToDate(base, preset.months));
+                        }}
+                        className="px-2 py-1 rounded-lg bg-orange-500/15 hover:bg-orange-500/30 border border-orange-500/30 text-[10px] font-bold text-orange-200 cursor-pointer transition-colors"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                      من تاريخ (بداية الاشتراك):
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={editStartDate}
+                      onChange={(e) => setEditStartDate(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                      إلى تاريخ (نهاية الاشتراك):
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={editEndDate}
+                      onChange={(e) => setEditEndDate(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  className={`p-2.5 rounded-xl border text-[11px] font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 ${
+                    editSubDetails.isExpired
+                      ? 'bg-rose-500/15 border-rose-500/40 text-rose-200'
+                      : 'bg-black/40 border-white/10 text-slate-200'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>المدة المحسوبة: {editDateSpan.formattedWithTotalAr}</span>
+                  </span>
+                  <span className={editSubDetails.isExpired ? 'text-rose-300' : 'text-emerald-300'}>
+                    {editSubDetails.isExpired
+                      ? 'منتهي — سيتم قفل الحساب تلقائياً 🔒'
+                      : `المتبقي من اليوم: ${editSubDetails.daysRemaining} يوم (${editSubDetails.formattedRemainingDurationAr})`}
+                  </span>
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">كلمة المرور:</label>
                 <div className="flex items-center gap-2">
@@ -1176,7 +1361,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       {/* MANUAL ADD SUBSCRIBER MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-[#0B132B] border-2 border-orange-500/40 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative text-white space-y-5">
+          <div className="bg-[#0B132B] border-2 border-orange-500/40 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative text-white space-y-5 max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setIsAddModalOpen(false)}
               className="absolute top-5 left-5 text-slate-400 hover:text-white p-2 rounded-xl bg-white/5 cursor-pointer"
@@ -1316,6 +1501,82 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                       <option value="AB-">AB-</option>
                     </select>
                   </div>
+                </div>
+              </div>
+
+              {/* Subscription Start & End Date Calculator */}
+              <div className="p-4 rounded-2xl bg-[#070e24]/90 border border-orange-500/30 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-xs font-black text-orange-300 flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-orange-400" />
+                    <span>تواريخ ومدة الاشتراك (بالأشهر والأيام):</span>
+                  </label>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      { label: 'شهر', months: 1 },
+                      { label: '3 شهور', months: 3 },
+                      { label: '6 شهور', months: 6 },
+                      { label: 'سنة', months: 12 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.months}
+                        type="button"
+                        onClick={() => {
+                          const base = addStartDate || getTodayIsoString();
+                          setAddStartDate(base);
+                          setAddEndDate(addMonthsToDate(base, preset.months));
+                        }}
+                        className="px-2 py-1 rounded-lg bg-orange-500/15 hover:bg-orange-500/30 border border-orange-500/30 text-[10px] font-bold text-orange-200 cursor-pointer transition-colors"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                      من تاريخ (بداية الاشتراك):
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={addStartDate}
+                      onChange={(e) => setAddStartDate(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                      إلى تاريخ (نهاية الاشتراك):
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={addEndDate}
+                      onChange={(e) => setAddEndDate(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  className={`p-2.5 rounded-xl border text-[11px] font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 ${
+                    addSubDetails.isExpired
+                      ? 'bg-rose-500/15 border-rose-500/40 text-rose-200'
+                      : 'bg-black/40 border-white/10 text-slate-200'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>المدة المحسوبة: {addDateSpan.formattedWithTotalAr}</span>
+                  </span>
+                  <span className={addSubDetails.isExpired ? 'text-rose-300' : 'text-emerald-300'}>
+                    {addSubDetails.isExpired
+                      ? 'تنبيه: التاريخ منتهي وسيكون مقفلاً 🔒'
+                      : `المتبقي من اليوم: ${addSubDetails.daysRemaining} يوم (${addSubDetails.formattedRemainingDurationAr})`}
+                  </span>
                 </div>
               </div>
 

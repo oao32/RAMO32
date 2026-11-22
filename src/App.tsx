@@ -149,6 +149,10 @@ function MainPortal() {
     const active = getCurrentUserSession();
     return active?.role === 'client' ? 'client' : 'guest';
   });
+  const [isHydratingClient, setIsHydratingClient] = useState<boolean>(() => {
+    const active = getCurrentUserSession();
+    return active?.role === 'client';
+  });
 
   // Toggle viewing plans when logged in as client
   const [showPlansForAthlete, setShowPlansForAthlete] = useState(false);
@@ -166,6 +170,9 @@ function MainPortal() {
         accessToken: active.accessToken,
         phone: active.phone,
         subscription_plan: normalizeSubscriptionPlan(active.plan),
+        subscriptionStartDate: active.subscriptionStartDate,
+        subscriptionEndDate: active.subscriptionEndDate,
+        subscriptionStatus: active.subscriptionStatus || 'active',
       });
     }
     return createNeutralClientProfile();
@@ -194,44 +201,73 @@ function MainPortal() {
       fallbackPlan?: SubscriptionPlanTier;
     }) => {
       const requestId = ++workspaceRequestRef.current;
-      const workspace = await loadClientWorkspaceFromSupabase(params);
-      if (requestId !== workspaceRequestRef.current) return;
-      setProfile(workspace.profile);
-      workoutDaysRef.current = workspace.workoutDays;
-      setWorkoutDays(workspace.workoutDays);
-      setActiveWorkoutDayKey((prev) =>
-        workspace.workoutDays.some((d) => d.key === prev && !d.isRestDay)
-          ? prev
-          : workspace.workoutDays.find((d) => !d.isRestDay)?.key || 'upper'
-      );
-      setNotes(workspace.notes);
-      streakDataRef.current = workspace.streakData;
-      setStreakData(workspace.streakData);
-      athleteRankRef.current = workspace.athleteRank;
-      setAthleteRank(workspace.athleteRank);
-      if (workspace.badges) {
-        badgesRef.current = workspace.badges;
-        setBadges(workspace.badges);
+      setIsHydratingClient(true);
+      try {
+        const workspace = await loadClientWorkspaceFromSupabase(params);
+        if (requestId !== workspaceRequestRef.current) return;
+        setProfile(workspace.profile);
+        workoutDaysRef.current = workspace.workoutDays;
+        setWorkoutDays(workspace.workoutDays);
+        setActiveWorkoutDayKey((prev) =>
+          workspace.workoutDays.some((d) => d.key === prev && !d.isRestDay)
+            ? prev
+            : workspace.workoutDays.find((d) => !d.isRestDay)?.key || 'upper'
+        );
+        setNotes(workspace.notes);
+        streakDataRef.current = workspace.streakData;
+        setStreakData(workspace.streakData);
+        athleteRankRef.current = workspace.athleteRank;
+        setAthleteRank(workspace.athleteRank);
+        if (workspace.badges) {
+          badgesRef.current = workspace.badges;
+          setBadges(workspace.badges);
+        }
+      } finally {
+        if (requestId === workspaceRequestRef.current) {
+          setIsHydratingClient(false);
+        }
       }
     },
     []
   );
 
-  // Hydrate live workspace from Supabase when a subscriber session is active on mount
+  // Hydrate live workspace from Supabase when a subscriber session is active on mount and window focus
   useEffect(() => {
-    if (userSession !== 'client') return;
+    if (userSession !== 'client') {
+      setIsHydratingClient(false);
+      return;
+    }
     const currentUser = getCurrentUserSession();
     const targetEmail = currentUser?.email || profile.email;
     const targetId = currentUser?.id || profile.id;
-    if (!targetEmail && !targetId) return;
+    if (!targetEmail && !targetId) {
+      setIsHydratingClient(false);
+      return;
+    }
 
-    void hydrateClientWorkspace({
-      clientId: targetId,
-      email: targetEmail,
-      fallbackName: currentUser?.name || profile.name,
-      fallbackPlan: currentUser?.plan || normalizeSubscriptionPlan(profile.subscription_plan),
-    });
-  }, []);
+    const runHydrate = () => {
+      void hydrateClientWorkspace({
+        clientId: targetId,
+        email: targetEmail,
+        fallbackName: currentUser?.name || profile.name,
+        fallbackPlan: currentUser?.plan || normalizeSubscriptionPlan(profile.subscription_plan),
+      });
+    };
+
+    runHydrate();
+
+    const handleFocusRefresh = () => {
+      if (document.visibilityState === 'visible') {
+        runHydrate();
+      }
+    };
+    window.addEventListener('focus', handleFocusRefresh);
+    document.addEventListener('visibilitychange', handleFocusRefresh);
+    return () => {
+      window.removeEventListener('focus', handleFocusRefresh);
+      document.removeEventListener('visibilitychange', handleFocusRefresh);
+    };
+  }, [userSession]);
 
   // Real-time synchronization for coach replies, athlete inquiries, profile updates, and login triggers
   useEffect(() => {
@@ -610,10 +646,10 @@ function MainPortal() {
       setCoachAuthenticated(true);
       navigate('/admin');
     } else {
+      setIsHydratingClient(true);
       setUserSession('client');
       const nextPlan = normalizeSubscriptionPlan(subscriptionPlan || 'standard');
       const resolvedId = getCanonicalClientKey(clientId, userEmail);
-      const todayIso = getTodayIsoString();
       const existingSession = getCurrentUserSession();
 
       setCurrentUserSession({
@@ -625,6 +661,9 @@ function MainPortal() {
         clientCode: existingSession?.clientCode,
         phone: existingSession?.phone,
         accessToken: existingSession?.accessToken,
+        subscriptionStartDate: existingSession?.subscriptionStartDate,
+        subscriptionEndDate: existingSession?.subscriptionEndDate,
+        subscriptionStatus: existingSession?.subscriptionStatus,
       });
 
       const baselineProfile = createNeutralClientProfile({
@@ -634,8 +673,9 @@ function MainPortal() {
         email: userEmail || '',
         accessToken: existingSession?.accessToken,
         subscription_plan: nextPlan,
-        subscriptionStartDate: todayIso,
-        subscriptionEndDate: addDaysToDate(todayIso, 60),
+        subscriptionStartDate: existingSession?.subscriptionStartDate,
+        subscriptionEndDate: existingSession?.subscriptionEndDate,
+        subscriptionStatus: existingSession?.subscriptionStatus || 'active',
       });
       setProfile(baselineProfile);
       setWorkoutDays(INITIAL_WORKOUT_DAYS);
@@ -826,19 +866,21 @@ function MainPortal() {
                     <span className="font-mono text-[11px] text-slate-400">Standard</span>
                   </div>
 
-                  {/* Direct "Upgrade to VIP" CTA in Top Bar for Standard Subscribers */}
-                  <button
-                    type="button"
-                    onClick={handleOpenUpgradeToVIP}
-                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-[#0B132B] font-black text-xs flex items-center gap-1.5 shadow-[0_0_18px_rgba(245,158,11,0.35)] border border-amber-200/80 transition-transform duration-150 hover:scale-[1.02] active:scale-[0.98] cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    <Crown className="w-3.5 h-3.5 text-[#0B132B] fill-[#0B132B]/20 shrink-0" />
-                    <span>{language === 'ar' ? 'ترقية إلى VIP' : 'Upgrade to VIP'}</span>
-                  </button>
+                  {/* Direct "Upgrade to VIP" CTA in Top Bar for Standard Subscribers (hidden when expired) */}
+                  {!isClientExpired && (
+                    <button
+                      type="button"
+                      onClick={handleOpenUpgradeToVIP}
+                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-[#0B132B] font-black text-xs flex items-center gap-1.5 shadow-[0_0_18px_rgba(245,158,11,0.35)] border border-amber-200/80 transition-transform duration-150 hover:scale-[1.02] active:scale-[0.98] cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      <Crown className="w-3.5 h-3.5 text-[#0B132B] fill-[#0B132B]/20 shrink-0" />
+                      <span>{language === 'ar' ? 'ترقية إلى VIP' : 'Upgrade to VIP'}</span>
+                    </button>
+                  )}
                 </>
               )}
 
-              {/* Live Subscription Remaining Days Pill */}
+              {/* Live Subscription Remaining Days & Months Pill */}
               <div
                 className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold whitespace-nowrap ${
                   clientSubDetails.isExpired
@@ -847,7 +889,11 @@ function MainPortal() {
                     ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 animate-pulse'
                     : 'bg-white/5 border-white/10 text-slate-300'
                 }`}
-                title={language === 'ar' ? `فترة الاشتراك: من ${clientSubDetails.startDate} إلى ${clientSubDetails.endDate}` : `Period: ${clientSubDetails.startDate} to ${clientSubDetails.endDate}`}
+                title={
+                  language === 'ar'
+                    ? `فترة الاشتراك: من ${clientSubDetails.startDate} إلى ${clientSubDetails.endDate}`
+                    : `Period: ${clientSubDetails.startDate} to ${clientSubDetails.endDate}`
+                }
               >
                 <Clock className="w-3.5 h-3.5 text-orange-400" />
                 <span>
@@ -855,30 +901,36 @@ function MainPortal() {
                     ? language === 'ar'
                       ? 'منتهي 🔒'
                       : 'Expired 🔒'
+                    : clientSubDetails.remainingMonths > 0
+                    ? language === 'ar'
+                      ? `${clientSubDetails.daysRemaining} يوم (${clientSubDetails.formattedRemainingDurationAr})`
+                      : `${clientSubDetails.daysRemaining}d (${clientSubDetails.formattedRemainingDurationEn})`
                     : `${clientSubDetails.daysRemaining} ${language === 'ar' ? 'يوم متبقي' : 'days left'}`}
                 </span>
               </div>
 
-              <button
-                onClick={() => setShowPlansForAthlete(!showPlansForAthlete)}
-                className={`text-xs px-3 py-1.5 rounded-xl font-bold border flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                  showPlansForAthlete
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
-                    : theme === 'dark'
-                    ? 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
-                    : 'bg-[#FAFBFD] hover:bg-slate-200 text-[#0B132B] border-slate-300'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5 text-orange-500" />
-                <span>{language === 'ar' ? 'باقات الاشتراك' : 'Plans'}</span>
-              </button>
+              {!isClientExpired && (
+                <button
+                  onClick={() => setShowPlansForAthlete(!showPlansForAthlete)}
+                  className={`text-xs px-3 py-1.5 rounded-xl font-bold border flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                    showPlansForAthlete
+                      ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                      : theme === 'dark'
+                      ? 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
+                      : 'bg-[#FAFBFD] hover:bg-slate-200 text-[#0B132B] border-slate-300'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5 text-orange-500" />
+                  <span>{language === 'ar' ? 'باقات الاشتراك' : 'Plans'}</span>
+                </button>
+              )}
             </div>
           )}
 
           {/* Action Buttons: QR Share, Logins, Logout, Theme, Language */}
           <div className="flex items-center gap-2">
             {/* QR Code Generator Button for sharing Subscriptions directly */}
-            {!isDirectPlansLanding && (
+            {!isDirectPlansLanding && !isClientExpired && (
               <button
                 type="button"
                 onClick={() => setIsQRModalOpen(true)}
@@ -1040,14 +1092,23 @@ function MainPortal() {
       {/* =========================================================================
           VIEW 2: LOGGED-IN ATHLETE (VIP Luxury Gold Theme vs Classic Standard Theme)
           ========================================================================= */}
+      {/* 2.0: Hydrating subscriber subscription & dates gate */}
+      {!isDirectPlansLanding && userSession === 'client' && isHydratingClient && (
+        <main ref={portalRef} className="max-w-7xl mx-auto px-3 sm:px-6 py-20 relative z-20 flex flex-col items-center justify-center gap-4 min-h-[70vh]">
+          <div className="w-12 h-12 rounded-full border-4 border-orange-500/30 border-t-orange-500 animate-spin" />
+          <p className="text-xs font-bold text-slate-400">
+            {language === 'ar' ? 'جاري التحقق من حالة الاشتراك وبيانات المتدرب...' : 'Verifying subscription status & workspace...'}
+          </p>
+        </main>
+      )}
+
       {/* 2A: Subscription Expired Locked Portal */}
-      {!isDirectPlansLanding && userSession === 'client' && isClientExpired && (
+      {!isDirectPlansLanding && userSession === 'client' && !isHydratingClient && isClientExpired && (
         <main ref={portalRef} className="max-w-7xl mx-auto px-3 sm:px-6 py-6 pb-20 relative z-20">
           <SubscriptionExpiredLockScreen
             profile={profile}
             language={language}
             theme={theme}
-            onOpenRenewModal={handleOpenUpgradeToVIP}
             onOpenCoachPasskeyModal={handleOpenCoachPasskey}
             onSignOut={handleLogout}
           />
@@ -1055,7 +1116,7 @@ function MainPortal() {
       )}
 
       {/* 2B: Active Subscription Athlete Portal */}
-      {!isDirectPlansLanding && userSession === 'client' && !isClientExpired && (
+      {!isDirectPlansLanding && userSession === 'client' && !isHydratingClient && !isClientExpired && (
         <main ref={portalRef} className="max-w-7xl mx-auto px-3 sm:px-6 py-6 pb-20 relative z-20">
           {/* Optional Plans viewer toggle for registered athlete */}
           {showPlansForAthlete && (

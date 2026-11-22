@@ -9,6 +9,7 @@ import {
   writeClientRowSafely,
   writeTableRowSafely,
 } from './supabase';
+import { calculateSubscriptionDetails, normalizeIsoDateOnly } from './subscriptionUtils';
 
 export interface UserCredentialRecord {
   id?: string;
@@ -20,6 +21,9 @@ export interface UserCredentialRecord {
   plan: SubscriptionPlanTier;
   phone?: string;
   status: 'active' | 'suspended' | 'expiring' | 'expired';
+  subscriptionStartDate?: string;
+  subscriptionEndDate?: string;
+  subscriptionDaysLeft?: number;
   createdAt: string;
   updatedAt: string;
   assignedByCoach: boolean;
@@ -41,6 +45,9 @@ export interface CurrentUserSession {
   clientCode?: string;
   phone?: string;
   accessToken?: string;
+  subscriptionStartDate?: string;
+  subscriptionEndDate?: string;
+  subscriptionStatus?: UserCredentialRecord['status'];
 }
 
 const COACH_AUTH_SESSION_KEY = 'oao_coach_authenticated';
@@ -158,6 +165,13 @@ function mapSubscribersRowToRecord(row: Record<string, unknown>): UserCredential
   const rawGoals = row.goals ?? row.visual_goal;
   const rawToken = typeof row.access_token === 'string' ? row.access_token.trim() : '';
 
+  const startIso = normalizeIsoDateOnly(
+    typeof row.subscription_start_date === 'string' ? row.subscription_start_date : undefined
+  );
+  const endIso = normalizeIsoDateOnly(
+    typeof row.subscription_end_date === 'string' ? row.subscription_end_date : undefined
+  );
+
   return {
     id: row.id ? String(row.id) : undefined,
     email: rawEmail,
@@ -172,6 +186,12 @@ function mapSubscribersRowToRecord(row: Record<string, unknown>): UserCredential
     plan: normalizeSubscriptionPlan(typeof rawTier === 'string' ? rawTier : undefined),
     phone: row.phone ? String(row.phone) : undefined,
     status: (row.status as UserCredentialRecord['status']) || 'active',
+    subscriptionStartDate: startIso || undefined,
+    subscriptionEndDate: endIso || undefined,
+    subscriptionDaysLeft:
+      row.subscription_days_left !== null && row.subscription_days_left !== undefined
+        ? Number(row.subscription_days_left)
+        : undefined,
     age: row.age !== null && row.age !== undefined ? Number(row.age) : undefined,
     bloodType: row.blood_type ? String(row.blood_type) : undefined,
     visualGoal: rawGoals ? String(rawGoals) : undefined,
@@ -248,6 +268,12 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
           if (!mapped.age && mirror.age) mapped.age = Number(mirror.age);
           if (!mapped.bloodType && mirror.bloodType) mapped.bloodType = String(mirror.bloodType);
           if (!mapped.visualGoal && mirror.visualGoal) mapped.visualGoal = String(mirror.visualGoal);
+          if (!mapped.subscriptionStartDate && typeof mirror.subscriptionStartDate === 'string') {
+            mapped.subscriptionStartDate = normalizeIsoDateOnly(mirror.subscriptionStartDate) || undefined;
+          }
+          if (!mapped.subscriptionEndDate && typeof mirror.subscriptionEndDate === 'string') {
+            mapped.subscriptionEndDate = normalizeIsoDateOnly(mirror.subscriptionEndDate) || undefined;
+          }
         }
         mergedByEmail.set(mapped.email, mapped);
       }
@@ -269,6 +295,15 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
           if (!existingSub.visualGoal && row.visual_goal) existingSub.visualGoal = String(row.visual_goal);
           if (!existingSub.age && row.age !== null && row.age !== undefined) existingSub.age = Number(row.age);
           if (!existingSub.bloodType && row.blood_type) existingSub.bloodType = String(row.blood_type);
+          if (!existingSub.subscriptionStartDate && row.subscription_start_date) {
+            existingSub.subscriptionStartDate = normalizeIsoDateOnly(String(row.subscription_start_date)) || undefined;
+          }
+          if (!existingSub.subscriptionEndDate && row.subscription_end_date) {
+            existingSub.subscriptionEndDate = normalizeIsoDateOnly(String(row.subscription_end_date)) || undefined;
+          }
+          if (existingSub.subscriptionDaysLeft === undefined && row.subscription_days_left !== null && row.subscription_days_left !== undefined) {
+            existingSub.subscriptionDaysLeft = Number(row.subscription_days_left);
+          }
           continue;
         }
 
@@ -297,6 +332,20 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
           phone: row.phone ? String(row.phone) : mirror?.phone ? String(mirror.phone) : undefined,
           status:
             ((row.status || mirror?.status) as UserCredentialRecord['status']) || 'active',
+          subscriptionStartDate:
+            normalizeIsoDateOnly(
+              (row.subscription_start_date as string) || (mirror?.subscriptionStartDate as string)
+            ) || undefined,
+          subscriptionEndDate:
+            normalizeIsoDateOnly(
+              (row.subscription_end_date as string) || (mirror?.subscriptionEndDate as string)
+            ) || undefined,
+          subscriptionDaysLeft:
+            row.subscription_days_left !== null && row.subscription_days_left !== undefined
+              ? Number(row.subscription_days_left)
+              : mirror?.subscriptionDaysLeft !== undefined
+              ? Number(mirror.subscriptionDaysLeft)
+              : undefined,
           age: row.age
             ? Number(row.age)
             : mirror?.age
@@ -351,6 +400,14 @@ export async function fetchSubscribersFromSupabase(): Promise<UserCredentialReco
           plan: normalizeSubscriptionPlan(mirror.plan as string),
           phone: mirror.phone ? String(mirror.phone) : undefined,
           status: (mirror.status as UserCredentialRecord['status']) || 'active',
+          subscriptionStartDate:
+            normalizeIsoDateOnly(mirror.subscriptionStartDate as string) || undefined,
+          subscriptionEndDate:
+            normalizeIsoDateOnly(mirror.subscriptionEndDate as string) || undefined,
+          subscriptionDaysLeft:
+            mirror.subscriptionDaysLeft !== undefined
+              ? Number(mirror.subscriptionDaysLeft)
+              : undefined,
           age: mirror.age ? Number(mirror.age) : undefined,
           bloodType: mirror.bloodType ? String(mirror.bloodType) : undefined,
           visualGoal: mirror.visualGoal ? String(mirror.visualGoal) : undefined,
@@ -388,6 +445,9 @@ export async function assignSubscriberPassword(params: {
   plan?: SubscriptionPlanTier;
   phone?: string;
   status?: 'active' | 'suspended' | 'expiring' | 'expired';
+  subscriptionStartDate?: string;
+  subscriptionEndDate?: string;
+  subscriptionDaysLeft?: number;
   age?: number;
   bloodType?: string;
   visualGoal?: string;
@@ -446,6 +506,43 @@ export async function assignSubscriberPassword(params: {
     existingDbToken ||
     generateSecureAccessToken();
 
+  const resolvedStartDate =
+    normalizeIsoDateOnly(
+      params.subscriptionStartDate !== undefined
+        ? params.subscriptionStartDate
+        : existingRecord?.subscriptionStartDate
+    ) || undefined;
+  const resolvedEndDate =
+    normalizeIsoDateOnly(
+      params.subscriptionEndDate !== undefined
+        ? params.subscriptionEndDate
+        : existingRecord?.subscriptionEndDate
+    ) || undefined;
+
+  const computedSubDetails = calculateSubscriptionDetails({
+    subscriptionStartDate: resolvedStartDate,
+    subscriptionEndDate: resolvedEndDate,
+    subscriptionStatus:
+      params.status === 'suspended'
+        ? 'suspended'
+        : params.status === 'expired'
+        ? 'expired'
+        : 'active',
+  });
+
+  const resolvedDaysLeft =
+    params.subscriptionDaysLeft !== undefined
+      ? params.subscriptionDaysLeft
+      : resolvedEndDate
+      ? computedSubDetails.daysRemaining
+      : existingRecord?.subscriptionDaysLeft;
+
+  let resolvedStatus: UserCredentialRecord['status'] =
+    params.status || existingRecord?.status || 'active';
+  if (resolvedStatus !== 'suspended' && resolvedEndDate) {
+    resolvedStatus = computedSubDetails.isExpired ? 'expired' : 'active';
+  }
+
   const updatedRecord: UserCredentialRecord = {
     id: resolvedId,
     email: cleanEmail,
@@ -459,7 +556,10 @@ export async function assignSubscriberPassword(params: {
     accessToken: resolvedAccessToken,
     plan: normalizedPlan,
     phone: params.phone !== undefined ? params.phone : existingRecord?.phone,
-    status: params.status || existingRecord?.status || 'active',
+    status: resolvedStatus,
+    subscriptionStartDate: resolvedStartDate,
+    subscriptionEndDate: resolvedEndDate,
+    subscriptionDaysLeft: resolvedDaysLeft,
     age: params.age !== undefined ? params.age : existingRecord?.age,
     bloodType: params.bloodType !== undefined ? params.bloodType : existingRecord?.bloodType,
     visualGoal: params.visualGoal !== undefined ? params.visualGoal : existingRecord?.visualGoal,
@@ -537,6 +637,10 @@ export async function assignSubscriberPassword(params: {
         age: updatedRecord.age ?? null,
         blood_type: updatedRecord.bloodType || null,
         status: updatedRecord.status,
+        subscription_start_date: updatedRecord.subscriptionStartDate || null,
+        subscription_end_date: updatedRecord.subscriptionEndDate || null,
+        subscription_days_left:
+          updatedRecord.subscriptionDaysLeft !== undefined ? updatedRecord.subscriptionDaysLeft : null,
         nutrition_plan_locked: Boolean(updatedRecord.nutritionPlanLocked),
         inbody_filename: updatedRecord.inBodyFileName || null,
         inbody_file_url: updatedRecord.inBodyFileUrl || null,
@@ -626,6 +730,10 @@ export async function assignSubscriberPassword(params: {
         client_code: updatedRecord.clientCode,
         access_token: resolvedAccessToken,
         status: updatedRecord.status,
+        subscription_start_date: updatedRecord.subscriptionStartDate || null,
+        subscription_end_date: updatedRecord.subscriptionEndDate || null,
+        subscription_days_left:
+          updatedRecord.subscriptionDaysLeft !== undefined ? updatedRecord.subscriptionDaysLeft : null,
         assigned_password: cleanPass,
         age: updatedRecord.age ?? null,
         blood_type: updatedRecord.bloodType || null,
@@ -879,6 +987,8 @@ export async function authenticateByAccessToken(token: string): Promise<{
   phone?: string;
   accessToken?: string;
   status?: UserCredentialRecord['status'];
+  subscriptionStartDate?: string;
+  subscriptionEndDate?: string;
   error?: string;
 }> {
   const cleanToken = (token || '').trim();
@@ -964,6 +1074,10 @@ export async function authenticateByAccessToken(token: string): Promise<{
               plan: normalizeSubscriptionPlan(w.plan as string),
               phone: w.phone ? String(w.phone) : undefined,
               status: (w.status as UserCredentialRecord['status']) || 'active',
+              subscriptionStartDate:
+                normalizeIsoDateOnly(w.subscriptionStartDate as string) || undefined,
+              subscriptionEndDate:
+                normalizeIsoDateOnly(w.subscriptionEndDate as string) || undefined,
               createdAt: String(w.createdAt || new Date().toISOString()),
               updatedAt: String(w.updatedAt || new Date().toISOString()),
               assignedByCoach: true,
@@ -1010,6 +1124,8 @@ export async function authenticateByAccessToken(token: string): Promise<{
       phone: matchedRecord.phone,
       accessToken: matchedRecord.accessToken || cleanToken,
       status: matchedRecord.status,
+      subscriptionStartDate: matchedRecord.subscriptionStartDate,
+      subscriptionEndDate: matchedRecord.subscriptionEndDate,
     };
   } catch (err) {
     return {
@@ -1434,6 +1550,9 @@ export async function authenticateUser(
   clientCode?: string;
   phone?: string;
   accessToken?: string;
+  subscriptionStartDate?: string;
+  subscriptionEndDate?: string;
+  status?: UserCredentialRecord['status'];
   error?: string;
 }> {
   const cleanId = (identifier || '').trim().toLowerCase();
@@ -1598,6 +1717,9 @@ export async function authenticateUser(
         clientCode: matchedByEmail.clientCode,
         phone: matchedByEmail.phone,
         accessToken: matchedByEmail.accessToken,
+        subscriptionStartDate: matchedByEmail.subscriptionStartDate,
+        subscriptionEndDate: matchedByEmail.subscriptionEndDate,
+        status: matchedByEmail.status,
       };
     }
     return {
@@ -1643,6 +1765,9 @@ export async function authenticateUser(
         clientCode: matchedByCodeOrPass.clientCode,
         phone: matchedByCodeOrPass.phone,
         accessToken: matchedByCodeOrPass.accessToken,
+        subscriptionStartDate: matchedByCodeOrPass.subscriptionStartDate,
+        subscriptionEndDate: matchedByCodeOrPass.subscriptionEndDate,
+        status: matchedByCodeOrPass.status,
       };
     }
   }
