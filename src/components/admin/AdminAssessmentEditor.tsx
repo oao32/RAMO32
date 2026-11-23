@@ -71,12 +71,7 @@ const buildDefaultAnalysisData = (): ComprehensiveAnalysisData => ({
   },
   recoveryFramework: {
     sleepNotesAr: '7.5 إلى 8.5 ساعات نوم متواصل في غرفة مظلمة وباردة لتحفيز هرمون النمو البنائي (GH) وتقليل الكورتيزول.',
-    supplementItems: [
-      '• كرياتين مونوهيدرات: 5 جم',
-      '• أوميغا 3 عالي EPA: 2000 ملغ',
-      '• مغنيسيوم جلايسينات: 400 ملغ',
-      '• فيتامين D3 + K2: 5000 وحدة',
-    ],
+    supplementItems: [],
   },
   customCoachNotes: 'المتدرب ملتزم ولديه استجابة عصبية ممتازة للأوزان الحرة.',
 });
@@ -97,6 +92,23 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
     () => profile.analysisData || buildDefaultAnalysisData()
   );
 
+  // Per-Subscriber Calories, Macros & Optional Supplements Text state
+  const [caloriesInput, setCaloriesInput] = useState<string>(() =>
+    String(profile.dailyCalories ?? 2100)
+  );
+  const [proteinInput, setProteinInput] = useState<string>(() =>
+    String(profile.macros?.protein ?? 160)
+  );
+  const [carbsInput, setCarbsInput] = useState<string>(() =>
+    String(profile.macros?.carbs ?? 210)
+  );
+  const [fatsInput, setFatsInput] = useState<string>(() =>
+    String(profile.macros?.fats ?? 65)
+  );
+  const [supplementsText, setSupplementsText] = useState<string>(() =>
+    (profile.analysisData?.recoveryFramework?.supplementItems || []).join('\n')
+  );
+
   // Streak & Rank State
   const [streakData, setStreakData] = useState<StreakData>(
     () => profile.streakData || createNeutralStreakData()
@@ -110,10 +122,26 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
 
   // Re-hydrate editor fields automatically whenever the selected target subscriber's profile changes
   useEffect(() => {
-    setAnalysisData(profile.analysisData || buildDefaultAnalysisData());
+    const nextAnalysis = profile.analysisData || buildDefaultAnalysisData();
+    setAnalysisData(nextAnalysis);
+    setCaloriesInput(String(profile.dailyCalories ?? 2100));
+    setProteinInput(String(profile.macros?.protein ?? 160));
+    setCarbsInput(String(profile.macros?.carbs ?? 210));
+    setFatsInput(String(profile.macros?.fats ?? 65));
+    setSupplementsText((nextAnalysis.recoveryFramework?.supplementItems || []).join('\n'));
     setStreakData(profile.streakData || createNeutralStreakData());
     setAthleteRank(profile.athleteRank || createNeutralAthleteRank());
-  }, [profile.id, profile.email, profile.analysisData, profile.streakData, profile.athleteRank]);
+  }, [
+    profile.id,
+    profile.email,
+    profile.dailyCalories,
+    profile.macros?.protein,
+    profile.macros?.carbs,
+    profile.macros?.fats,
+    profile.analysisData,
+    profile.streakData,
+    profile.athleteRank,
+  ]);
 
   // Form field helpers
   const handleSaveAll = async (e: React.FormEvent) => {
@@ -131,21 +159,44 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
       last_streak_date: syncedDate,
     };
 
+    const cleanedSupplements = supplementsText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const nextAnalysisData: ComprehensiveAnalysisData = {
+      ...analysisData,
+      recoveryFramework: {
+        ...analysisData.recoveryFramework,
+        supplementItems: cleanedSupplements,
+      },
+    };
+
+    const nextCalories = Math.max(0, Number(caloriesInput) || 0);
+    const nextMacros = {
+      protein: Math.max(0, Number(proteinInput) || 0),
+      carbs: Math.max(0, Number(carbsInput) || 0),
+      fats: Math.max(0, Number(fatsInput) || 0),
+    };
+
     const updatedProfile: ClientProfile = {
       ...profile,
       id: canonicalKey || profile.id,
-      analysisData,
+      dailyCalories: nextCalories,
+      macros: nextMacros,
+      analysisData: nextAnalysisData,
       streakData: normalizedStreakData,
       athleteRank,
     };
 
+    setAnalysisData(nextAnalysisData);
     onUpdateProfile(updatedProfile);
 
     // Persist directly to target client's Supabase assessment & profile records
     await Promise.all([
       syncAssessmentToSupabase(
         canonicalKey,
-        { analysisData, streakData: normalizedStreakData, athleteRank },
+        { analysisData: nextAnalysisData, streakData: normalizedStreakData, athleteRank },
         updatedProfile.email
       ),
       syncClientProfileToSupabase(canonicalKey, updatedProfile),
@@ -172,6 +223,7 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
     const resetRank = createNeutralAthleteRank();
     setStreakData(resetStreak);
     setAthleteRank(resetRank);
+    setSupplementsText('');
     setAnalysisData({
       muscleAnalysis: {
         strengthsTitleAr: 'نقاط القوة والكتلة المكتسبة',
@@ -446,6 +498,53 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
           </div>
 
           <div className="space-y-3 text-xs">
+            {/* السعرات اليومية وتوزيع الماكروز لكل مشترك */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="text-orange-400 font-bold block mb-1">السعرات اليومية (Kcal):</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={caloriesInput}
+                  onChange={(e) => setCaloriesInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white font-mono font-bold outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-blue-400 font-bold block mb-1">البروتين (جم):</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={proteinInput}
+                  onChange={(e) => setProteinInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-blue-500 text-white font-mono font-bold outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-amber-400 font-bold block mb-1">الكاربوهيدرات (جم):</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={carbsInput}
+                  onChange={(e) => setCarbsInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-amber-500 text-white font-mono font-bold outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-rose-400 font-bold block mb-1">الدهون الصحية (جم):</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={fatsInput}
+                  onChange={(e) => setFatsInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-rose-500 text-white font-mono font-bold outline-none"
+                />
+              </div>
+            </div>
+
             <div>
               <label className="text-slate-300 font-bold block mb-1">عنوان الهدف الغذائي:</label>
               <input
@@ -561,6 +660,19 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                   })
                 }
                 className="w-full px-4 py-2 rounded-xl bg-black/50 border border-white/15 text-white outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-slate-300 font-bold block mb-1">
+                بروتوكول المكملات الموصى به (اختياري — اتركه فارغاً عند عدم وجود مكملات):
+              </label>
+              <textarea
+                rows={3}
+                value={supplementsText}
+                onChange={(e) => setSupplementsText(e.target.value)}
+                placeholder="اكتب كل مكمل في سطر مستقل (أو اتركه فارغاً لإخفاء قسم المكملات لدى هذا المشترك)..."
+                className="w-full px-4 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none resize-y"
               />
             </div>
           </div>

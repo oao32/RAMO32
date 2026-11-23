@@ -239,10 +239,10 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
                       {language === 'ar' ? 'البروتين' : 'Protein'}
                     </span>
                     <span className="text-2xl font-black text-blue-700 dark:text-blue-400">
-                      {profile.macros?.protein || 165}g
+                      {profile.macros?.protein ?? 0}g
                     </span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
-                      {(profile.macros?.protein || 165) * 4} Kcal
+                      {(profile.macros?.protein ?? 0) * 4} Kcal
                     </span>
                   </div>
                   <div className="bg-[#EEF2F6] dark:bg-[#070a14] p-3 rounded-2xl border border-amber-500/40 text-center">
@@ -250,10 +250,10 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
                       {language === 'ar' ? 'الكاربوهيدرات' : 'Carbs'}
                     </span>
                     <span className="text-2xl font-black text-amber-700 dark:text-amber-400">
-                      {profile.macros?.carbs || 200}g
+                      {profile.macros?.carbs ?? 0}g
                     </span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
-                      {(profile.macros?.carbs || 200) * 4} Kcal
+                      {(profile.macros?.carbs ?? 0) * 4} Kcal
                     </span>
                   </div>
                   <div className="bg-[#EEF2F6] dark:bg-[#070a14] p-3 rounded-2xl border border-red-500/40 text-center">
@@ -261,10 +261,10 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
                       {language === 'ar' ? 'الدهون الصحية' : 'Fats'}
                     </span>
                     <span className="text-2xl font-black text-red-700 dark:text-red-400">
-                      {profile.macros?.fats || 60}g
+                      {profile.macros?.fats ?? 0}g
                     </span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
-                      {(profile.macros?.fats || 60) * 9} Kcal
+                      {(profile.macros?.fats ?? 0) * 9} Kcal
                     </span>
                   </div>
                 </div>
@@ -273,7 +273,7 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
                   <div className="font-extrabold text-[#0B132B] dark:text-white flex items-center justify-between">
                     <span>{language === 'ar' ? 'إجمالي السعرات اليومية' : 'Total Daily Calories'}</span>
                     <span className="text-orange-600 dark:text-orange-400 text-lg font-black">
-                      {profile.dailyCalories} Kcal
+                      {profile.dailyCalories ?? 0} Kcal
                     </span>
                   </div>
                   <p className="text-slate-700 dark:text-slate-300 font-medium">
@@ -367,26 +367,33 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
                     </p>
                   </div>
 
-                  <div className="bg-[#EEF2F6] dark:bg-[#070a14] p-3 rounded-2xl border border-slate-300/80 dark:border-white/10">
-                    <h5 className="font-extrabold text-[#0B132B] dark:text-white mb-1">
-                      {language === 'ar' ? 'بروتوكول المكملات الموصى به' : 'Recommended Supplement Protocol'}
-                    </h5>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      {(profile.analysisData?.recoveryFramework?.supplementItems || [
-                        '• كرياتين مونوهيدرات: 5 جم',
-                        '• أوميغا 3 عالي EPA: 2000 ملغ',
-                        '• مغنيسيوم جلايسينات: 400 ملغ',
-                        '• فيتامين D3 + K2: 5000 وحدة',
-                      ]).map((sup, idx) => (
-                        <span
-                          key={idx}
-                          className="bg-white dark:bg-white/5 p-2 rounded-lg border border-slate-200 dark:border-transparent"
-                        >
-                          {sup}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                  {(() => {
+                    const recoverySupplements = (
+                      profile.analysisData?.recoveryFramework?.supplementItems || []
+                    )
+                      .map((sup) => sup.trim())
+                      .filter(Boolean);
+                    if (recoverySupplements.length === 0) return null;
+                    return (
+                      <div className="bg-[#EEF2F6] dark:bg-[#070a14] p-3 rounded-2xl border border-slate-300/80 dark:border-white/10">
+                        <h5 className="font-extrabold text-[#0B132B] dark:text-white mb-1">
+                          {language === 'ar'
+                            ? 'بروتوكول المكملات الموصى به'
+                            : 'Recommended Supplement Protocol'}
+                        </h5>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          {recoverySupplements.map((sup, idx) => (
+                            <span
+                              key={idx}
+                              className="bg-white dark:bg-white/5 p-2 rounded-lg border border-slate-200 dark:border-transparent"
+                            >
+                              {sup}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}

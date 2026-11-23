@@ -1620,8 +1620,40 @@ export async function fetchClientProfileFromSupabase(
       if (p.daily_water_current !== null && p.daily_water_current !== undefined) merged.dailyWaterCurrent = Number(p.daily_water_current);
     }
 
-    if (!extRes.error && extRes.data && (extRes.data as Record<string, unknown>).workout_data) {
-      const ext = (extRes.data as Record<string, unknown>).workout_data as Partial<ClientProfile>;
+    let resolvedExtData =
+      !extRes.error && extRes.data && (extRes.data as Record<string, unknown>).workout_data
+        ? ((extRes.data as Record<string, unknown>).workout_data as Partial<ClientProfile>)
+        : null;
+
+    if (!resolvedExtData) {
+      const extraKeys = new Set<string>(candidates);
+      if (merged.id) extraKeys.add(merged.id);
+      if (clientsRes.data && (clientsRes.data as Record<string, unknown>).id) {
+        extraKeys.add(String((clientsRes.data as Record<string, unknown>).id));
+      }
+      const extraArray = Array.from(extraKeys).filter((k) => !candidates.includes(k));
+      if (extraArray.length > 0) {
+        const extraExtRes = await client
+          .from('workouts')
+          .select('*')
+          .eq('day_key', 'profile_ext')
+          .in('client_id', extraArray)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (
+          !extraExtRes.error &&
+          extraExtRes.data &&
+          (extraExtRes.data as Record<string, unknown>).workout_data
+        ) {
+          resolvedExtData = (extraExtRes.data as Record<string, unknown>)
+            .workout_data as Partial<ClientProfile>;
+        }
+      }
+    }
+
+    if (resolvedExtData) {
+      const ext = resolvedExtData;
       if (ext.accessToken && !merged.accessToken) merged.accessToken = ext.accessToken;
       if (ext.weight !== undefined) merged.weight = ext.weight;
       if (ext.height !== undefined) merged.height = ext.height;
