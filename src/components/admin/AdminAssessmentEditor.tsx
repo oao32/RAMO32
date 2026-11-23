@@ -300,20 +300,20 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
   return (
     <form onSubmit={handleSaveAll} className="space-y-6">
       {/* Header */}
-      <div className="bg-[#0B132B]/80 p-6 rounded-3xl border border-white/10 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-[#0B132B]/80 p-6 rounded-3xl border border-slate-200 dark:border-white/10 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
         <div>
-          <h2 className="text-xl font-black text-white flex items-center gap-2">
-            <Activity className="w-5 h-5 text-orange-400" />
+          <h2 className="text-xl font-black text-[#0B132B] dark:text-white flex items-center gap-2">
+            <Activity className="w-5 h-5 text-orange-500 dark:text-orange-400" />
             <span>محرر التقييم العام والتحليل الشامل للمشترك (Dynamic Assessment)</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
             إدارة بطاقات التحليل العضلي، نقاط القوة، التوجيه الغذائي، خطة الاستشفاء، ورتبة المتدرب وسلسلة الالتزام
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {savedNotice && (
-            <div className="px-3.5 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
+            <div className="px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-500/20 border border-emerald-400/60 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4" />
               <span>تم حفظ التقييم فورياً!</span>
             </div>
@@ -340,18 +340,18 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
       )}
 
       {/* 1. التحليل المقطعي والبنية العضلية */}
-      <div className="p-6 rounded-3xl bg-[#0B132B]/90 border border-white/10 space-y-4">
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="p-6 rounded-3xl bg-white dark:bg-[#0B132B]/90 border border-slate-200 dark:border-white/10 space-y-4 shadow-md transition-colors">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-orange-400" />
-            <h3 className="text-base font-black text-white">1. التحليل المقطعي والبنية العضلية</h3>
+            <Sparkles className="w-5 h-5 text-orange-500 dark:text-orange-400" />
+            <h3 className="text-base font-black text-[#0B132B] dark:text-white">1. التحليل المقطعي والبنية العضلية</h3>
           </div>
-          <span className="text-xs text-orange-400 font-bold">بطاقة التحليل العضلي</span>
+          <span className="text-xs text-orange-600 dark:text-orange-400 font-bold">بطاقة التحليل العضلي</span>
         </div>
 
         <div className="space-y-4 text-xs">
           <div>
-            <label className="text-slate-300 font-bold block mb-1">عنوان نقاط القوة:</label>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">عنوان نقاط القوة:</label>
             <input
               type="text"
               value={analysisData.muscleAnalysis?.strengthsTitleAr || ''}
@@ -364,18 +364,18 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                   },
                 })
               }
-              className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none"
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
             />
           </div>
 
           {/* Strengths Items List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-300">عناصر نقاط القوة والكتلة المكتسبة:</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">عناصر نقاط القوة والكتلة المكتسبة:</span>
               <button
                 type="button"
                 onClick={handleAddStrengthItem}
-                className="px-2.5 py-1 rounded-lg bg-orange-500/20 text-orange-400 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-orange-50 dark:bg-orange-500/20 border border-orange-200 dark:border-transparent text-orange-600 dark:text-orange-400 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3 h-3" />
                 <span>إضافة نقطة قوة</span>
@@ -386,7 +386,7 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
               {(analysisData.muscleAnalysis?.strengthsItems || []).map((item, idx) => (
                 <div
                   key={idx}
-                  className="p-3 rounded-2xl bg-black/40 border border-white/10 flex items-center gap-2"
+                  className="p-3 rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 flex items-center gap-2"
                 >
                   <input
                     type="text"
@@ -400,7 +400,7 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                       });
                     }}
                     placeholder="اسم العضلة"
-                    className="flex-1 px-3 py-1.5 rounded-lg bg-black/60 border border-white/15 text-white font-bold text-xs outline-none"
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-black/60 border border-slate-300 dark:border-white/15 text-[#0B132B] dark:text-white font-bold text-xs outline-none"
                   />
                   <input
                     type="text"
@@ -414,12 +414,12 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                       });
                     }}
                     placeholder="التقييم"
-                    className="w-32 px-3 py-1.5 rounded-lg bg-black/60 border border-white/15 text-emerald-400 font-bold text-xs outline-none"
+                    className="w-32 px-3 py-1.5 rounded-lg bg-white dark:bg-black/60 border border-slate-300 dark:border-white/15 text-emerald-700 dark:text-emerald-400 font-bold text-xs outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => handleRemoveStrengthItem(idx)}
-                    className="p-1.5 text-red-400 hover:text-red-300"
+                    className="p-1.5 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -429,13 +429,13 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
           </div>
 
           {/* Focus Points List */}
-          <div className="space-y-2 pt-2 border-t border-white/10">
+          <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-white/10">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-300">نقاط التركيز الأساسي في الخطة الحالية:</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">نقاط التركيز الأساسي في الخطة الحالية:</span>
               <button
                 type="button"
                 onClick={handleAddFocusItem}
-                className="px-2.5 py-1 rounded-lg bg-orange-500/20 text-orange-400 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-orange-50 dark:bg-orange-500/20 border border-orange-200 dark:border-transparent text-orange-600 dark:text-orange-400 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3 h-3" />
                 <span>إضافة نقطة تركيز</span>
@@ -456,12 +456,12 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                         muscleAnalysis: { ...analysisData.muscleAnalysis, focusItems: updated },
                       });
                     }}
-                    className="flex-1 px-4 py-2 rounded-xl bg-black/50 border border-white/15 text-white text-xs outline-none focus:border-orange-500"
+                    className="flex-1 px-4 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 text-[#0B132B] dark:text-white text-xs outline-none focus:border-orange-500"
                   />
                   <button
                     type="button"
                     onClick={() => handleRemoveFocusItem(idx)}
-                    className="p-2 text-red-400 hover:text-red-300"
+                    className="p-2 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -472,7 +472,7 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
 
           {/* Custom Coach Note */}
           <div className="pt-2">
-            <label className="text-slate-300 font-bold block mb-1">
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
               ملاحظة خاصة واستثنائية من الكوتش عمر للمتدرب:
             </label>
             <textarea
@@ -482,7 +482,7 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                 setAnalysisData({ ...analysisData, customCoachNotes: e.target.value })
               }
               placeholder="اكتب ملاحظة أو توجيهاً خاصاً يظهر في نافذة التحليل للمشترك..."
-              className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 text-white text-xs outline-none focus:border-orange-500"
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 text-[#0B132B] dark:text-white text-xs outline-none focus:border-orange-500"
             />
           </div>
         </div>
@@ -491,62 +491,62 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
       {/* 2. الهندسة الغذائية وبروتوكول التدريب */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* الهندسة الغذائية */}
-        <div className="p-6 rounded-3xl bg-[#0B132B]/90 border border-white/10 space-y-4">
-          <div className="flex items-center gap-2 border-b border-white/10 pb-3">
-            <Utensils className="w-5 h-5 text-blue-400" />
-            <h3 className="text-base font-black text-white">2. الهندسة الغذائية وتوزيع الماكروز</h3>
+        <div className="p-6 rounded-3xl bg-white dark:bg-[#0B132B]/90 border border-slate-200 dark:border-white/10 space-y-4 shadow-md transition-colors">
+          <div className="flex items-center gap-2 border-b border-slate-200 dark:border-white/10 pb-3">
+            <Utensils className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <h3 className="text-base font-black text-[#0B132B] dark:text-white">2. الهندسة الغذائية وتوزيع الماكروز</h3>
           </div>
 
           <div className="space-y-3 text-xs">
             {/* السعرات اليومية وتوزيع الماكروز لكل مشترك */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
-                <label className="text-orange-400 font-bold block mb-1">السعرات اليومية (Kcal):</label>
+                <label className="text-orange-600 dark:text-orange-400 font-bold block mb-1">السعرات اليومية (Kcal):</label>
                 <input
                   type="number"
                   min={0}
                   value={caloriesInput}
                   onChange={(e) => setCaloriesInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white font-mono font-bold outline-none"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white font-mono font-bold outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-blue-400 font-bold block mb-1">البروتين (جم):</label>
+                <label className="text-blue-600 dark:text-blue-400 font-bold block mb-1">البروتين (جم):</label>
                 <input
                   type="number"
                   min={0}
                   value={proteinInput}
                   onChange={(e) => setProteinInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-blue-500 text-white font-mono font-bold outline-none"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-blue-500 text-[#0B132B] dark:text-white font-mono font-bold outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-amber-400 font-bold block mb-1">الكاربوهيدرات (جم):</label>
+                <label className="text-amber-600 dark:text-amber-400 font-bold block mb-1">الكاربوهيدرات (جم):</label>
                 <input
                   type="number"
                   min={0}
                   value={carbsInput}
                   onChange={(e) => setCarbsInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-amber-500 text-white font-mono font-bold outline-none"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-amber-500 text-[#0B132B] dark:text-white font-mono font-bold outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-rose-400 font-bold block mb-1">الدهون الصحية (جم):</label>
+                <label className="text-rose-600 dark:text-rose-400 font-bold block mb-1">الدهون الصحية (جم):</label>
                 <input
                   type="number"
                   min={0}
                   value={fatsInput}
                   onChange={(e) => setFatsInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-rose-500 text-white font-mono font-bold outline-none"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-rose-500 text-[#0B132B] dark:text-white font-mono font-bold outline-none"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-slate-300 font-bold block mb-1">عنوان الهدف الغذائي:</label>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">عنوان الهدف الغذائي:</label>
               <input
                 type="text"
                 value={analysisData.nutritionEngineering?.goalTitleAr || ''}
@@ -559,12 +559,12 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                     },
                   })
                 }
-                className="w-full px-4 py-2 rounded-xl bg-black/50 border border-white/15 text-white outline-none"
+                className="w-full px-4 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
               />
             </div>
 
             <div>
-              <label className="text-slate-300 font-bold block mb-1">توجيه وجبة قبل التمرين:</label>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">توجيه وجبة قبل التمرين:</label>
               <input
                 type="text"
                 value={analysisData.nutritionEngineering?.preWorkoutNotesAr || ''}
@@ -577,12 +577,12 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                     },
                   })
                 }
-                className="w-full px-4 py-2 rounded-xl bg-black/50 border border-white/15 text-white outline-none"
+                className="w-full px-4 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
               />
             </div>
 
             <div>
-              <label className="text-slate-300 font-bold block mb-1">توجيه وجبة بعد التمرين:</label>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">توجيه وجبة بعد التمرين:</label>
               <input
                 type="text"
                 value={analysisData.nutritionEngineering?.postWorkoutNotesAr || ''}
@@ -595,22 +595,22 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                     },
                   })
                 }
-                className="w-full px-4 py-2 rounded-xl bg-black/50 border border-white/15 text-white outline-none"
+                className="w-full px-4 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
               />
             </div>
           </div>
         </div>
 
         {/* بروتوكول التدريب والاستشفاء */}
-        <div className="p-6 rounded-3xl bg-[#0B132B]/90 border border-white/10 space-y-4">
-          <div className="flex items-center gap-2 border-b border-white/10 pb-3">
-            <Dumbbell className="w-5 h-5 text-amber-400" />
-            <h3 className="text-base font-black text-white">3. بروتوكول التدريب والاستشفاء</h3>
+        <div className="p-6 rounded-3xl bg-white dark:bg-[#0B132B]/90 border border-slate-200 dark:border-white/10 space-y-4 shadow-md transition-colors">
+          <div className="flex items-center gap-2 border-b border-slate-200 dark:border-white/10 pb-3">
+            <Dumbbell className="w-5 h-5 text-amber-500 dark:text-amber-400" />
+            <h3 className="text-base font-black text-[#0B132B] dark:text-white">3. بروتوكول التدريب والاستشفاء</h3>
           </div>
 
           <div className="space-y-3 text-xs">
             <div>
-              <label className="text-slate-300 font-bold block mb-1">مسمى نظام التقسيم (Split):</label>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">مسمى نظام التقسيم (Split):</label>
               <input
                 type="text"
                 value={analysisData.trainingProtocol?.splitNameAr || ''}
@@ -623,12 +623,12 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                     },
                   })
                 }
-                className="w-full px-4 py-2 rounded-xl bg-black/50 border border-white/15 text-white outline-none"
+                className="w-full px-4 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
               />
             </div>
 
             <div>
-              <label className="text-slate-300 font-bold block mb-1">قاعدة الزيادة التدريجية:</label>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">قاعدة الزيادة التدريجية:</label>
               <input
                 type="text"
                 value={analysisData.trainingProtocol?.overloadNotesAr || ''}
@@ -641,12 +641,12 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                     },
                   })
                 }
-                className="w-full px-4 py-2 rounded-xl bg-black/50 border border-white/15 text-white outline-none"
+                className="w-full px-4 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
               />
             </div>
 
             <div>
-              <label className="text-slate-300 font-bold block mb-1">إرشادات النوم والاستشفاء:</label>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">إرشادات النوم والاستشفاء:</label>
               <input
                 type="text"
                 value={analysisData.recoveryFramework?.sleepNotesAr || ''}
@@ -659,12 +659,12 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                     },
                   })
                 }
-                className="w-full px-4 py-2 rounded-xl bg-black/50 border border-white/15 text-white outline-none"
+                className="w-full px-4 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
               />
             </div>
 
             <div>
-              <label className="text-slate-300 font-bold block mb-1">
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
                 بروتوكول المكملات الموصى به (اختياري — اتركه فارغاً عند عدم وجود مكملات):
               </label>
               <textarea
@@ -672,7 +672,7 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                 value={supplementsText}
                 onChange={(e) => setSupplementsText(e.target.value)}
                 placeholder="اكتب كل مكمل في سطر مستقل (أو اتركه فارغاً لإخفاء قسم المكملات لدى هذا المشترك)..."
-                className="w-full px-4 py-2 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none resize-y"
+                className="w-full px-4 py-2 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none resize-y"
               />
             </div>
           </div>
@@ -680,20 +680,20 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
       </div>
 
       {/* 3. رتبة المتدرب وسلسلة الالتزام (Streak & Rank Gamification) */}
-      <div className="p-6 rounded-3xl bg-[#0B132B]/90 border border-white/10 space-y-4">
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="p-6 rounded-3xl bg-white dark:bg-[#0B132B]/90 border border-slate-200 dark:border-white/10 space-y-4 shadow-md transition-colors">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
           <div className="flex items-center gap-2">
             <Flame className="w-5 h-5 text-orange-500" />
-            <h3 className="text-base font-black text-white">
+            <h3 className="text-base font-black text-[#0B132B] dark:text-white">
               4. رتبة المتدرب ومؤشرات سلسلة الالتزام (Gamification)
             </h3>
           </div>
-          <span className="text-xs text-orange-400 font-bold">نقاط الـ XP والـ Streak</span>
+          <span className="text-xs text-orange-600 dark:text-orange-400 font-bold">نقاط الـ XP والـ Streak</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
           <div>
-            <label className="text-slate-300 font-bold block mb-1.5">رتبة المتدرب:</label>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1.5">رتبة المتدرب:</label>
             <select
               value={athleteRank.tier}
               onChange={(e) =>
@@ -710,7 +710,7 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
                       : 'الفضي الصاعد (Silver)',
                 })
               }
-              className="w-full px-3 py-2.5 rounded-xl bg-black/50 border border-white/15 text-white font-bold outline-none"
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white font-bold outline-none"
             >
               <option value="bronze">برونزي (Bronze)</option>
               <option value="silver">فضي (Silver)</option>
@@ -721,86 +721,86 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
           </div>
 
           <div>
-            <label className="text-slate-300 font-bold block mb-1.5">المستوى الحالي (Level):</label>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1.5">المستوى الحالي (Level):</label>
             <input
               type="number"
               value={athleteRank.level}
               onChange={(e) => setAthleteRank({ ...athleteRank, level: Number(e.target.value) })}
-              className="w-full px-3 py-2.5 rounded-xl bg-black/50 border border-white/15 text-white font-mono font-bold outline-none"
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white font-mono font-bold outline-none"
             />
           </div>
 
           <div>
-            <label className="text-slate-300 font-bold block mb-1.5">أيام الستريك الحالية:</label>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1.5">أيام الستريك الحالية:</label>
             <input
               type="number"
               value={streakData.currentStreak}
               onChange={(e) =>
                 setStreakData({ ...streakData, currentStreak: Number(e.target.value) })}
-              className="w-full px-3 py-2.5 rounded-xl bg-black/50 border border-white/15 text-orange-400 font-mono font-bold outline-none"
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-orange-600 dark:text-orange-400 font-mono font-bold outline-none"
             />
           </div>
 
           <div>
-            <label className="text-slate-300 font-bold block mb-1.5">أعلى ستريك قياسي:</label>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1.5">أعلى ستريك قياسي:</label>
             <input
               type="number"
               value={streakData.longestStreak}
               onChange={(e) =>
                 setStreakData({ ...streakData, longestStreak: Number(e.target.value) })}
-              className="w-full px-3 py-2.5 rounded-xl bg-black/50 border border-white/15 text-amber-400 font-mono font-bold outline-none"
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-amber-600 dark:text-amber-400 font-mono font-bold outline-none"
             />
           </div>
 
           <div>
-            <label className="text-slate-300 font-bold block mb-1.5">نقاط الـ XP الحالية:</label>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1.5">نقاط الـ XP الحالية:</label>
             <input
               type="number"
               value={athleteRank.currentXp}
               onChange={(e) =>
                 setAthleteRank({ ...athleteRank, currentXp: Number(e.target.value) })}
-              className="w-full px-3 py-2.5 rounded-xl bg-black/50 border border-white/15 text-cyan-400 font-mono font-bold outline-none"
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-cyan-600 dark:text-cyan-400 font-mono font-bold outline-none"
             />
           </div>
 
           <div>
-            <label className="text-slate-300 font-bold block mb-1.5">نقاط المستوى التالي:</label>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1.5">نقاط المستوى التالي:</label>
             <input
               type="number"
               value={athleteRank.nextLevelXp}
               onChange={(e) =>
                 setAthleteRank({ ...athleteRank, nextLevelXp: Number(e.target.value) })}
-              className="w-full px-3 py-2.5 rounded-xl bg-black/50 border border-white/15 text-slate-300 font-mono font-bold outline-none"
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-slate-300 font-mono font-bold outline-none"
             />
           </div>
 
           <div>
-            <label className="text-slate-300 font-bold block mb-1.5">رصيد تجميد الستريك:</label>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1.5">رصيد تجميد الستريك:</label>
             <input
               type="number"
               value={streakData.freezesRemaining}
               onChange={(e) =>
                 setStreakData({ ...streakData, freezesRemaining: Number(e.target.value) })}
-              className="w-full px-3 py-2.5 rounded-xl bg-black/50 border border-white/15 text-blue-400 font-mono font-bold outline-none"
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-blue-600 dark:text-blue-400 font-mono font-bold outline-none"
             />
           </div>
 
           <div>
-            <label className="text-slate-300 font-bold block mb-1.5">إجمالي الأوزان المرفوعة (كجم):</label>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1.5">إجمالي الأوزان المرفوعة (كجم):</label>
             <input
               type="number"
               value={streakData.totalVolumeLiftedKg}
               onChange={(e) =>
                 setStreakData({ ...streakData, totalVolumeLiftedKg: Number(e.target.value) })}
-              className="w-full px-3 py-2.5 rounded-xl bg-black/50 border border-white/15 text-emerald-400 font-mono font-bold outline-none"
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-emerald-600 dark:text-emerald-400 font-mono font-bold outline-none"
             />
           </div>
         </div>
       </div>
 
       {/* Bottom Save Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[#0B132B]/80 border border-white/10">
-        <span className="text-xs text-slate-400">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-[#0B132B]/80 border border-slate-200 dark:border-white/10 shadow-sm">
+        <span className="text-xs text-slate-600 dark:text-slate-400">
           💡 تنعكس جميع التعديلات المحفوظة هنا مباشرة داخل بوابات المشتركين وبطاقات التحليل الشامل.
         </span>
 
@@ -808,7 +808,7 @@ export const AdminAssessmentEditor: React.FC<AdminAssessmentEditorProps> = ({
           <button
             type="button"
             onClick={handleResetAssessment}
-            className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>إعادة ضبط القيم</span>

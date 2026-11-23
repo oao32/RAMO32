@@ -208,19 +208,19 @@ export const SubscriptionQRModal: React.FC<SubscriptionQRModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl bg-gradient-to-b from-[#0B132B] via-[#070E24] to-[#030712] border-2 border-orange-500/40 text-white shadow-2xl p-6 sm:p-8 space-y-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 dark:bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl bg-[#FAFBFD] dark:bg-gradient-to-b dark:from-[#0B132B] dark:via-[#070E24] dark:to-[#030712] border-2 border-orange-500/40 text-[#0B132B] dark:text-white shadow-2xl p-6 sm:p-8 space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
           <div className="flex items-center gap-3">
             <BrandLogo size="sm" showText={false} />
             <div>
-              <h3 className="text-lg sm:text-xl font-black text-white">
+              <h3 className="text-lg sm:text-xl font-black text-[#0B132B] dark:text-white">
                 {language === 'ar'
                   ? 'باركود ورابط الاشتراكات المباشر للمشتركين الجدد'
                   : 'Direct Subscription QR Code & Enrollment Link'}
               </h3>
-              <p className="text-xs text-slate-400 font-semibold">
+              <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
                 {language === 'ar'
                   ? 'أرسل الباركود أو الرابط لأي شخص ليدخل مباشرة على الباقات ← الإقرار ← إتمام التسجيل'
                   : 'Share this QR or link to send clients directly to Packages → Declaration → Checkout'}
@@ -231,7 +231,7 @@ export const SubscriptionQRModal: React.FC<SubscriptionQRModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl bg-white/10 hover:bg-red-500/30 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            className="p-2 rounded-xl bg-slate-200/80 dark:bg-white/10 hover:bg-red-500/20 dark:hover:bg-red-500/30 text-slate-600 dark:text-slate-300 hover:text-red-700 dark:hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -240,7 +240,7 @@ export const SubscriptionQRModal: React.FC<SubscriptionQRModalProps> = ({
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
           {/* QR Card Column */}
-          <div className="md:col-span-5 flex flex-col items-center bg-[#070a14] border border-orange-500/30 rounded-3xl p-5 text-center space-y-4">
+          <div className="md:col-span-5 flex flex-col items-center bg-slate-100 dark:bg-[#070a14] border border-orange-500/30 rounded-3xl p-5 text-center space-y-4">
             <div className="bg-white p-3.5 rounded-2xl shadow-lg border-2 border-orange-500">
               {qrDataUrl ? (
                 <img
@@ -249,19 +249,19 @@ export const SubscriptionQRModal: React.FC<SubscriptionQRModalProps> = ({
                   className="w-48 h-48 sm:w-52 sm:h-52 object-contain mx-auto"
                 />
               ) : (
-                <div className="w-48 h-48 flex items-center justify-center text-slate-400 text-xs">
+                <div className="w-48 h-48 flex items-center justify-center text-slate-500 dark:text-slate-400 text-xs">
                   جاري توليد الباركود...
                 </div>
               )}
             </div>
 
             <div className="space-y-1">
-              <p className="text-xs font-black text-white">
+              <p className="text-xs font-black text-[#0B132B] dark:text-white">
                 {language === 'ar'
                   ? 'امسح الكود بكاميرا الجوال'
                   : 'Scan with Phone Camera'}
               </p>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
                 {language === 'ar'
                   ? 'يحوّل العميل فوراً لصفحة اختيار الباقة والإقرار'
                   : 'Routes directly to Subscription Plans & Declaration'}
@@ -289,7 +289,7 @@ export const SubscriptionQRModal: React.FC<SubscriptionQRModalProps> = ({
 
           {/* Journey Steps & Link Controls Column */}
           <div className="md:col-span-7 space-y-4">
-            <h4 className="text-xs sm:text-sm font-black text-orange-400">
+            <h4 className="text-xs sm:text-sm font-black text-orange-600 dark:text-orange-400">
               {language === 'ar'
                 ? 'مسار العميل التلقائي عند مسح الباركود:'
                 : 'Client Enrollment Flow After Scanning:'}
@@ -301,16 +301,16 @@ export const SubscriptionQRModal: React.FC<SubscriptionQRModalProps> = ({
                 return (
                   <div
                     key={idx}
-                    className="p-3 rounded-2xl bg-white/5 border border-white/10 flex items-start gap-3"
+                    className="p-3 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-start gap-3 shadow-xs dark:shadow-none"
                   >
-                    <div className="p-2 rounded-xl bg-orange-500/15 text-orange-400 shrink-0 mt-0.5">
+                    <div className="p-2 rounded-xl bg-orange-50 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5">
                       <StepIcon className="w-4 h-4" />
                     </div>
                     <div>
-                      <h5 className="text-xs font-black text-white">
+                      <h5 className="text-xs font-black text-[#0B132B] dark:text-white">
                         {language === 'ar' ? step.titleAr : step.titleEn}
                       </h5>
-                      <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5">
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed mt-0.5">
                         {language === 'ar' ? step.descAr : step.descEn}
                       </p>
                     </div>
@@ -321,8 +321,8 @@ export const SubscriptionQRModal: React.FC<SubscriptionQRModalProps> = ({
 
             {/* Direct Link Box */}
             <div className="pt-2 space-y-2">
-              <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                <Link2 className="w-3.5 h-3.5 text-orange-400" />
+              <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                <Link2 className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
                 <span>
                   {language === 'ar'
                     ? 'الرابط المباشر المدمج داخل الباركود (يمكنك نسخه أو تخصيصه):'
@@ -336,23 +336,23 @@ export const SubscriptionQRModal: React.FC<SubscriptionQRModalProps> = ({
                   value={targetUrl}
                   onChange={(e) => setTargetUrl(e.target.value)}
                   dir="ltr"
-                  className="flex-1 bg-black/50 border border-white/15 focus:border-orange-500 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-200 outline-none"
+                  className="flex-1 bg-white dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-800 dark:text-slate-200 outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-slate-200/80 dark:bg-white/10 hover:bg-slate-300/80 dark:hover:bg-white/20 text-[#0B132B] dark:text-white font-bold text-xs flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
                 >
                   {copiedLink ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">
+                      <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-emerald-600 dark:text-emerald-400">
                         {language === 'ar' ? 'تم النسخ' : 'Copied'}
                       </span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3.5 h-3.5 text-orange-400" />
+                      <Copy className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
                       <span>{language === 'ar' ? 'نسخ الرابط' : 'Copy'}</span>
                     </>
                   )}
@@ -367,7 +367,7 @@ export const SubscriptionQRModal: React.FC<SubscriptionQRModalProps> = ({
                 onClose();
                 onPreviewDirectPage();
               }}
-              className="w-full py-3 px-4 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-extrabold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              className="w-full py-3 px-4 rounded-xl bg-emerald-50 dark:bg-emerald-600/20 hover:bg-emerald-100 dark:hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-extrabold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <Eye className="w-4 h-4" />
               <span>

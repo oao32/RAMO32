@@ -189,8 +189,8 @@ export const WorkoutSchedule: React.FC<WorkoutScheduleProps> = ({
       {profile && (
         <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
           <h3 className="text-orange-600 dark:text-orange-400 font-extrabold text-sm md:text-base flex items-center gap-2">
-            <span className="p-1 rounded-lg bg-gradient-to-br from-[#0B132B] to-[#1C2541] text-orange-400">
-              <Dumbbell className="w-4 h-4 text-orange-400" />
+            <span className="p-1.5 rounded-lg bg-orange-100 border border-orange-300 text-orange-600 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] dark:border-transparent dark:text-orange-400">
+              <Dumbbell className="w-4 h-4 text-orange-600 dark:text-orange-400" />
             </span>
             <span>
               {language === 'ar' ? 'جدول التمارين التفاعلي المعتمد' : 'Interactive Workout Schedule'}
@@ -243,8 +243,8 @@ export const WorkoutSchedule: React.FC<WorkoutScheduleProps> = ({
               className="w-full py-3.5 px-5 flex items-center justify-between text-start group select-none transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-3.5">
-                <span className="p-2.5 rounded-xl bg-gradient-to-br from-[#0B132B] to-[#1C2541] ring-2 ring-orange-500/30 text-orange-400 group-hover:ring-orange-500 transition-all shadow-md">
-                  <Dumbbell className="w-4 h-4 text-orange-400 stroke-[2.2]" />
+                <span className="p-2.5 rounded-xl bg-orange-100 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] ring-2 ring-orange-500/30 text-orange-600 dark:text-orange-400 group-hover:ring-orange-500 transition-all shadow-md">
+                  <Dumbbell className="w-4 h-4 text-orange-600 dark:text-orange-400 stroke-[2.2]" />
                 </span>
                 <div>
                   <h4 className="font-black text-sm md:text-base text-[#0B132B] dark:text-white tracking-wider uppercase group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
@@ -258,7 +258,7 @@ export const WorkoutSchedule: React.FC<WorkoutScheduleProps> = ({
 
               <div className="flex items-center gap-3">
                 {!day.isRestDay && (
-                  <span className="text-xs px-3 py-1 rounded-full bg-gradient-to-r from-[#0B132B] to-[#1C2541] text-orange-400 border border-orange-500/40 font-black shadow-xs font-mono">
+                  <span className="text-xs px-3 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-300 dark:bg-gradient-to-r dark:from-[#0B132B] dark:to-[#1C2541] dark:text-orange-400 dark:border-orange-500/40 font-black shadow-xs font-mono">
                     {dayProgress}%
                   </span>
                 )}
@@ -326,7 +326,7 @@ export const WorkoutSchedule: React.FC<WorkoutScheduleProps> = ({
                                 className="flex items-center gap-2.5 group/btn text-start cursor-pointer"
                                 title="Watch Video Demonstration"
                               >
-                                <div className="p-2 rounded-xl bg-gradient-to-br from-[#0B132B] to-[#1C2541] ring-2 ring-orange-500/30 text-orange-400 group-hover/btn:bg-orange-500 group-hover/btn:text-white transition-all shadow-md shrink-0">
+                                <div className="p-2 rounded-xl bg-orange-100 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] ring-2 ring-orange-500/30 text-[#EA580C] dark:text-orange-400 group-hover/btn:bg-orange-500 group-hover/btn:text-white transition-all shadow-md shrink-0">
                                   <Play className="w-3.5 h-3.5 fill-current" />
                                 </div>
                                 <div>
@@ -358,15 +358,15 @@ export const WorkoutSchedule: React.FC<WorkoutScheduleProps> = ({
 
                             {/* Sets Badge - Exact dynamic count */}
                             <div className="sm:col-span-3 flex items-center justify-center">
-                              <span className="px-3.5 py-1 rounded-full bg-gradient-to-r from-[#0B132B] to-[#1C2541] border border-blue-500/40 text-blue-300 font-black text-xs shadow-xs">
+                              <span className="px-3.5 py-1 rounded-full bg-blue-50 border border-blue-300 text-blue-700 dark:bg-gradient-to-r dark:from-[#0B132B] dark:to-[#1C2541] dark:border-blue-500/40 dark:text-blue-300 font-black text-xs shadow-xs">
                                 {exercise.sets.length} {language === 'ar' ? 'جلسات' : 'Sets'}
                               </span>
                             </div>
 
                             {/* Reps Badge & Logger Toggle */}
                             <div className="sm:col-span-3 flex items-center justify-center gap-2">
-                              <span className="px-3 py-1 rounded-full bg-gradient-to-r from-[#0B132B] to-[#1C2541] border border-orange-500/40 text-orange-300 font-black text-xs flex items-center gap-1 shadow-xs">
-                                <span className="text-orange-400">⚡</span>
+                              <span className="px-3 py-1 rounded-full bg-orange-50 border border-orange-300 text-orange-700 dark:bg-gradient-to-r dark:from-[#0B132B] dark:to-[#1C2541] dark:border-orange-500/40 dark:text-orange-300 font-black text-xs flex items-center gap-1 shadow-xs">
+                                <span className="text-orange-600 dark:text-orange-400">⚡</span>
                                 <span>{exercise.repsRange}</span>
                               </span>
 
@@ -507,7 +507,7 @@ export const WorkoutSchedule: React.FC<WorkoutScheduleProps> = ({
                                         className={`px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all cursor-pointer shadow-xs ${
                                           set.isCompleted
                                             ? 'bg-emerald-600 text-white shadow-[0_0_10px_rgba(16,185,129,0.5)]'
-                                            : 'bg-gradient-to-r from-[#0B132B] to-[#1C2541] hover:bg-orange-500 text-white'
+                                            : 'bg-slate-100 hover:bg-orange-500 text-[#0B132B] hover:text-white border border-slate-300 dark:bg-gradient-to-r dark:from-[#0B132B] dark:to-[#1C2541] dark:border-transparent dark:text-white'
                                         }`}
                                       >
                                         <CheckCircle2 className="w-3.5 h-3.5" />

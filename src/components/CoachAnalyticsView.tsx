@@ -260,7 +260,7 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black text-[#0B132B] dark:text-white">{activeSubscribers}</span>
-            <span className="text-xs font-bold text-slate-400">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
               / {totalSubscribers} مسجل
             </span>
           </div>
@@ -280,14 +280,14 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
             </div>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-emerald-400 font-mono">
+            <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
               {totalRevenue.toLocaleString()}
             </span>
-            <span className="text-xs font-bold text-orange-400">
+            <span className="text-xs font-bold text-orange-600 dark:text-orange-400">
               {language === 'ar' ? 'ريال' : 'SAR'}
             </span>
           </div>
-          <p className="text-[11px] text-emerald-400 font-bold mt-2 flex items-center gap-1">
+          <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold mt-2 flex items-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>
               MRR الشهري: {monthlyRecurringRevenue.toLocaleString()} ريال • {declarations.length} عقد موثق
@@ -301,7 +301,7 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
             <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
               {language === 'ar' ? 'نسبة اشتراكات VIP النخبوية' : 'VIP Plan Share'}
             </span>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/20">
               <Crown className="w-5 h-5" />
             </div>
           </div>
@@ -309,7 +309,7 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
             <span className="text-3xl font-black text-[#0B132B] dark:text-white">
               {totalSubscribers > 0 ? Math.round((vipSubscribers / totalSubscribers) * 100) : 0}%
             </span>
-            <span className="text-xs font-bold text-amber-400">
+            <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
               ({vipSubscribers} مشترك VIP)
             </span>
           </div>
@@ -329,7 +329,7 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
             <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
               {language === 'ar' ? 'نسبة إنجاز التمارين العضلية' : 'Muscle Completion %'}
             </span>
-            <div className="p-2 rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20">
+            <div className="p-2 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20">
               <TrendingUp className="w-5 h-5" />
             </div>
           </div>
@@ -337,7 +337,7 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
             <span className="text-3xl font-black text-[#0B132B] dark:text-white font-mono">
               {muscleCompletionPct}%
             </span>
-            <span className="text-xs font-bold text-slate-400">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
               • {declarations.length} عقد موثق
             </span>
           </div>
@@ -352,13 +352,13 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
 
       {/* Athletes List Table */}
       <div className="bg-[#FAFBFD] dark:bg-[#0b132b] border border-slate-300/80 dark:border-white/10 rounded-3xl p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 pb-4">
           <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-orange-400" />
+            <Activity className="w-5 h-5 text-orange-500 dark:text-orange-400" />
             <h3 className="text-base font-black text-[#0B132B] dark:text-white">
               {language === 'ar' ? 'قائمة المشتركين ومتابعة الأداء' : 'Athletes Roster'}
             </h3>
-            <span className="px-2.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 text-xs font-mono font-bold">
+            <span className="px-2.5 py-0.5 rounded-full bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-xs font-mono font-bold">
               {filteredAthletes.length}
             </span>
           </div>
@@ -368,8 +368,8 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
               onClick={() => setFilterMode('all')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 filterMode === 'all'
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-black/40 text-slate-400 hover:text-white'
+                  ? 'bg-orange-500 text-white shadow-sm'
+                  : 'bg-slate-200/80 text-slate-700 hover:text-[#0B132B] dark:bg-black/40 dark:text-slate-400 dark:hover:text-white'
               }`}
             >
               الكل
@@ -378,8 +378,8 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
               onClick={() => setFilterMode('vip')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 filterMode === 'vip'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-black/40 text-slate-400 hover:text-white'
+                  ? 'bg-amber-500 text-white shadow-sm'
+                  : 'bg-slate-200/80 text-slate-700 hover:text-[#0B132B] dark:bg-black/40 dark:text-slate-400 dark:hover:text-white'
               }`}
             >
               VIP فقط
@@ -388,8 +388,8 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
               onClick={() => setFilterMode('warning')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 filterMode === 'warning'
-                  ? 'bg-rose-500 text-white'
-                  : 'bg-black/40 text-slate-400 hover:text-white'
+                  ? 'bg-rose-500 text-white shadow-sm'
+                  : 'bg-slate-200/80 text-slate-700 hover:text-[#0B132B] dark:bg-black/40 dark:text-slate-400 dark:hover:text-white'
               }`}
             >
               المعلقون
@@ -399,8 +399,8 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
 
         {filteredAthletes.length === 0 ? (
           <div className="text-center py-12 space-y-3">
-            <Users className="w-12 h-12 text-slate-600 mx-auto" />
-            <p className="text-sm font-bold text-slate-300">
+            <Users className="w-12 h-12 text-slate-400 dark:text-slate-600 mx-auto" />
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
               لا يوجد متدربون مسجلون في هذه الفئة حالياً.
             </p>
             <p className="text-xs text-slate-500">
@@ -410,7 +410,7 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs">
-              <thead className="bg-[#070e24] text-slate-400 border-b border-white/10">
+              <thead className="bg-slate-100 dark:bg-[#070e24] text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-white/10">
                 <tr>
                   <th className="p-3 font-bold">المتدرب</th>
                   <th className="p-3 font-bold">البريد الإلكتروني</th>
@@ -419,21 +419,21 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
                   <th className="p-3 font-bold text-center">وثيقة العقد</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-slate-200 dark:divide-white/5">
                 {filteredAthletes.map((ath) => (
-                  <tr key={ath.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="p-3 font-black text-white flex items-center gap-2">
+                  <tr key={ath.id} className="hover:bg-slate-100/70 dark:hover:bg-white/[0.02] transition-colors">
+                    <td className="p-3 font-black text-[#0B132B] dark:text-white flex items-center gap-2">
                       <span className="text-lg">{ath.avatar}</span>
                       <span>{ath.name}</span>
                     </td>
-                    <td className="p-3 font-mono text-slate-400">{ath.email}</td>
+                    <td className="p-3 font-mono text-slate-600 dark:text-slate-400">{ath.email}</td>
                     <td className="p-3">
                       {ath.plan === 'Platinum VIP' ? (
-                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold text-[11px]">
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40 font-bold text-[11px]">
                           VIP بلاتينيوم
                         </span>
                       ) : (
-                        <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-600 font-bold text-[11px]">
+                        <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 font-bold text-[11px]">
                           Standard قياسي
                         </span>
                       )}
@@ -442,8 +442,8 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
                       <span
                         className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                           ath.status === 'suspended'
-                            ? 'bg-rose-500/20 text-rose-300'
-                            : 'bg-emerald-500/20 text-emerald-300'
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
+                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
                         }`}
                       >
                         {ath.status === 'suspended' ? 'معلق' : 'نشط'}
@@ -452,7 +452,7 @@ export const CoachAnalyticsView: React.FC<CoachAnalyticsViewProps> = ({
                     <td className="p-3 text-center">
                       <button
                         onClick={() => handleOpenDeclaration(ath.name, ath.email)}
-                        className="px-2.5 py-1 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/40 text-orange-300 font-bold text-xs inline-flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-300 text-orange-700 dark:bg-orange-500/15 dark:hover:bg-orange-500/25 dark:border-orange-500/40 dark:text-orange-300 font-bold text-xs inline-flex items-center gap-1 cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>عرض العقد</span>

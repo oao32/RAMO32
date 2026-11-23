@@ -118,6 +118,7 @@ import {
   setCurrentUserSession,
   clearCurrentUserSession,
 } from './lib/authStore';
+import { useOaoTheme } from './lib/themeUtils';
 import {
   Sun,
   Moon,
@@ -136,9 +137,7 @@ import {
 function MainPortal() {
   const navigate = useNavigate();
   // Theme & Language State
-  const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('oao_theme') as Theme) || 'dark';
-  });
+  const { theme, toggleTheme } = useOaoTheme();
 
   const [language, setLanguage] = useState<Language>(() => {
     return (localStorage.getItem('oao_lang') as Language) || 'ar';
@@ -374,21 +373,12 @@ function MainPortal() {
     }
   };
 
-  // Sync to HTML root class & direction
+  // Sync language direction
   useEffect(() => {
     document.documentElement.lang = language;
     document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
     localStorage.setItem('oao_lang', language);
   }, [language]);
-
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    localStorage.setItem('oao_theme', theme);
-  }, [theme]);
 
   // Auto-Save Profile to Supabase
   const handleUpdateProfile = (newProfile: ClientProfile) => {
@@ -727,7 +717,7 @@ function MainPortal() {
       }`}
     >
       {/* Dynamic Background Laser & Embers Effects */}
-      <BackgroundEffects />
+      <BackgroundEffects theme={theme} />
 
       {/* 1. TOP TICKER QUOTES BANNER */}
       <TickerBanner language={language} />
@@ -788,17 +778,6 @@ function MainPortal() {
                 <span>{language === 'ar' ? 'الرئيسية' : 'Home'}</span>
               </button>
               <button
-                onClick={scrollToPlans}
-                className={`text-xs px-3.5 py-1.5 rounded-full font-bold border flex items-center gap-1.5 transition-colors cursor-pointer ${
-                  theme === 'dark'
-                    ? 'bg-[#FF5722]/15 hover:bg-[#FF5722]/25 text-[#FF7043] border-[#FF5722]/40'
-                    : 'bg-orange-500/15 hover:bg-orange-500/25 text-orange-700 border-orange-500/40 shadow-xs'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5 text-orange-500" />
-                <span>{language === 'ar' ? 'باقات الاشتراك' : 'Pricing Plans'}</span>
-              </button>
-              <button
                 onClick={() => navigate('/subscribe')}
                 className={`text-xs px-3.5 py-1.5 rounded-full font-bold border flex items-center gap-1.5 transition-colors cursor-pointer ${
                   theme === 'dark'
@@ -806,7 +785,7 @@ function MainPortal() {
                     : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-400/50 shadow-xs'
                 }`}
               >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>{language === 'ar' ? 'اشترك الآن' : 'Subscribe Now'}</span>
               </button>
             </div>
@@ -821,7 +800,7 @@ function MainPortal() {
                     className={`hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold whitespace-nowrap ${
                       theme === 'dark'
                         ? 'bg-amber-500/10 border-amber-400/50 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.18)]'
-                        : 'bg-[#141A2E] text-amber-200 border-amber-400/60 shadow-sm'
+                        : 'bg-amber-50 border-amber-400 text-amber-900 shadow-xs'
                     }`}
                   >
                     <span>
@@ -835,14 +814,18 @@ function MainPortal() {
                   {/* VIP Streak & Share Card Button */}
                   <button
                     onClick={() => setIsShareCardModalOpen(true)}
-                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/20 border border-amber-400/50 hover:border-amber-300 text-amber-400 font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+                    className={`px-3 py-1.5 rounded-xl border font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                      theme === 'dark'
+                        ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/20 border-amber-400/50 hover:border-amber-300 text-amber-400'
+                        : 'bg-amber-50 hover:bg-amber-100 border-amber-400 text-amber-800 shadow-xs'
+                    }`}
                     title={language === 'ar' ? 'سلسلة الالتزام ومشاركة كرت الإنجاز' : 'Workout Streak & Share Card'}
                   >
-                    <Flame className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    <Flame className="w-3.5 h-3.5 fill-amber-500 text-amber-600 dark:fill-amber-400 dark:text-amber-400" />
                     <span className="font-mono tabular-nums">
                       {streakData.currentStreak} {language === 'ar' ? 'يوم' : 'Days'}
                     </span>
-                    <span className="hidden md:inline text-[10px] text-amber-200 font-bold">
+                    <span className="hidden md:inline text-[10px] text-amber-700 dark:text-amber-200 font-bold">
                       {language === 'ar' ? '· كرت الإنجاز' : '· Share'}
                     </span>
                   </button>
@@ -862,8 +845,8 @@ function MainPortal() {
                         ? `المشترك: ${profile.name}`
                         : `Athlete: ${profile.nameEn || profile.name}`}
                     </span>
-                    <span aria-hidden="true" className="text-slate-400">·</span>
-                    <span className="font-mono text-[11px] text-slate-400">Standard</span>
+                    <span aria-hidden="true" className="text-slate-500 dark:text-slate-400">·</span>
+                    <span className="font-mono text-[11px] text-slate-600 dark:text-slate-400">Standard</span>
                   </div>
 
                   {/* Direct "Upgrade to VIP" CTA in Top Bar for Standard Subscribers (hidden when expired) */}
@@ -884,10 +867,16 @@ function MainPortal() {
               <div
                 className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold whitespace-nowrap ${
                   clientSubDetails.isExpired
-                    ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                    ? theme === 'dark'
+                      ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                      : 'bg-rose-50 border-rose-400 text-rose-700'
                     : clientSubDetails.isExpiringSoon
-                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 animate-pulse'
-                    : 'bg-white/5 border-white/10 text-slate-300'
+                    ? theme === 'dark'
+                      ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 animate-pulse'
+                      : 'bg-amber-50 border-amber-400 text-amber-800 animate-pulse'
+                    : theme === 'dark'
+                    ? 'bg-white/5 border-white/10 text-slate-300'
+                    : 'bg-white border-slate-300 text-[#0B132B] shadow-xs'
                 }`}
                 title={
                   language === 'ar'
@@ -895,7 +884,7 @@ function MainPortal() {
                     : `Period: ${clientSubDetails.startDate} to ${clientSubDetails.endDate}`
                 }
               >
-                <Clock className="w-3.5 h-3.5 text-orange-400" />
+                <Clock className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
                 <span>
                   {clientSubDetails.isExpired
                     ? language === 'ar'
@@ -958,7 +947,11 @@ function MainPortal() {
                     window.history.replaceState({}, '', window.location.pathname);
                   }
                 }}
-                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold text-slate-200 transition-colors cursor-pointer"
+                className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-white/10 hover:bg-white/20 border-white/15 text-slate-200'
+                    : 'bg-white hover:bg-slate-100 border-slate-300 text-[#0B132B] shadow-xs'
+                }`}
               >
                 {language === 'ar' ? 'الصفحة الرئيسية الكاملة' : 'Full Website'}
               </button>
@@ -994,7 +987,11 @@ function MainPortal() {
             {userSession === 'client' && (
               <button
                 onClick={handleLogout}
-                className="px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 hover:text-red-300 text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5"
+                className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5 ${
+                  theme === 'dark'
+                    ? 'bg-red-500/15 hover:bg-red-500/25 border-red-500/30 text-red-400 hover:text-red-300'
+                    : 'bg-red-50 hover:bg-red-100 border-red-300 text-red-700'
+                }`}
                 title={language === 'ar' ? 'تسجيل الخروج والعودة للرئيسية' : 'Log Out'}
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -1020,7 +1017,7 @@ function MainPortal() {
 
             {/* Theme Toggle */}
             <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              onClick={toggleTheme}
               className={`p-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
                 theme === 'dark'
                   ? 'bg-white/5 border-white/10 hover:border-orange-500/50 text-slate-300'
@@ -1065,6 +1062,7 @@ function MainPortal() {
             onOpenFacilities={scrollToPlans}
             onOpenAuth={handleOpenAthleteLogin}
             language={language}
+            theme={theme}
           />
 
           {/* 3D Metallic Brand Identity & Technical Blueprint Section */}
@@ -1073,6 +1071,7 @@ function MainPortal() {
               onEnterPortal={handleOpenAthleteLogin}
               onOpenAdmin={handleOpenCoachPasskey}
               language={language}
+              theme={theme}
             />
           </div>
 
@@ -1096,7 +1095,7 @@ function MainPortal() {
       {!isDirectPlansLanding && userSession === 'client' && isHydratingClient && (
         <main ref={portalRef} className="max-w-7xl mx-auto px-3 sm:px-6 py-20 relative z-20 flex flex-col items-center justify-center gap-4 min-h-[70vh]">
           <div className="w-12 h-12 rounded-full border-4 border-orange-500/30 border-t-orange-500 animate-spin" />
-          <p className="text-xs font-bold text-slate-400">
+          <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
             {language === 'ar' ? 'جاري التحقق من حالة الاشتراك وبيانات المتدرب...' : 'Verifying subscription status & workspace...'}
           </p>
         </main>
@@ -1196,8 +1195,8 @@ function MainPortal() {
                   <span
                     className={`text-[11px] sm:text-xs font-bold tracking-wider uppercase ${
                       isClientVIP
-                        ? 'text-amber-500 dark:text-amber-300'
-                        : 'text-slate-500 dark:text-slate-400'
+                        ? 'text-amber-700 dark:text-amber-300'
+                        : 'text-slate-600 dark:text-slate-400'
                     }`}
                   >
                     {isClientVIP
@@ -1218,7 +1217,7 @@ function MainPortal() {
                     isClientVIP
                       ? theme === 'dark'
                         ? 'bg-amber-500/10 border-amber-400/50 text-amber-100'
-                        : 'bg-[#141A2E] border-amber-400/60 text-amber-100'
+                        : 'bg-amber-50 border-amber-400 text-amber-950 shadow-xs'
                       : theme === 'dark'
                       ? 'bg-white/5 border-white/15 text-slate-200'
                       : 'bg-white border-slate-300 text-[#0B132B]'
@@ -1422,13 +1421,13 @@ function MainPortal() {
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2 font-bold text-slate-400">
+          <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-400">
             <span>© 2026 OWN AURA OUTCOME (OAO)</span>
             <span>•</span>
             <span>COACH OMAR ADNAN</span>
           </div>
           <div className="flex items-center gap-4 text-xs">
-            <span className="text-emerald-400 font-semibold flex items-center gap-1">
+            <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               {language === 'ar' ? 'نظام الحفظ التلقائي ومزامنة Supabase نشط' : 'Auto-Save & Supabase Engine Active'}
             </span>

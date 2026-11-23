@@ -27,13 +27,16 @@ export const TickerBanner: React.FC<TickerBannerProps> = ({ language }) => {
   const quotes = language === 'ar' ? arabicQuotes : englishQuotes;
 
   return (
-    <div className="w-full bg-[#070a14] border-b border-orange-500/20 text-xs overflow-hidden py-2 select-none relative z-20 shadow-md">
+    <div className="w-full bg-[#FAFBFD] dark:bg-[#070a14] border-b border-slate-300/80 dark:border-orange-500/20 text-xs overflow-hidden py-2 select-none relative z-20 shadow-xs dark:shadow-md transition-colors">
       <div className={`flex whitespace-nowrap ${language === 'ar' ? 'animate-ticker-rtl' : 'animate-ticker-ltr'}`}>
         {[...quotes, ...quotes, ...quotes].map((quote, idx) => (
-          <div key={idx} className="flex items-center mx-6 text-slate-300 font-medium tracking-wide">
-            <span className="w-2 h-2 rounded-full bg-orange-500 mr-2 ml-2 shadow-[0_0_8px_#f97316] inline-block animate-ping" />
-            <span className="hover:text-orange-400 transition-colors cursor-default">{quote}</span>
-            <span className="text-orange-500/60 font-bold ml-6 mr-6">✦</span>
+          <div
+            key={idx}
+            className="flex items-center mx-6 text-[#0B132B] dark:text-slate-300 font-semibold dark:font-medium tracking-wide"
+          >
+            <span className="w-2 h-2 rounded-full bg-orange-600 dark:bg-orange-500 mr-2 ml-2 shadow-[0_0_8px_rgba(234,88,12,0.5)] dark:shadow-[0_0_8px_#f97316] inline-block" />
+            <span className="hover:text-orange-600 dark:hover:text-orange-400 transition-colors cursor-default">{quote}</span>
+            <span className="text-orange-600/70 dark:text-orange-500/60 font-bold ml-6 mr-6">✦</span>
           </div>
         ))}
       </div>

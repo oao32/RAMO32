@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Play, Pause, RotateCcw, Plus, X, Bell, Minimize2, Maximize2 } from 'lucide-react';
 import { soundEffects } from '../utils/audio';
 import { Language } from '../types';
+import { useOaoTheme } from '../lib/themeUtils';
 
 interface RestTimerProps {
   initialSeconds?: number;
@@ -16,6 +17,7 @@ export const RestTimer: React.FC<RestTimerProps> = ({
   onClose,
   language,
 }) => {
+  const { theme } = useOaoTheme();
   const [totalSeconds, setTotalSeconds] = useState(initialSeconds);
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
   const [isRunning, setIsRunning] = useState(true);
@@ -91,24 +93,24 @@ export const RestTimer: React.FC<RestTimerProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-[#0b132b] border border-orange-500/50 rounded-3xl p-6 w-full max-w-sm shadow-[0_0_40px_rgba(249,115,22,0.3)] relative text-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-[#FAFBFD] dark:bg-[#0b132b] border border-orange-500/50 rounded-3xl p-6 w-full max-w-sm shadow-2xl dark:shadow-[0_0_40px_rgba(249,115,22,0.3)] text-[#0B132B] dark:text-white relative text-center">
         {/* Top bar controls */}
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={() => setIsMinimized(true)}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg bg-white/5 transition-colors"
+            className="text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white p-1.5 rounded-lg bg-slate-200/70 dark:bg-white/5 hover:bg-slate-300/70 dark:hover:bg-white/10 transition-colors cursor-pointer"
             title="Minimize"
           >
             <Minimize2 className="w-4 h-4" />
           </button>
-          <span className="text-orange-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping inline-block" />
+          <span className="text-orange-600 dark:text-orange-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-orange-500 inline-block" />
             {language === 'ar' ? 'عداد الراحة بين الجولات' : 'Rest Interval Counter'}
           </span>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg bg-white/5 transition-colors"
+            className="text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white p-1.5 rounded-lg bg-slate-200/70 dark:bg-white/5 hover:bg-slate-300/70 dark:hover:bg-white/10 transition-colors cursor-pointer"
             title="Close"
           >
             <X className="w-4 h-4" />
@@ -124,7 +126,7 @@ export const RestTimer: React.FC<RestTimerProps> = ({
               cy="50"
               r="45"
               fill="transparent"
-              stroke="rgba(255, 255, 255, 0.08)"
+              stroke={theme === 'light' ? 'rgba(11, 19, 43, 0.12)' : 'rgba(255, 255, 255, 0.08)'}
               strokeWidth="6"
             />
             {/* Animated progress ring */}
@@ -144,10 +146,10 @@ export const RestTimer: React.FC<RestTimerProps> = ({
 
           {/* Centered Timer Number */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-4xl font-mono font-black text-white tracking-wider">
+            <span className="text-4xl font-mono font-black text-[#0B132B] dark:text-white tracking-wider">
               {formattedTime}
             </span>
-            <span className="text-[11px] text-orange-400/90 font-medium mt-1">
+            <span className="text-[11px] text-orange-600 dark:text-orange-400/90 font-semibold mt-1">
               {secondsLeft === 0
                 ? language === 'ar'
                   ? 'انتهت الراحة! ابدأ جولتك 🔥'
@@ -163,7 +165,7 @@ export const RestTimer: React.FC<RestTimerProps> = ({
         <div className="flex items-center justify-center gap-3 mt-4">
           <button
             onClick={resetTimer}
-            className="p-3 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-transform active:scale-95"
+            className="p-3 rounded-full bg-slate-200/70 dark:bg-white/5 hover:bg-slate-300/70 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 hover:text-[#0B132B] dark:hover:text-white border border-slate-300 dark:border-white/10 transition-transform active:scale-95 cursor-pointer"
             title="Reset"
           >
             <RotateCcw className="w-4 h-4" />
@@ -171,7 +173,7 @@ export const RestTimer: React.FC<RestTimerProps> = ({
 
           <button
             onClick={() => setIsRunning(!isRunning)}
-            className="px-6 py-3 rounded-full bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(249,115,22,0.6)] transition-transform active:scale-95"
+            className="px-6 py-3 rounded-full bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(249,115,22,0.6)] transition-transform active:scale-95 cursor-pointer"
           >
             {isRunning ? (
               <>
@@ -188,7 +190,7 @@ export const RestTimer: React.FC<RestTimerProps> = ({
 
           <button
             onClick={() => addTime(30)}
-            className="p-3 rounded-full bg-white/5 hover:bg-white/10 text-orange-400 border border-orange-500/30 font-bold text-xs flex items-center justify-center transition-transform active:scale-95"
+            className="p-3 rounded-full bg-orange-50 dark:bg-white/5 hover:bg-orange-100 dark:hover:bg-white/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 font-bold text-xs flex items-center justify-center transition-transform active:scale-95 cursor-pointer"
             title="+30 Seconds"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -197,7 +199,7 @@ export const RestTimer: React.FC<RestTimerProps> = ({
         </div>
 
         {/* Quick presets */}
-        <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-white/10">
+        <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-slate-200 dark:border-white/10">
           {[60, 90, 120].map((preset) => (
             <button
               key={preset}
@@ -206,10 +208,10 @@ export const RestTimer: React.FC<RestTimerProps> = ({
                 setSecondsLeft(preset);
                 setIsRunning(true);
               }}
-              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
                 totalSeconds === preset
-                  ? 'bg-orange-500/20 text-orange-400 border-orange-500'
-                  : 'bg-white/5 text-slate-400 border-white/10 hover:text-white'
+                  ? 'bg-orange-500/15 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 border-orange-500'
+                  : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-white/10 hover:text-[#0B132B] dark:hover:text-white'
               }`}
             >
               {preset}s

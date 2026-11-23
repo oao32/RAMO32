@@ -90,13 +90,13 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
   const getRarityBadgeStyle = (rarity: string) => {
     switch (rarity) {
       case 'legendary':
-        return 'from-amber-500/20 via-orange-500/30 to-amber-600/30 border-amber-500/70 text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.35)]';
+        return 'from-amber-100 via-orange-50 to-amber-100 border-amber-400 text-amber-900 shadow-md dark:from-amber-500/20 dark:via-orange-500/30 dark:to-amber-600/30 dark:border-amber-500/70 dark:text-amber-300 dark:shadow-[0_0_20px_rgba(245,158,11,0.35)]';
       case 'epic':
-        return 'from-purple-500/20 via-indigo-500/30 to-purple-600/30 border-purple-500/60 text-purple-300 shadow-[0_0_18px_rgba(168,85,247,0.3)]';
+        return 'from-purple-100 via-indigo-50 to-purple-100 border-purple-400 text-purple-900 shadow-md dark:from-purple-500/20 dark:via-indigo-500/30 dark:to-purple-600/30 dark:border-purple-500/60 dark:text-purple-300 dark:shadow-[0_0_18px_rgba(168,85,247,0.3)]';
       case 'rare':
-        return 'from-blue-500/20 via-cyan-500/30 to-blue-600/30 border-blue-500/60 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.25)]';
+        return 'from-blue-100 via-cyan-50 to-blue-100 border-blue-400 text-blue-900 shadow-md dark:from-blue-500/20 dark:via-cyan-500/30 dark:to-blue-600/30 dark:border-blue-500/60 dark:text-blue-300 dark:shadow-[0_0_15px_rgba(59,130,246,0.25)]';
       default:
-        return 'from-slate-700/30 via-slate-800/40 to-slate-900/40 border-slate-600/40 text-slate-300';
+        return 'from-slate-100 via-white to-slate-100 border-slate-300 text-slate-800 shadow-xs dark:from-slate-700/30 dark:via-slate-800/40 dark:to-slate-900/40 dark:border-slate-600/40 dark:text-slate-300';
     }
   };
 
@@ -129,20 +129,20 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
           {/* Col 1: Big Streak Flame Counter */}
           <div className="lg:col-span-5 flex flex-col items-center lg:items-start text-center lg:text-start">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/15 border border-orange-500/40 text-orange-400 font-extrabold text-[11px] uppercase tracking-wider mb-3 shadow-[0_0_15px_rgba(249,115,22,0.3)]">
-              <Flame className="w-3.5 h-3.5 animate-bounce text-orange-400" />
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/15 border border-orange-500/40 text-orange-700 dark:text-orange-400 font-extrabold text-[11px] uppercase tracking-wider mb-3 shadow-[0_0_15px_rgba(249,115,22,0.25)]">
+              <Flame className="w-3.5 h-3.5 animate-bounce text-orange-600 dark:text-orange-400" />
               <span>{isAr ? 'سلسلة الالتزام الرياضي (Workout Streak)' : 'Workout Streak System'}</span>
             </div>
 
             <div className="flex items-baseline gap-3 my-1">
-              <span className="text-5xl sm:text-6xl md:text-7xl font-black font-mono text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-orange-500 drop-shadow-[0_2px_15px_rgba(249,115,22,0.6)]">
+              <span className="text-5xl sm:text-6xl md:text-7xl font-black font-mono text-transparent bg-clip-text bg-gradient-to-r from-orange-600 via-amber-500 to-orange-600 dark:from-orange-400 dark:via-amber-300 dark:to-orange-500 drop-shadow-[0_2px_15px_rgba(249,115,22,0.45)]">
                 {streakData.currentStreak}
               </span>
               <div className="flex flex-col items-start">
                 <span className={`text-xl sm:text-2xl font-black ${theme === 'dark' ? 'text-white' : 'text-[#0B132B]'}`}>
                   {isAr ? 'يوماً متواصلاً' : 'Days Streak'}
                 </span>
-                <span className="text-xs text-orange-400 font-bold">
+                <span className="text-xs text-orange-700 dark:text-orange-400 font-bold">
                   {isAr ? `🔥 الرقم القياسي: ${streakData.longestStreak} يوماً` : `🔥 Record: ${streakData.longestStreak} Days`}
                 </span>
               </div>
@@ -167,14 +167,20 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                 <div className="w-full space-y-3 mt-4">
                   {awardedToday ? (
                     <div className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-amber-500/10 to-orange-500/15 border border-emerald-500/40 flex flex-wrap items-center justify-between gap-2 shadow-[0_0_20px_rgba(16,185,129,0.18)]">
-                      <div className="flex items-center gap-2 text-emerald-400 font-black text-xs sm:text-sm">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-black text-xs sm:text-sm">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
                         <span>
                           {isAr ? 'تم احتساب سلسلة اليوم ✓' : "Today's Streak Awarded ✓"}
                         </span>
                       </div>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/40 border border-amber-400/40 text-amber-300 text-[11px] font-bold">
-                        <Lock className="w-3 h-3 text-amber-400" />
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold ${
+                          theme === 'dark'
+                            ? 'bg-black/40 border-amber-400/40 text-amber-300'
+                            : 'bg-amber-50 border-amber-400 text-amber-800'
+                        }`}
+                      >
+                        <Lock className="w-3 h-3 text-amber-500" />
                         <span>{isAr ? 'مقفل حتى الغد' : 'Locked until tomorrow'}</span>
                       </span>
                     </div>
@@ -187,23 +193,29 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2 text-xs font-black">
-                        <span className="text-orange-400 flex items-center gap-1.5">
-                          <Flame className="w-3.5 h-3.5 text-orange-400" />
+                        <span className="text-orange-500 flex items-center gap-1.5">
+                          <Flame className="w-3.5 h-3.5 text-orange-500" />
                           <span>
                             {isAr
                               ? `${completedCount} / ${totalCount} تمارين مكتملة لاحتساب سلسلة اليوم`
                               : `${completedCount} / ${totalCount} exercises completed for today's streak`}
                           </span>
                         </span>
-                        <span className="font-mono text-amber-400 text-[11px]">{progressPct}%</span>
+                        <span className="font-mono text-amber-600 dark:text-amber-400 text-[11px]">{progressPct}%</span>
                       </div>
-                      <div className="w-full bg-slate-800/80 rounded-full h-2 overflow-hidden border border-white/10">
+                      <div
+                        className={`w-full rounded-full h-2 overflow-hidden border ${
+                          theme === 'dark'
+                            ? 'bg-slate-800/80 border-white/10'
+                            : 'bg-slate-200 border-slate-300'
+                        }`}
+                      >
                         <div
                           className="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-500"
                           style={{ width: `${progressPct}%` }}
                         />
                       </div>
-                      <p className="text-[11px] text-slate-400 font-semibold">
+                      <p className={`text-[11px] font-semibold ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                         {isAr
                           ? 'يُحتسب (+1 يوم) و (+50 XP) تلقائياً فور إكمال 100% من تمارين اليوم.'
                           : 'Automatically awards +1 day & +50 XP once 100% of today’s exercises are completed.'}
@@ -221,7 +233,7 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                           : 'bg-white hover:bg-slate-100 border-slate-300 text-[#0B132B] shadow-xs'
                       }`}
                     >
-                      <Share2 className="w-4 h-4 text-cyan-400" />
+                      <Share2 className="w-4 h-4 text-cyan-700 dark:text-cyan-400" />
                       <span>{isAr ? 'تصدير كرت الإنجاز 📲' : 'Export Progress Card 📲'}</span>
                     </button>
                   </div>
@@ -246,7 +258,7 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                     LV.{athleteRank.level}
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block tracking-wider">
                       {isAr ? 'الرتبة الرياضية الحالية' : 'CURRENT ATHLETE TIER'}
                     </span>
                     <span className={`text-base font-black ${theme === 'dark' ? 'text-white' : 'text-[#0B132B]'}`}>
@@ -256,17 +268,23 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-xs font-bold font-mono text-orange-400 block">
+                  <span className="text-xs font-bold font-mono text-orange-600 dark:text-orange-400 block">
                     {athleteRank.currentXp} / {athleteRank.nextLevelXp} XP
                   </span>
-                  <span className="text-[10px] text-slate-400 font-semibold">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
                     {isAr ? `متبقي ${athleteRank.nextLevelXp - athleteRank.currentXp} XP للرتبة التالية` : `${athleteRank.nextLevelXp - athleteRank.currentXp} XP to next level`}
                   </span>
                 </div>
               </div>
 
               {/* XP Progress Bar */}
-              <div className="w-full bg-slate-800/80 rounded-full h-3 overflow-hidden p-0.5 border border-white/10 relative">
+              <div
+                className={`w-full rounded-full h-3 overflow-hidden p-0.5 border relative ${
+                  theme === 'dark'
+                    ? 'bg-slate-800/80 border-white/10'
+                    : 'bg-slate-200 border-slate-300'
+                }`}
+              >
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-orange-500 via-amber-400 to-cyan-400 shadow-[0_0_12px_rgba(249,115,22,0.8)] transition-all duration-700 relative"
                   style={{ width: `${xpPercentage}%` }}
@@ -275,10 +293,10 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2">
+              <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 mt-2">
                 <span>{isAr ? 'البلاتينيوم (Titan)' : 'Platinum'}</span>
-                <span className="font-bold text-cyan-400">{xpPercentage}%</span>
-                <span className="text-amber-400 font-bold">{isAr ? 'الأسطوري (Legend Aura)' : 'Legend Aura'}</span>
+                <span className="font-bold text-cyan-700 dark:text-cyan-400">{xpPercentage}%</span>
+                <span className="text-amber-700 dark:text-amber-400 font-bold">{isAr ? 'الأسطوري (Legend Aura)' : 'Legend Aura'}</span>
               </div>
             </div>
 
@@ -303,12 +321,14 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                   onClick={onUseStreakFreeze}
                   className={`text-[10px] px-2.5 py-1 rounded-full border flex items-center gap-1 font-bold transition-all cursor-pointer ${
                     streakData.freezesRemaining > 0
-                      ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/20'
-                      : 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
+                      ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20'
+                      : theme === 'dark'
+                      ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
+                      : 'bg-slate-100 border-slate-300 text-slate-400 cursor-not-allowed'
                   }`}
                   title={isAr ? 'تجميد السلسلة ليوم راحة أو سفر' : 'Freeze streak for rest day'}
                 >
-                  <Snowflake className="w-3 h-3 text-cyan-400" />
+                  <Snowflake className="w-3 h-3 text-cyan-500 dark:text-cyan-400" />
                   <span>
                     {isAr
                       ? `حماية السلسلة: ${streakData.freezesRemaining} متوفر`
@@ -326,10 +346,14 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                       day.isToday
                         ? 'border-orange-500 ring-2 ring-orange-500/40 bg-orange-500/10'
                         : day.isCompleted
-                        ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                        ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                         : day.isRestDay
-                        ? 'border-slate-700/60 bg-slate-800/40 text-slate-400'
-                        : 'border-white/5 bg-black/20 text-slate-500'
+                        ? theme === 'dark'
+                          ? 'border-slate-700/60 bg-slate-800/40 text-slate-400'
+                          : 'border-slate-300 bg-slate-100 text-slate-600'
+                        : theme === 'dark'
+                        ? 'border-white/5 bg-black/20 text-slate-500'
+                        : 'border-slate-200 bg-slate-50 text-slate-500'
                     }`}
                   >
                     <span className="text-[10px] font-bold block mb-1">
@@ -342,17 +366,21 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                           <Flame className="w-4 h-4 fill-white" />
                         </div>
                       ) : day.isRestDay ? (
-                        <div className="w-7 h-7 rounded-full bg-slate-700/70 flex items-center justify-center text-slate-300">
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center ${
+                            theme === 'dark' ? 'bg-slate-700/70 text-slate-300' : 'bg-slate-200 text-slate-600'
+                          }`}
+                        >
                           <Shield className="w-3.5 h-3.5" />
                         </div>
                       ) : (
-                        <div className="w-6 h-6 rounded-full border border-dashed border-slate-600 flex items-center justify-center text-slate-500 text-[9px]">
+                        <div className="w-6 h-6 rounded-full border border-dashed border-slate-400 dark:border-slate-600 flex items-center justify-center text-slate-400 dark:text-slate-500 text-[9px]">
                           —
                         </div>
                       )}
                     </div>
 
-                    <span className="text-[9px] font-semibold truncate max-w-full block text-slate-400 mt-1">
+                    <span className="text-[9px] font-semibold truncate max-w-full block text-slate-600 dark:text-slate-400 mt-1">
                       {day.isRestDay ? (isAr ? 'راحة' : 'Rest') : day.isCompleted ? (isAr ? 'أُنجز' : 'Done') : (isAr ? 'قادم' : 'Pending')}
                     </span>
                   </div>
@@ -387,7 +415,13 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
           </div>
 
           {/* Category Filter Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-black/30 border border-white/10 backdrop-blur-md">
+          <div
+            className={`flex flex-wrap items-center gap-1.5 p-1 rounded-2xl border backdrop-blur-md ${
+              theme === 'dark'
+                ? 'bg-black/30 border-white/10'
+                : 'bg-slate-200/70 border-slate-300'
+            }`}
+          >
             {[
               { key: 'all', labelAr: 'الكل', labelEn: 'All' },
               { key: 'streak', labelAr: 'سلاسل الالتزام', labelEn: 'Streaks' },
@@ -401,7 +435,9 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   selectedCategory === cat.key
                     ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
+                    : theme === 'dark'
+                    ? 'text-slate-400 hover:text-white'
+                    : 'text-slate-700 hover:text-[#0B132B]'
                 }`}
               >
                 {isAr ? cat.labelAr : cat.labelEn}
@@ -421,7 +457,9 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                 className={`relative rounded-2xl p-4 border transition-all duration-300 cursor-pointer group flex flex-col items-center text-center select-none ${
                   isUnlocked
                     ? `bg-gradient-to-b ${getRarityBadgeStyle(badge.rarity)} hover:scale-105 hover:-translate-y-1`
-                    : 'bg-black/20 border-white/5 opacity-60 hover:opacity-80'
+                    : theme === 'dark'
+                    ? 'bg-black/20 border-white/5 opacity-60 hover:opacity-80'
+                    : 'bg-slate-100 border-slate-200 opacity-75 hover:opacity-95'
                 }`}
               >
                 {/* Unlocked / Locked Icon Badge */}
@@ -429,7 +467,9 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                   className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-3 transition-transform duration-300 group-hover:scale-110 shadow-lg ${
                     isUnlocked
                       ? 'bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-orange-500/40'
-                      : 'bg-slate-800 text-slate-500 border border-slate-700'
+                      : theme === 'dark'
+                      ? 'bg-slate-800 text-slate-500 border border-slate-700'
+                      : 'bg-white text-slate-500 border border-slate-300'
                   }`}
                 >
                   {isUnlocked ? getBadgeIcon(badge.iconName) : <Lock className="w-5 h-5" />}
@@ -438,7 +478,13 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                 {/* Badge Title */}
                 <h3
                   className={`font-black text-xs sm:text-sm line-clamp-1 mb-1 ${
-                    isUnlocked ? (theme === 'dark' ? 'text-white' : 'text-[#0B132B]') : 'text-slate-400'
+                    isUnlocked
+                      ? theme === 'dark'
+                        ? 'text-white'
+                        : 'text-[#0B132B]'
+                      : theme === 'dark'
+                      ? 'text-slate-400'
+                      : 'text-slate-600'
                   }`}
                 >
                   {isAr ? badge.titleAr : badge.titleEn}
@@ -446,7 +492,13 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
 
                 {/* Short Rarity & XP */}
                 <div className="flex items-center gap-1.5 mb-2">
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-black/40 border border-white/10 text-orange-400">
+                  <span
+                    className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border text-orange-600 dark:text-orange-400 ${
+                      theme === 'dark'
+                        ? 'bg-black/40 border-white/10'
+                        : 'bg-orange-50 border-orange-300'
+                    }`}
+                  >
                     +{badge.xpReward} XP
                   </span>
                 </div>
@@ -454,13 +506,17 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
                 {/* Progress bar if locked with progress */}
                 {!isUnlocked && badge.progress && (
                   <div className="w-full mt-auto pt-2">
-                    <div className="flex justify-between text-[9px] text-slate-400 font-semibold mb-1">
+                    <div className="flex justify-between text-[9px] text-slate-500 dark:text-slate-400 font-semibold mb-1">
                       <span>{isAr ? 'التقدم' : 'Progress'}</span>
                       <span>
                         {badge.progress.current} / {badge.progress.target}
                       </span>
                     </div>
-                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`w-full rounded-full h-1.5 overflow-hidden ${
+                        theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'
+                      }`}
+                    >
                       <div
                         className="h-full bg-orange-500 rounded-full"
                         style={{ width: `${(badge.progress.current / badge.progress.target) * 100}%` }}
@@ -483,7 +539,7 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
 
       {/* 3. BADGE DETAIL MODAL WITH CELEBRATION */}
       {selectedBadge && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
           <div
             className={`relative w-full max-w-md rounded-3xl p-6 sm:p-8 border shadow-2xl overflow-hidden transition-all text-center ${
               theme === 'dark'
@@ -496,7 +552,11 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
 
             <button
               onClick={() => setSelectedBadge(null)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer"
+              className={`absolute top-4 right-4 p-2 rounded-full transition-colors cursor-pointer ${
+                theme === 'dark'
+                  ? 'bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-[#0B132B]'
+              }`}
             >
               <X className="w-5 h-5" />
             </button>
@@ -506,7 +566,7 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
               {getBadgeIcon(selectedBadge.iconName)}
             </div>
 
-            <span className="text-[10px] font-black tracking-widest uppercase px-3 py-1 rounded-full bg-orange-500/15 border border-orange-500/40 text-orange-400 mb-2 inline-block">
+            <span className="text-[10px] font-black tracking-widest uppercase px-3 py-1 rounded-full bg-orange-500/15 border border-orange-500/40 text-orange-600 dark:text-orange-400 mb-2 inline-block">
               {getRarityLabel(selectedBadge.rarity)}
             </span>
 
@@ -520,12 +580,20 @@ export const GamificationStreakSection: React.FC<GamificationStreakSectionProps>
 
             {/* Badge Metadata Pill Grid */}
             <div className="grid grid-cols-2 gap-3 mb-6 text-xs">
-              <div className="p-3 rounded-xl bg-black/30 border border-white/10">
-                <span className="text-slate-400 block text-[10px] mb-1">{isAr ? 'مكافأة نقاط الخبرة' : 'XP Reward'}</span>
-                <span className="font-black text-orange-400">+{selectedBadge.xpReward} XP</span>
+              <div
+                className={`p-3 rounded-xl border ${
+                  theme === 'dark' ? 'bg-black/30 border-white/10' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <span className="text-slate-500 dark:text-slate-400 block text-[10px] mb-1">{isAr ? 'مكافأة نقاط الخبرة' : 'XP Reward'}</span>
+                <span className="font-black text-orange-600 dark:text-orange-400">+{selectedBadge.xpReward} XP</span>
               </div>
-              <div className="p-3 rounded-xl bg-black/30 border border-white/10">
-                <span className="text-slate-400 block text-[10px] mb-1">{isAr ? 'تاريخ الإنجاز' : 'Date Unlocked'}</span>
+              <div
+                className={`p-3 rounded-xl border ${
+                  theme === 'dark' ? 'bg-black/30 border-white/10' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <span className="text-slate-500 dark:text-slate-400 block text-[10px] mb-1">{isAr ? 'تاريخ الإنجاز' : 'Date Unlocked'}</span>
                 <span className="font-bold">
                   {selectedBadge.unlockedDate ? selectedBadge.unlockedDate : isAr ? 'قيد الإنجاز' : 'In Progress'}
                 </span>

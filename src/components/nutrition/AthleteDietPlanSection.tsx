@@ -39,12 +39,14 @@ interface AthleteDietPlanSectionProps {
 
 export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
   language,
+  theme = 'dark',
   isVIP = false,
   isLocked = false,
   subscriberEmail,
   clientId,
 }) => {
-  // Check global or per-subscriber lock setting reactively (fast local + Supabase authoritative)
+  const isLight = theme === 'light';
+
   const [storedLocked, setStoredLocked] = useState<boolean>(() =>
     isSubscriberNutritionLocked(subscriberEmail)
   );
@@ -64,7 +66,6 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
     const cleanId = (clientId || '').trim();
     const canonicalKey = getCanonicalClientKey(cleanId, cleanEmail);
 
-    // Reset immediately when switching subscriber/tier so previous user's diet never flashes
     setCategories(getDietPlanCategories(tier));
     setSelectedMealIndex(0);
 
@@ -166,22 +167,48 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
 
   if (isNutritionLocked) {
     return (
-      <section className="relative w-full rounded-3xl p-8 sm:p-12 bg-gradient-to-b from-[#0B132B]/95 via-[#070E24]/95 to-[#030712] border-2 border-amber-500/40 shadow-[0_10px_40px_rgba(0,0,0,0.6)] backdrop-blur-xl text-center select-none overflow-hidden animate-in fade-in">
+      <section
+        className={`relative w-full rounded-3xl p-8 sm:p-12 border-2 text-center select-none overflow-hidden ${
+          isLight
+            ? 'bg-[#FAFBFD] border-amber-500/50 shadow-lg'
+            : 'bg-gradient-to-b from-[#0B132B]/95 via-[#070E24]/95 to-[#030712] border-amber-500/40 shadow-[0_10px_40px_rgba(0,0,0,0.6)] backdrop-blur-xl'
+        }`}
+      >
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="relative z-10 max-w-xl mx-auto space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border-2 border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(245,158,11,0.3)]">
+          <div
+            className={`w-16 h-16 rounded-2xl border-2 flex items-center justify-center mx-auto ${
+              isLight
+                ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-sm'
+                : 'bg-amber-500/20 border-amber-500/40 text-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.3)]'
+            }`}
+          >
             <Lock className="w-8 h-8" />
           </div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold">
+          <div
+            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold ${
+              isLight
+                ? 'bg-amber-50 border-amber-300 text-amber-800'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+            }`}
+          >
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>{language === 'ar' ? 'الخطة الغذائية معلقة مؤقتاً' : 'Nutrition Plan Temporarily Locked'}</span>
           </div>
-          <h3 className="text-xl sm:text-2xl font-black text-white leading-snug">
+          <h3
+            className={`text-xl sm:text-2xl font-black leading-snug ${
+              isLight ? 'text-[#0B132B]' : 'text-white'
+            }`}
+          >
             {language === 'ar'
               ? '🔒 تم تعليق/قفل عرض الخطة الغذائية من قبل الكوتش لحين تحديث التقييم والمقاييس الشخصية'
               : '🔒 Nutrition plan access is temporarily suspended by the coach pending assessment and biometrics update'}
           </h3>
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
+          <p
+            className={`text-xs sm:text-sm leading-relaxed font-medium ${
+              isLight ? 'text-slate-600' : 'text-slate-300'
+            }`}
+          >
             {language === 'ar'
               ? 'يقوم الكوتش حالياً بمراجعة وتعديل خطتك الغذائية والسعرات والماكروز وفقاً لآخر قياساتك. يرجى التواصل مع الكوتش أو إرسال استفسار عند الحاجة.'
               : 'The coach is updating your custom meal plan, macros, and calories. Please contact the coach or submit an inquiry if you have questions.'}
@@ -192,27 +219,53 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
   }
 
   return (
-    <section className="relative w-full rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#0B132B]/95 via-[#070E24]/95 to-[#030712] border border-orange-500/30 shadow-[0_10px_40px_rgba(0,0,0,0.6)] backdrop-blur-xl overflow-hidden select-none">
+    <section
+      className={`relative w-full rounded-3xl p-6 sm:p-8 border overflow-hidden select-none transition-colors ${
+        isLight
+          ? 'bg-[#FAFBFD] border-slate-300 shadow-lg'
+          : 'bg-gradient-to-b from-[#0B132B]/95 via-[#070E24]/95 to-[#030712] border-orange-500/30 shadow-[0_10px_40px_rgba(0,0,0,0.6)] backdrop-blur-xl'
+      }`}
+    >
       {/* Background Ambient Glow */}
-      <div className="absolute top-0 right-1/4 w-96 h-96 bg-orange-600/10 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-orange-600/8 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none" />
 
       {/* Top Header */}
-      <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-white/10">
+      <div
+        className={`relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b ${
+          isLight ? 'border-slate-200' : 'border-white/10'
+        }`}
+      >
         <div>
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 font-extrabold text-xs tracking-wider uppercase mb-2">
-            <Utensils className="w-3.5 h-3.5 text-orange-400" />
+          <div
+            className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full border font-extrabold text-xs tracking-wider uppercase mb-2 ${
+              isLight
+                ? 'bg-orange-50 border-orange-300 text-orange-700'
+                : 'bg-orange-500/10 border-orange-500/30 text-orange-400'
+            }`}
+          >
+            <Utensils className="w-3.5 h-3.5" />
             <span>{language === 'ar' ? 'الجدول الغذائي الرياضي المعتمد' : 'Official Athletic Nutrition Plan'}</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-2">
+          <h2
+            className={`text-2xl sm:text-3xl font-black flex items-center gap-2 ${
+              isLight ? 'text-[#0B132B]' : 'text-white'
+            }`}
+          >
             <span>{language === 'ar' ? 'نظام الوجبات والخيارات المتوازنة' : 'Custom Meal Plan & Options'}</span>
             {isVIP && (
-              <span className="text-xs px-2.5 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/40 font-mono">
+              <span
+                className={`text-xs px-2.5 py-0.5 rounded-md border font-mono ${
+                  isLight
+                    ? 'bg-amber-100 text-amber-900 border-amber-400'
+                    : 'bg-amber-400/20 text-amber-300 border-amber-400/40'
+                }`}
+              >
                 VIP MACROS
               </span>
             )}
           </h2>
-          <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1">
+          <p className={`text-xs sm:text-sm font-medium mt-1 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
             {language === 'ar'
               ? 'اختر وجبتك المفضلة يومياً من بين 7 خيارات للفطور، 7 للغداء، 7 للعشاء، و6 خيارات للسناكات.'
               : 'Choose your preferred meals daily: 7 Breakfast, 7 Lunch, 7 Dinner, and 6 Snack options.'}
@@ -220,12 +273,18 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
         </div>
 
         {/* View Toggle (Featured Detail vs All Grid) */}
-        <div className="flex items-center gap-1.5 p-1 bg-black/40 border border-white/10 rounded-2xl">
+        <div
+          className={`flex items-center gap-1.5 p-1 border rounded-2xl ${
+            isLight ? 'bg-slate-100 border-slate-300' : 'bg-black/40 border-white/10'
+          }`}
+        >
           <button
             onClick={() => setViewMode('featured')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               viewMode === 'featured'
                 ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-md'
+                : isLight
+                ? 'text-slate-600 hover:text-[#0B132B]'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -236,6 +295,8 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               viewMode === 'grid'
                 ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-md'
+                : isLight
+                ? 'text-slate-600 hover:text-[#0B132B]'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -244,7 +305,7 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
         </div>
       </div>
 
-      {/* Category Selection Tabs (فطور = 7, غداء = 7, عشاء = 7, سناكين = 6) */}
+      {/* Category Selection Tabs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 my-6">
         {categories.map((cat) => {
           const isSelected = selectedCategoryKey === cat.key;
@@ -254,7 +315,11 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
               onClick={() => handleSelectCategory(cat.key)}
               className={`p-3.5 sm:p-4 rounded-2xl border text-start transition-all cursor-pointer flex flex-col justify-between ${
                 isSelected
-                  ? 'bg-gradient-to-br from-[#1C2541] via-[#0B132B] to-[#120F05] border-orange-500 shadow-[0_0_25px_rgba(234,88,12,0.35)] scale-[1.02]'
+                  ? isLight
+                    ? 'bg-gradient-to-br from-[#0B132B] to-[#1C2541] border-orange-500 text-white shadow-md scale-[1.02]'
+                    : 'bg-gradient-to-br from-[#1C2541] via-[#0B132B] to-[#120F05] border-orange-500 shadow-[0_0_25px_rgba(234,88,12,0.35)] scale-[1.02]'
+                  : isLight
+                  ? 'bg-white border-slate-300 hover:border-orange-500/60 text-[#0B132B]'
                   : 'bg-black/30 border-white/10 hover:border-white/20 text-slate-300 hover:bg-white/5'
               }`}
             >
@@ -264,6 +329,8 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
                   className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
                     isSelected
                       ? 'bg-orange-500 text-white shadow-xs'
+                      : isLight
+                      ? 'bg-slate-100 text-slate-700'
                       : 'bg-white/10 text-slate-400'
                   }`}
                 >
@@ -271,10 +338,18 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
                 </span>
               </div>
               <div>
-                <h3 className={`font-black text-sm sm:text-base ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                <h3
+                  className={`font-black text-sm sm:text-base ${
+                    isSelected ? 'text-white' : isLight ? 'text-[#0B132B]' : 'text-slate-200'
+                  }`}
+                >
                   {language === 'ar' ? cat.titleAr : cat.titleEn}
                 </h3>
-                <p className="text-[10px] sm:text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                <p
+                  className={`text-[10px] sm:text-[11px] line-clamp-1 mt-0.5 ${
+                    isSelected ? 'text-slate-300' : isLight ? 'text-slate-600' : 'text-slate-400'
+                  }`}
+                >
                   {cat.subtitleAr}
                 </p>
               </div>
@@ -286,7 +361,7 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
       {/* VIEW MODE 1: FEATURED CAROUSEL / DETAIL CARD */}
       {viewMode === 'featured' && (
         <div className="space-y-6">
-          {/* Sub-item Quick Picker Bar (Pills 1 to 7) */}
+          {/* Sub-item Quick Picker Bar */}
           <div className="flex items-center justify-between gap-2 overflow-x-auto pb-2 scrollbar-none">
             <div className="flex items-center gap-1.5 min-w-max">
               {activeCategory.meals.map((meal, idx) => {
@@ -297,7 +372,9 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
                     onClick={() => setSelectedMealIndex(idx)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                       isCurrent
-                        ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white border-orange-400 shadow-[0_0_15px_rgba(234,88,12,0.4)] scale-105'
+                        ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white border-orange-400 shadow-md scale-105'
+                        : isLight
+                        ? 'bg-white text-[#0B132B] border-slate-300 hover:border-orange-500'
                         : 'bg-white/5 text-slate-300 border-white/10 hover:border-orange-500/40 hover:text-white'
                     }`}
                   >
@@ -311,14 +388,22 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
               <button
                 onClick={handlePrevMeal}
                 aria-label="Previous Meal"
-                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                  isLight
+                    ? 'bg-white hover:bg-slate-100 border-slate-300 text-[#0B132B]'
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
+                }`}
               >
                 <ChevronRight className="w-4 h-4 rtl:rotate-180" />
               </button>
               <button
                 onClick={handleNextMeal}
                 aria-label="Next Meal"
-                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                  isLight
+                    ? 'bg-white hover:bg-slate-100 border-slate-300 text-[#0B132B]'
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
+                }`}
               >
                 <ChevronLeft className="w-4 h-4 rtl:rotate-180" />
               </button>
@@ -326,42 +411,74 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
           </div>
 
           {/* Active Meal Detailed Card */}
-          <div className="rounded-3xl p-6 sm:p-8 bg-[#050C1F]/90 border-2 border-orange-500/40 shadow-2xl space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
+          <div
+            className={`rounded-3xl p-6 sm:p-8 border-2 space-y-6 ${
+              isLight
+                ? 'bg-white border-orange-400/60 shadow-lg'
+                : 'bg-[#050C1F]/90 border-orange-500/40 shadow-2xl'
+            }`}
+          >
+            <div
+              className={`flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b ${
+                isLight ? 'border-slate-200' : 'border-white/10'
+              }`}
+            >
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="px-3 py-0.5 rounded-full bg-orange-500/20 border border-orange-500/40 text-orange-400 font-mono font-bold text-xs">
-                    {language === 'ar' ? `الخيار رقم ${safeMealIndex + 1} من ${activeCategory.meals.length}` : `Option ${safeMealIndex + 1} of ${activeCategory.meals.length}`}
+                  <span
+                    className={`px-3 py-0.5 rounded-full border font-mono font-bold text-xs ${
+                      isLight
+                        ? 'bg-orange-50 border-orange-300 text-orange-800'
+                        : 'bg-orange-500/20 border-orange-500/40 text-orange-400'
+                    }`}
+                  >
+                    {language === 'ar'
+                      ? `الخيار رقم ${safeMealIndex + 1} من ${activeCategory.meals.length}`
+                      : `Option ${safeMealIndex + 1} of ${activeCategory.meals.length}`}
                   </span>
                   {currentMeal.tagsAr.map((tag, tIdx) => (
                     <span
                       key={tIdx}
-                      className="px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-[11px] font-semibold"
+                      className={`px-2.5 py-0.5 rounded-full border text-[11px] font-semibold ${
+                        isLight
+                          ? 'bg-slate-100 border-slate-300 text-slate-700'
+                          : 'bg-white/5 border-white/10 text-slate-300'
+                      }`}
                     >
                       {tag}
                     </span>
                   ))}
                 </div>
-                <h3 className="text-xl sm:text-2xl font-black text-white leading-tight">
+                <h3
+                  className={`text-xl sm:text-2xl font-black leading-tight ${
+                    isLight ? 'text-[#0B132B]' : 'text-white'
+                  }`}
+                >
                   {currentMeal.nameAr}
                 </h3>
-                <p className="text-xs text-slate-400 mt-1 font-mono">
+                <p className={`text-xs mt-1 font-mono ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                   {currentMeal.nameEn} • {currentMeal.portionAr}
                 </p>
               </div>
 
               {/* Calories Highlight Box */}
-              <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-gradient-to-br from-orange-600/20 via-orange-500/10 to-amber-500/20 border border-orange-500/50 shrink-0 shadow-[0_0_20px_rgba(234,88,12,0.2)]">
-                <Flame className="w-7 h-7 text-orange-500 shrink-0" />
+              <div
+                className={`flex items-center gap-3 px-5 py-3 rounded-2xl border shrink-0 ${
+                  isLight
+                    ? 'bg-orange-50 border-orange-300 shadow-xs'
+                    : 'bg-gradient-to-br from-orange-600/20 via-orange-500/10 to-amber-500/20 border-orange-500/50 shadow-[0_0_20px_rgba(234,88,12,0.2)]'
+                }`}
+              >
+                <Flame className="w-7 h-7 text-[#EA580C] dark:text-orange-500 shrink-0" />
                 <div className="text-start">
-                  <span className="text-[10px] text-slate-400 block font-bold uppercase">
+                  <span className={`text-[10px] block font-bold uppercase ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     {language === 'ar' ? 'إجمالي السعرات' : 'TOTAL ENERGY'}
                   </span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-black text-white font-mono">
+                    <span className={`text-2xl font-black font-mono ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>
                       {currentMeal.calories}
                     </span>
-                    <span className="text-xs font-bold text-orange-400">KCAL</span>
+                    <span className="text-xs font-bold text-[#EA580C] dark:text-orange-400">KCAL</span>
                   </div>
                 </div>
               </div>
@@ -370,69 +487,113 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
             {/* Macros Breakdown 4-Card Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
               {/* Protein */}
-              <div className="p-4 rounded-2xl bg-black/40 border border-emerald-500/40 text-center shadow-xs">
-                <div className="w-8 h-8 mx-auto rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center mb-2">
+              <div
+                className={`p-4 rounded-2xl border text-center shadow-xs ${
+                  isLight ? 'bg-emerald-50/60 border-emerald-300' : 'bg-black/40 border-emerald-500/40'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 mx-auto rounded-xl flex items-center justify-center mb-2 ${
+                    isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-500/15 text-emerald-400'
+                  }`}
+                >
                   <Dumbbell className="w-4 h-4" />
                 </div>
-                <span className="text-[11px] text-slate-400 block font-bold">
+                <span className={`text-[11px] block font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                   {language === 'ar' ? 'البروتين الصافي' : 'Protein'}
                 </span>
-                <span className="text-xl font-black text-emerald-400 font-mono">
+                <span className="text-xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
                   {currentMeal.protein} <span className="text-xs font-bold">غرام</span>
                 </span>
               </div>
 
               {/* Carbs */}
-              <div className="p-4 rounded-2xl bg-black/40 border border-amber-500/40 text-center shadow-xs">
-                <div className="w-8 h-8 mx-auto rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center mb-2">
+              <div
+                className={`p-4 rounded-2xl border text-center shadow-xs ${
+                  isLight ? 'bg-amber-50/70 border-amber-300' : 'bg-black/40 border-amber-500/40'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 mx-auto rounded-xl flex items-center justify-center mb-2 ${
+                    isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-500/15 text-amber-400'
+                  }`}
+                >
                   <Wheat className="w-4 h-4" />
                 </div>
-                <span className="text-[11px] text-slate-400 block font-bold">
+                <span className={`text-[11px] block font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                   {language === 'ar' ? 'الكربوهيدرات' : 'Carbs'}
                 </span>
-                <span className="text-xl font-black text-amber-300 font-mono">
+                <span className="text-xl font-black text-amber-700 dark:text-amber-300 font-mono">
                   {currentMeal.carbs} <span className="text-xs font-bold">غرام</span>
                 </span>
               </div>
 
               {/* Fats */}
-              <div className="p-4 rounded-2xl bg-black/40 border border-rose-500/40 text-center shadow-xs">
-                <div className="w-8 h-8 mx-auto rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center mb-2">
+              <div
+                className={`p-4 rounded-2xl border text-center shadow-xs ${
+                  isLight ? 'bg-rose-50/70 border-rose-300' : 'bg-black/40 border-rose-500/40'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 mx-auto rounded-xl flex items-center justify-center mb-2 ${
+                    isLight ? 'bg-rose-100 text-rose-700' : 'bg-rose-500/15 text-rose-400'
+                  }`}
+                >
                   <Droplet className="w-4 h-4" />
                 </div>
-                <span className="text-[11px] text-slate-400 block font-bold">
+                <span className={`text-[11px] block font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                   {language === 'ar' ? 'الدهون الصحية' : 'Healthy Fats'}
                 </span>
-                <span className="text-xl font-black text-rose-400 font-mono">
+                <span className="text-xl font-black text-rose-700 dark:text-rose-400 font-mono">
                   {currentMeal.fats} <span className="text-xs font-bold">غرام</span>
                 </span>
               </div>
 
-              {/* Fibers / Meal Size */}
-              <div className="p-4 rounded-2xl bg-black/40 border border-blue-500/40 text-center shadow-xs">
-                <div className="w-8 h-8 mx-auto rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center mb-2">
+              {/* Portion Size */}
+              <div
+                className={`p-4 rounded-2xl border text-center shadow-xs ${
+                  isLight ? 'bg-blue-50/70 border-blue-300' : 'bg-black/40 border-blue-500/40'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 mx-auto rounded-xl flex items-center justify-center mb-2 ${
+                    isLight ? 'bg-blue-100 text-[#1E3A8A]' : 'bg-blue-500/15 text-blue-400'
+                  }`}
+                >
                   <Utensils className="w-4 h-4" />
                 </div>
-                <span className="text-[11px] text-slate-400 block font-bold">
+                <span className={`text-[11px] block font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                   {language === 'ar' ? 'حجم الحصة' : 'Portion'}
                 </span>
-                <span className="text-sm font-black text-blue-300 truncate block mt-1">
+                <span className="text-sm font-black text-[#1E3A8A] dark:text-blue-300 truncate block mt-1">
                   {currentMeal.portionAr}
                 </span>
               </div>
             </div>
 
-            {/* Ingredients & Quantities Breakdown */}
-            <div className="space-y-3 bg-black/30 p-5 rounded-2xl border border-white/5">
-              <h4 className="text-sm font-black text-white flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>{language === 'ar' ? 'المكونات والمقادير المحددة بدقة (بالغرام):' : 'Exact Ingredients & Gram Portions:'}</span>
+            {/* Ingredients Breakdown */}
+            <div
+              className={`space-y-3 p-5 rounded-2xl border ${
+                isLight ? 'bg-slate-100/80 border-slate-300' : 'bg-black/30 border-white/5'
+              }`}
+            >
+              <h4 className={`text-sm font-black flex items-center gap-2 ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>
+                  {language === 'ar'
+                    ? 'المكونات والمقادير المحددة بدقة (بالغرام):'
+                    : 'Exact Ingredients & Gram Portions:'}
+                </span>
               </h4>
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
                 {currentMeal.ingredientsAr.map((ing, iIdx) => (
                   <li
                     key={iIdx}
-                    className="flex items-start gap-2 text-xs text-slate-300 bg-white/5 p-3 rounded-xl border border-white/5"
+                    className={`flex items-start gap-2 text-xs p-3 rounded-xl border ${
+                      isLight
+                        ? 'text-[#0B132B] bg-white border-slate-200'
+                        : 'text-slate-300 bg-white/5 border-white/5'
+                    }`}
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0" />
                     <span>{ing}</span>
@@ -441,14 +602,20 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
               </ul>
             </div>
 
-            {/* Coach Omar Adnan's Expert Nutrition Tip */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-transparent border-s-4 border-orange-500 border-t border-b border-e border-orange-500/20 flex items-start gap-3">
-              <Sparkles className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" />
+            {/* Coach Tip */}
+            <div
+              className={`p-4 sm:p-5 rounded-2xl border-s-4 border-orange-500 border-t border-b border-e flex items-start gap-3 ${
+                isLight
+                  ? 'bg-orange-50/80 border-orange-300'
+                  : 'bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-transparent border-orange-500/20'
+              }`}
+            >
+              <Sparkles className="w-5 h-5 text-[#EA580C] dark:text-orange-400 shrink-0 mt-0.5" />
               <div>
-                <span className="text-xs font-black text-orange-400 block mb-0.5">
+                <span className="text-xs font-black text-[#EA580C] dark:text-orange-400 block mb-0.5">
                   {language === 'ar' ? 'توجيه الكوتش عمر عدنان للوجبة:' : 'Coach Omar Adnan Tip:'}
                 </span>
-                <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                <p className={`text-xs leading-relaxed font-medium ${isLight ? 'text-[#0B132B]' : 'text-slate-200'}`}>
                   {currentMeal.tipAr}
                 </p>
               </div>
@@ -467,30 +634,48 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
                 setSelectedMealIndex(mIdx);
                 setViewMode('featured');
               }}
-              className="p-5 rounded-2xl bg-[#050C1F]/90 border border-white/10 hover:border-orange-500 transition-all hover:scale-[1.02] cursor-pointer flex flex-col justify-between space-y-4 shadow-lg group"
+              className={`p-5 rounded-2xl border transition-all hover:scale-[1.02] cursor-pointer flex flex-col justify-between space-y-4 shadow-md group ${
+                isLight
+                  ? 'bg-white border-slate-300 hover:border-orange-500'
+                  : 'bg-[#050C1F]/90 border-white/10 hover:border-orange-500'
+              }`}
             >
               <div>
                 <div className="flex items-center justify-between text-xs mb-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-bold font-mono">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full font-bold font-mono ${
+                      isLight ? 'bg-orange-100 text-orange-800' : 'bg-orange-500/20 text-orange-400'
+                    }`}
+                  >
                     {language === 'ar' ? `صنف ${mIdx + 1}` : `Item ${mIdx + 1}`}
                   </span>
-                  <span className="font-mono text-white font-bold">
+                  <span className={`font-mono font-bold ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>
                     {meal.calories} KCAL
                   </span>
                 </div>
-                <h4 className="font-black text-white text-base group-hover:text-orange-400 transition-colors">
+                <h4
+                  className={`font-black text-base transition-colors ${
+                    isLight
+                      ? 'text-[#0B132B] group-hover:text-[#EA580C]'
+                      : 'text-white group-hover:text-orange-400'
+                  }`}
+                >
                   {meal.nameAr}
                 </h4>
-                <p className="text-xs text-slate-400 mt-1 line-clamp-2">
+                <p className={`text-xs mt-1 line-clamp-2 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                   {meal.tipAr}
                 </p>
               </div>
 
-              <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs font-mono font-bold text-slate-300">
-                <span className="text-emerald-400">{meal.protein}g P</span>
-                <span className="text-amber-300">{meal.carbs}g C</span>
-                <span className="text-rose-400">{meal.fats}g F</span>
-                <span className="text-orange-400 text-[11px] font-sans group-hover:underline">
+              <div
+                className={`pt-3 border-t flex items-center justify-between text-xs font-mono font-bold ${
+                  isLight ? 'border-slate-200 text-slate-700' : 'border-white/10 text-slate-300'
+                }`}
+              >
+                <span className="text-emerald-700 dark:text-emerald-400">{meal.protein}g P</span>
+                <span className="text-amber-700 dark:text-amber-300">{meal.carbs}g C</span>
+                <span className="text-rose-700 dark:text-rose-400">{meal.fats}g F</span>
+                <span className="text-[#EA580C] dark:text-orange-400 text-[11px] font-sans group-hover:underline">
                   {language === 'ar' ? 'التفاصيل ➔' : 'View ➔'}
                 </span>
               </div>
@@ -500,16 +685,20 @@ export const AthleteDietPlanSection: React.FC<AthleteDietPlanSectionProps> = ({
       )}
 
       {/* Bottom Nutrition Note */}
-      <div className="mt-6 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 font-medium">
+      <div
+        className={`mt-6 pt-4 border-t flex flex-wrap items-center justify-between gap-3 text-xs font-medium ${
+          isLight ? 'border-slate-200 text-slate-600' : 'border-white/10 text-slate-400'
+        }`}
+      >
         <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span>
             {language === 'ar'
               ? 'جميع الكميات والمقادير محسوبة وفق الاحتياج اليومي للوصول إلى الوزن المستهدف.'
               : 'All meals are calibrated to meet daily macro and caloric requirements.'}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-orange-400 font-bold">
+        <div className="flex items-center gap-1.5 text-[#EA580C] dark:text-orange-400 font-bold">
           <Info className="w-3.5 h-3.5" />
           <span>{language === 'ar' ? 'إجمالي الخيارات المتاحة: 27 صنفاً غذائياً' : '27 Total Meal Options Available'}</span>
         </div>

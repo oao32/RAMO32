@@ -482,13 +482,13 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Header & Tier Toggle */}
-      <div className="bg-[#0B132B]/80 p-6 rounded-3xl border border-white/10 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-[#0B132B]/80 p-6 rounded-3xl border border-slate-200 dark:border-white/10 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
         <div>
-          <h2 className="text-xl font-black text-white flex items-center gap-2">
-            <Utensils className="w-5 h-5 text-orange-400" />
+          <h2 className="text-xl font-black text-[#0B132B] dark:text-white flex items-center gap-2">
+            <Utensils className="w-5 h-5 text-orange-500 dark:text-orange-400" />
             <span>محرر الأنظمة الغذائية والوجبات المتقدم (Meal Plan CRUD)</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
             إضافة وتعديل وحذف الوجبات، تعديل المكونات والغرامات، وحساب الماكروز تلقائياً
           </p>
         </div>
@@ -500,32 +500,32 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
             onClick={handleToggleNutritionLock}
             className={`px-4 py-2 rounded-2xl border text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
               isNutritionLocked
-                ? 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/50 text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
-                : 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-400'
+                ? 'bg-amber-50 hover:bg-amber-100 border-amber-400/60 text-amber-800 dark:bg-amber-500/20 dark:hover:bg-amber-500/30 dark:border-amber-500/50 dark:text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+                : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-400/60 text-emerald-700 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 dark:border-emerald-500/40 dark:text-emerald-400'
             }`}
             title="التحكم في إتاحة أو حجب جدول الوجبات في لوحة المتدربين"
           >
             {isNutritionLocked ? (
               <>
-                <Lock className="w-4 h-4 text-amber-400" />
+                <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 <span>النظام الغذائي: مقفل ومخفي</span>
               </>
             ) : (
               <>
-                <Unlock className="w-4 h-4 text-emerald-400" />
+                <Unlock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>النظام الغذائي: متاح ومعروض</span>
               </>
             )}
           </button>
 
           {/* Tier switcher */}
-          <div className="flex items-center gap-1.5 p-1 bg-black/50 border border-white/10 rounded-2xl">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-2xl">
             <button
               onClick={() => handleManualTierSwitch('standard')}
               className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 tier === 'standard'
                   ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-[#0B132B] dark:text-slate-400 dark:hover:text-white'
               }`}
             >
               الباقة القياسية (Standard)
@@ -535,7 +535,7 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
               className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 tier === 'VIP'
                   ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-[#0B132B] dark:text-slate-400 dark:hover:text-white'
               }`}
             >
               باقة VIP النخبوية
@@ -547,8 +547,8 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
             onClick={handleResetToDefaults}
             className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
               confirmReset
-                ? 'bg-rose-500/20 border-rose-500/60 text-rose-300 animate-pulse'
-                : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
+                ? 'bg-rose-100 border-rose-400 text-rose-700 dark:bg-rose-500/20 dark:border-rose-500/60 dark:text-rose-300 animate-pulse'
+                : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:border-white/10 dark:text-slate-300 dark:hover:text-white'
             }`}
             title="استرجاع الوجبات الافتراضية"
           >
@@ -573,21 +573,21 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
       />
 
       {/* Per-Subscriber Nutrition Access Lock Controls */}
-      <div className="bg-[#0B132B]/80 p-5 rounded-3xl border border-white/10 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+      <div className="bg-white dark:bg-[#0B132B]/80 p-5 rounded-3xl border border-slate-200 dark:border-white/10 space-y-3 shadow-sm transition-colors">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-white/10 pb-3">
           <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-orange-400" />
-            <h3 className="text-sm font-black text-white">
+            <Users className="w-4 h-4 text-orange-500 dark:text-orange-400" />
+            <h3 className="text-sm font-black text-[#0B132B] dark:text-white">
               إخفاء / قفل النظام الغذائي عن المشترك (تحكم فردي)
             </h3>
           </div>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[11px] text-slate-600 dark:text-slate-400">
             قفل أو إتاحة عرض جدول الوجبات في بوابة كل مشترك بشكل مستقل
           </span>
         </div>
 
         {subscribers.length === 0 ? (
-          <p className="text-xs text-slate-400 py-2">
+          <p className="text-xs text-slate-600 dark:text-slate-400 py-2">
             لا يوجد مشتركون مسجلون حالياً. يمكنك استخدام زر القفل العام أعلاه أو إضافة مشترك من قسم إدارة المشتركين.
           </p>
         ) : (
@@ -597,24 +597,24 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
                 key={sub.email}
                 className={`p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
                   sub.nutritionPlanLocked
-                    ? 'bg-amber-500/10 border-amber-500/40'
-                    : 'bg-black/40 border-white/10'
+                    ? 'bg-amber-50 border-amber-300 dark:bg-amber-500/10 dark:border-amber-500/40'
+                    : 'bg-slate-50 border-slate-200 dark:bg-black/40 dark:border-white/10'
                 }`}
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-black text-white truncate">{sub.clientName}</span>
+                    <span className="text-xs font-black text-[#0B132B] dark:text-white truncate">{sub.clientName}</span>
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
                         sub.plan === 'VIP'
-                          ? 'bg-amber-500/20 text-amber-300'
-                          : 'bg-slate-700 text-slate-300'
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300'
+                          : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
                       }`}
                     >
                       {sub.plan === 'VIP' ? 'VIP' : 'Std'}
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono truncate block">
+                  <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono truncate block">
                     {sub.email}
                   </span>
                 </div>
@@ -624,8 +624,8 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
                   onClick={() => handleTogglePerSubscriberLock(sub)}
                   className={`px-3 py-1.5 rounded-xl border text-[11px] font-black flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
                     sub.nutritionPlanLocked
-                      ? 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/50 text-amber-300'
-                      : 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-300'
+                      ? 'bg-amber-100 hover:bg-amber-200 border-amber-400 text-amber-800 dark:bg-amber-500/20 dark:hover:bg-amber-500/30 dark:border-amber-500/50 dark:text-amber-300'
+                      : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-400/60 text-emerald-700 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 dark:border-emerald-500/40 dark:text-emerald-300'
                   }`}
                 >
                   {sub.nutritionPlanLocked ? (
@@ -648,69 +648,69 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
 
       {/* Save Notification */}
       {saveMessage && (
-        <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/50 text-white text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-500/20 border border-emerald-400 dark:border-emerald-500/50 text-emerald-800 dark:text-white text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <span>{saveMessage}</span>
         </div>
       )}
 
       {/* Live Auto-Calculated Daily Macro Totals Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 rounded-3xl bg-gradient-to-br from-[#070e24] via-[#0b132b] to-[#040817] border-2 border-orange-500/30 shadow-xl">
-        <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 text-center">
-          <span className="text-[11px] text-slate-400 block mb-1">متوسط السعرات اليومية</span>
-          <span className="text-xl font-black text-orange-400 font-mono">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 rounded-3xl bg-gradient-to-br from-slate-50 via-white to-orange-50/40 dark:from-[#070e24] dark:via-[#0b132b] dark:to-[#040817] border-2 border-orange-400/40 dark:border-orange-500/30 shadow-xl">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 text-center shadow-xs dark:shadow-none">
+          <span className="text-[11px] text-slate-600 dark:text-slate-400 block mb-1">متوسط السعرات اليومية</span>
+          <span className="text-xl font-black text-orange-600 dark:text-orange-400 font-mono">
             {dailyTotals.totalCal} Kcal
           </span>
           <span className="text-[10px] text-slate-500 block mt-0.5">محسوبة تلقائياً</span>
         </div>
-        <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 text-center">
-          <span className="text-[11px] text-slate-400 block mb-1">البروتين اليومي</span>
-          <span className="text-xl font-black text-blue-400 font-mono">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 text-center shadow-xs dark:shadow-none">
+          <span className="text-[11px] text-slate-600 dark:text-slate-400 block mb-1">البروتين اليومي</span>
+          <span className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono">
             {dailyTotals.totalP}g
           </span>
-          <span className="text-[10px] text-blue-500/80 block mt-0.5">
+          <span className="text-[10px] text-blue-600/80 dark:text-blue-500/80 block mt-0.5">
             {Math.round(((dailyTotals.totalP * 4) / (dailyTotals.totalCal || 1)) * 100)}%
           </span>
         </div>
-        <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 text-center">
-          <span className="text-[11px] text-slate-400 block mb-1">الكاربوهيدرات</span>
-          <span className="text-xl font-black text-amber-400 font-mono">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 text-center shadow-xs dark:shadow-none">
+          <span className="text-[11px] text-slate-600 dark:text-slate-400 block mb-1">الكاربوهيدرات</span>
+          <span className="text-xl font-black text-amber-600 dark:text-amber-400 font-mono">
             {dailyTotals.totalC}g
           </span>
-          <span className="text-[10px] text-amber-500/80 block mt-0.5">
+          <span className="text-[10px] text-amber-600/80 dark:text-amber-500/80 block mt-0.5">
             {Math.round(((dailyTotals.totalC * 4) / (dailyTotals.totalCal || 1)) * 100)}%
           </span>
         </div>
-        <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 text-center">
-          <span className="text-[11px] text-slate-400 block mb-1">الدهون الصحية</span>
-          <span className="text-xl font-black text-rose-400 font-mono">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 text-center shadow-xs dark:shadow-none">
+          <span className="text-[11px] text-slate-600 dark:text-slate-400 block mb-1">الدهون الصحية</span>
+          <span className="text-xl font-black text-rose-600 dark:text-rose-400 font-mono">
             {dailyTotals.totalF}g
           </span>
-          <span className="text-[10px] text-rose-500/80 block mt-0.5">
+          <span className="text-[10px] text-rose-600/80 dark:text-rose-500/80 block mt-0.5">
             {Math.round(((dailyTotals.totalF * 9) / (dailyTotals.totalCal || 1)) * 100)}%
           </span>
         </div>
       </div>
 
       {/* Templates & Quick Actions Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[#0B132B]/80 border border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-[#0B132B]/80 border border-slate-200 dark:border-white/10 shadow-sm">
         <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-orange-400" />
-          <span className="text-xs font-bold text-white">قوالب الخطط الغذائية الجاهزة:</span>
+          <Layers className="w-4 h-4 text-orange-500 dark:text-orange-400" />
+          <span className="text-xs font-bold text-[#0B132B] dark:text-white">قوالب الخطط الغذائية الجاهزة:</span>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsApplyTemplateModalOpen(true)}
-            className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 text-[#0B132B] dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-slate-200 dark:border-transparent"
           >
-            <Bookmark className="w-3.5 h-3.5 text-amber-400" />
+            <Bookmark className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
             <span>تطبيق قالب جاهز ({templates.length})</span>
           </button>
 
           <button
             onClick={() => setIsSaveTemplateModalOpen(true)}
-            className="px-3.5 py-1.5 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/40 text-orange-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 dark:bg-orange-500/20 dark:hover:bg-orange-500/30 border border-orange-300 dark:border-orange-500/40 text-orange-700 dark:text-orange-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>حفظ الخطة الحالية كقالب</span>
@@ -726,20 +726,20 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
             onClick={() => setActiveCategoryKey(cat.key)}
             className={`p-4 rounded-2xl border text-right transition-all cursor-pointer flex items-center justify-between ${
               activeCategoryKey === cat.key
-                ? 'bg-orange-500/15 border-orange-500 text-white ring-2 ring-orange-500/40 shadow-lg'
-                : 'bg-black/40 border-white/10 text-slate-400 hover:border-white/20'
+                ? 'bg-orange-50 dark:bg-orange-500/15 border-orange-500 text-[#0B132B] dark:text-white ring-2 ring-orange-500/40 shadow-lg'
+                : 'bg-white dark:bg-black/40 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-white/20'
             }`}
           >
             <div className="flex items-center gap-2.5">
               <span className="text-2xl">{cat.icon}</span>
               <div>
-                <h4 className="text-xs font-black text-white">{cat.titleAr}</h4>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
+                <h4 className="text-xs font-black text-[#0B132B] dark:text-white">{cat.titleAr}</h4>
+                <span className="text-[10px] text-slate-600 dark:text-slate-400 block mt-0.5">
                   {cat.meals.length} أصناف مخصصة
                 </span>
               </div>
             </div>
-            <span className="text-xs font-mono font-bold text-orange-400">
+            <span className="text-xs font-mono font-bold text-orange-600 dark:text-orange-400">
               {cat.meals.reduce((sum, m) => sum + m.calories, 0) / (cat.meals.length || 1) | 0} kcal avg
             </span>
           </button>
@@ -747,12 +747,12 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
       </div>
 
       {/* Active Category Header with Add Meal Button */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5 rounded-2xl bg-[#071329] border border-orange-500/30 shadow-md">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5 rounded-2xl bg-orange-50/70 dark:bg-[#071329] border border-orange-400/50 dark:border-orange-500/30 shadow-md">
         <div className="flex items-center gap-3">
           <span className="text-3xl">{activeCategory.icon}</span>
           <div>
-            <h3 className="text-base font-black text-white">{activeCategory.titleAr}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">{activeCategory.subtitleAr}</p>
+            <h3 className="text-base font-black text-[#0B132B] dark:text-white">{activeCategory.titleAr}</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{activeCategory.subtitleAr}</p>
           </div>
         </div>
 
@@ -770,30 +770,30 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
         {activeCategory.meals.map((meal, idx) => (
           <div
             key={meal.id}
-            className="p-5 rounded-3xl bg-[#0B132B]/90 border border-white/10 hover:border-orange-500/40 transition-all shadow-md space-y-3 flex flex-col justify-between group"
+            className="p-5 rounded-3xl bg-white dark:bg-[#0B132B]/90 border border-slate-200 dark:border-white/10 hover:border-orange-500/50 transition-all shadow-md space-y-3 flex flex-col justify-between group"
           >
             <div>
-              <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
-                <span className="px-2 py-0.5 rounded-md bg-orange-500/20 text-orange-400 text-[10px] font-bold">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2 mb-2">
+                <span className="px-2 py-0.5 rounded-md bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[10px] font-bold">
                   صنف {idx + 1}
                 </span>
-                <span className="text-sm font-black text-white font-mono">{meal.calories} Kcal</span>
+                <span className="text-sm font-black text-[#0B132B] dark:text-white font-mono">{meal.calories} Kcal</span>
               </div>
 
-              <h4 className="text-sm font-black text-white leading-snug mb-1">{meal.nameAr}</h4>
-              <p className="text-[11px] text-slate-400 font-semibold mb-2">{meal.portionAr}</p>
+              <h4 className="text-sm font-black text-[#0B132B] dark:text-white leading-snug mb-1">{meal.nameAr}</h4>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400 font-semibold mb-2">{meal.portionAr}</p>
 
               {/* Macros Chips */}
-              <div className="grid grid-cols-3 gap-1.5 p-2 rounded-xl bg-black/40 border border-white/5 text-center text-[10px] font-mono font-bold mb-3">
-                <span className="text-blue-400">{meal.protein}g P</span>
-                <span className="text-amber-400">{meal.carbs}g C</span>
-                <span className="text-rose-400">{meal.fats}g F</span>
+              <div className="grid grid-cols-3 gap-1.5 p-2 rounded-xl bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/5 text-center text-[10px] font-mono font-bold mb-3">
+                <span className="text-blue-600 dark:text-blue-400">{meal.protein}g P</span>
+                <span className="text-amber-600 dark:text-amber-400">{meal.carbs}g C</span>
+                <span className="text-rose-600 dark:text-rose-400">{meal.fats}g F</span>
               </div>
 
               {/* Ingredients preview */}
-              <div className="text-[11px] text-slate-300 space-y-1">
-                <span className="text-[10px] text-orange-400/90 font-bold block">المكونات والمقادير:</span>
-                <ul className="list-disc list-inside space-y-0.5 text-slate-300">
+              <div className="text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
+                <span className="text-[10px] text-orange-600 dark:text-orange-400/90 font-bold block">المكونات والمقادير:</span>
+                <ul className="list-disc list-inside space-y-0.5 text-slate-700 dark:text-slate-300">
                   {meal.ingredientsAr.slice(0, 3).map((ing, iIdx) => (
                     <li key={iIdx} className="line-clamp-1">{ing}</li>
                   ))}
@@ -804,24 +804,24 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
               </div>
 
               {meal.tipAr && (
-                <div className="mt-2.5 p-2 rounded-xl bg-orange-500/10 border border-orange-500/20 text-[10px] text-slate-300 font-medium">
+                <div className="mt-2.5 p-2 rounded-xl bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-[10px] text-slate-700 dark:text-slate-300 font-medium">
                   💡 {meal.tipAr}
                 </div>
               )}
             </div>
 
             {/* Meal Action Buttons */}
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10 mt-3">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-white/10 mt-3">
               <button
                 onClick={() => handleOpenEditMeal(meal)}
-                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-[#0B132B] dark:text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
-                <Edit3 className="w-3.5 h-3.5 text-orange-400" />
+                <Edit3 className="w-3.5 h-3.5 text-orange-500 dark:text-orange-400" />
                 <span>تعديل</span>
               </button>
               <button
                 onClick={() => handleDeleteMeal(meal.id)}
-                className="p-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all cursor-pointer"
+                className="p-1.5 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 transition-all cursor-pointer"
                 title="حذف الوجبة"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -833,24 +833,24 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
 
       {/* ADD / EDIT MEAL MODAL */}
       {isMealModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-[#0B132B] border-2 border-orange-500/40 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative text-white space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#0B132B] border-2 border-orange-500/40 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative text-[#0B132B] dark:text-white space-y-5">
             <button
               onClick={() => setIsMealModalOpen(false)}
-              className="absolute top-5 left-5 text-slate-400 hover:text-white p-2 rounded-xl bg-white/5"
+              className="absolute top-5 left-5 text-slate-500 hover:text-[#0B132B] dark:text-slate-400 dark:hover:text-white p-2 rounded-xl bg-slate-100 dark:bg-white/5 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-orange-500/20 text-orange-400 border border-orange-500/30">
+              <div className="p-3 rounded-2xl bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/30">
                 <Utensils className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-black text-white">
+                <h3 className="text-lg font-black text-[#0B132B] dark:text-white">
                   {editingMeal ? 'تعديل بيانات الوجبة' : 'إضافة وجبة جديدة'}
                 </h3>
-                <p className="text-xs text-orange-400 font-bold">
+                <p className="text-xs text-orange-600 dark:text-orange-400 font-bold">
                   {activeCategory.titleAr} ({tier === 'VIP' ? 'VIP' : 'Standard'})
                   {activeTargetClient ? ` — للمشترك: ${activeTargetClient.clientName}` : ''}
                 </p>
@@ -860,86 +860,86 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
             <form onSubmit={handleSaveMealForm} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-bold text-slate-300 block mb-1">اسم الوجبة (عربي):</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">اسم الوجبة (عربي):</label>
                   <input
                     type="text"
                     required
                     value={formNameAr}
                     onChange={(e) => setFormNameAr(e.target.value)}
                     placeholder="مثال: صدور دجاج مشوية مع بطاطا مهروسة"
-                    className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none"
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-300 block mb-1">اسم الوجبة (إنجليزي):</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">اسم الوجبة (إنجليزي):</label>
                   <input
                     type="text"
                     value={formNameEn}
                     onChange={(e) => setFormNameEn(e.target.value)}
                     placeholder="e.g. Grilled Chicken with Mashed Potato"
-                    className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none"
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">وصف الحصة / التقديم:</label>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">وصف الحصة / التقديم:</label>
                 <input
                   type="text"
                   value={formPortionAr}
                   onChange={(e) => setFormPortionAr(e.target.value)}
                   placeholder="مثال: طبق غداء رئيسي متكامل"
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
                 />
               </div>
 
               {/* Macros inputs */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-black/40 border border-white/10">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10">
                 <div>
-                  <label className="text-[11px] font-bold text-slate-400 block mb-1">السعرات (Kcal):</label>
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">السعرات (Kcal):</label>
                   <input
                     type="number"
                     value={formCalories}
                     onChange={(e) => setFormCalories(Number(e.target.value))}
                     required
-                    className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 focus:border-orange-500 text-white font-mono font-bold outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-black/60 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white font-mono font-bold outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-blue-400 block mb-1">البروتين (g):</label>
+                  <label className="text-[11px] font-bold text-blue-600 dark:text-blue-400 block mb-1">البروتين (g):</label>
                   <input
                     type="number"
                     value={formProtein}
                     onChange={(e) => setFormProtein(Number(e.target.value))}
                     required
-                    className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 focus:border-orange-500 text-white font-mono font-bold outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-black/60 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white font-mono font-bold outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-amber-400 block mb-1">الكاربوهيدرات (g):</label>
+                  <label className="text-[11px] font-bold text-amber-600 dark:text-amber-400 block mb-1">الكاربوهيدرات (g):</label>
                   <input
                     type="number"
                     value={formCarbs}
                     onChange={(e) => setFormCarbs(Number(e.target.value))}
                     required
-                    className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 focus:border-orange-500 text-white font-mono font-bold outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-black/60 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white font-mono font-bold outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-rose-400 block mb-1">الدهون (g):</label>
+                  <label className="text-[11px] font-bold text-rose-600 dark:text-rose-400 block mb-1">الدهون (g):</label>
                   <input
                     type="number"
                     value={formFats}
                     onChange={(e) => setFormFats(Number(e.target.value))}
                     required
-                    className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 focus:border-orange-500 text-white font-mono font-bold outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-black/60 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white font-mono font-bold outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
                   المكونات والمقادير (سطر لكل مكون):
                 </label>
                 <textarea
@@ -947,12 +947,12 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
                   value={formIngredients}
                   onChange={(e) => setFormIngredients(e.target.value)}
                   placeholder="200 غرام صدر دجاج مشوي&#10;150 غرام أرز أسمر مسلوق&#10;100 غرام بروكلي على البخار"
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none font-sans"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none font-sans"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
                   نصيحة وتوجيه الكوتش للوجبة:
                 </label>
                 <input
@@ -960,15 +960,15 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
                   value={formTip}
                   onChange={(e) => setFormTip(e.target.value)}
                   placeholder="مثال: يفضل تناولها قبل التمرين بساعتين لأعلى طاقة وانفجار عضلات"
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-white/10">
                 <button
                   type="button"
                   onClick={() => setIsMealModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-white/10 text-slate-300 text-xs font-bold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300 text-xs font-bold cursor-pointer"
                 >
                   إلغاء
                 </button>
@@ -986,22 +986,22 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
 
       {/* SAVE MEAL TEMPLATE MODAL */}
       {isSaveTemplateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-[#0B132B] border-2 border-orange-500/40 rounded-3xl w-full max-w-md p-6 shadow-2xl relative text-white space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#0B132B] border-2 border-orange-500/40 rounded-3xl w-full max-w-md p-6 shadow-2xl relative text-[#0B132B] dark:text-white space-y-5">
             <button
               onClick={() => setIsSaveTemplateModalOpen(false)}
-              className="absolute top-5 left-5 text-slate-400 hover:text-white p-2 rounded-xl bg-white/5"
+              className="absolute top-5 left-5 text-slate-500 hover:text-[#0B132B] dark:text-slate-400 dark:hover:text-white p-2 rounded-xl bg-slate-100 dark:bg-white/5 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-orange-500/20 text-orange-400 border border-orange-500/30">
+              <div className="p-3 rounded-2xl bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/30">
                 <Bookmark className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-black text-white">حفظ الخطة الحالية كقالب</h3>
-                <p className="text-xs text-slate-400 font-medium">
+                <h3 className="text-lg font-black text-[#0B132B] dark:text-white">حفظ الخطة الحالية كقالب</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
                   إعادة تطبيق هذا النظام على أي مشترك لاحقاً بنقرة واحدة
                 </p>
               </div>
@@ -1009,23 +1009,23 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
 
             <form onSubmit={handleSaveAsTemplate} className="space-y-4 text-xs">
               <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">اسم القالب:</label>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">اسم القالب:</label>
                 <input
                   type="text"
                   required
                   value={newTemplateName}
                   onChange={(e) => setNewTemplateName(e.target.value)}
                   placeholder="مثال: خطة تضخيم صافي 2500 سعرة"
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">تصنيف الهدف:</label>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">تصنيف الهدف:</label>
                 <select
                   value={newTemplateCategory}
                   onChange={(e) => setNewTemplateCategory(e.target.value as any)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/15 focus:border-orange-500 text-white outline-none font-bold"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white outline-none font-bold"
                 >
                   <option value="bulk">تضخيم وبناء عضلي (Bulk)</option>
                   <option value="cut">تنشيف وحرق دهون (Cut)</option>
@@ -1034,18 +1034,18 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
                 </select>
               </div>
 
-              <div className="p-3 rounded-xl bg-black/40 border border-white/10 text-xs">
-                <span className="text-slate-400 block mb-1">إجمالي ماكروز القالب:</span>
-                <span className="font-mono text-orange-400 font-bold">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 text-xs">
+                <span className="text-slate-600 dark:text-slate-400 block mb-1">إجمالي ماكروز القالب:</span>
+                <span className="font-mono text-orange-600 dark:text-orange-400 font-bold">
                   {dailyTotals.totalCal} Kcal • {dailyTotals.totalP}g P • {dailyTotals.totalC}g C • {dailyTotals.totalF}g F
                 </span>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-white/10">
                 <button
                   type="button"
                   onClick={() => setIsSaveTemplateModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-white/10 text-slate-300 text-xs font-bold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300 text-xs font-bold cursor-pointer"
                 >
                   إلغاء
                 </button>
@@ -1063,22 +1063,22 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
 
       {/* APPLY MEAL TEMPLATE MODAL */}
       {isApplyTemplateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-[#0B132B] border-2 border-orange-500/40 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative text-white space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#0B132B] border-2 border-orange-500/40 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative text-[#0B132B] dark:text-white space-y-5">
             <button
               onClick={() => setIsApplyTemplateModalOpen(false)}
-              className="absolute top-5 left-5 text-slate-400 hover:text-white p-2 rounded-xl bg-white/5"
+              className="absolute top-5 left-5 text-slate-500 hover:text-[#0B132B] dark:text-slate-400 dark:hover:text-white p-2 rounded-xl bg-slate-100 dark:bg-white/5 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              <div className="p-3 rounded-2xl bg-amber-500/15 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                 <Bookmark className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-black text-white">تطبيق قالب غذائي جاهز</h3>
-                <p className="text-xs text-slate-400 font-medium">
+                <h3 className="text-lg font-black text-[#0B132B] dark:text-white">تطبيق قالب غذائي جاهز</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
                   اختر قالباً غذائياً لتطبيقه فوراً على باقة {tier === 'VIP' ? 'VIP' : 'Standard'}
                 </p>
               </div>
@@ -1088,16 +1088,16 @@ export const AdminDietEditor: React.FC<AdminDietEditorProps> = ({
               {templates.map((tmpl) => (
                 <div
                   key={tmpl.id}
-                  className="p-4 rounded-2xl bg-black/40 border border-white/10 hover:border-orange-500/40 transition-all flex items-center justify-between gap-3"
+                  className="p-4 rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 hover:border-orange-500/40 transition-all flex items-center justify-between gap-3"
                 >
                   <div>
-                    <h4 className="text-xs font-black text-white">{tmpl.nameAr}</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{tmpl.descriptionAr}</p>
-                    <div className="flex items-center gap-3 mt-2 text-[10px] font-mono font-bold text-orange-400">
+                    <h4 className="text-xs font-black text-[#0B132B] dark:text-white">{tmpl.nameAr}</h4>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">{tmpl.descriptionAr}</p>
+                    <div className="flex items-center gap-3 mt-2 text-[10px] font-mono font-bold text-orange-600 dark:text-orange-400">
                       <span>{tmpl.targetCalories} Kcal</span>
-                      <span className="text-blue-400">{tmpl.macros?.protein}g P</span>
-                      <span className="text-amber-400">{tmpl.macros?.carbs}g C</span>
-                      <span className="text-rose-400">{tmpl.macros?.fats}g F</span>
+                      <span className="text-blue-600 dark:text-blue-400">{tmpl.macros?.protein}g P</span>
+                      <span className="text-amber-600 dark:text-amber-400">{tmpl.macros?.carbs}g C</span>
+                      <span className="text-rose-600 dark:text-rose-400">{tmpl.macros?.fats}g F</span>
                     </div>
                   </div>
 

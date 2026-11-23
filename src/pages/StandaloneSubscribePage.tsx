@@ -7,8 +7,8 @@ import {
   SubscriptionDurationKey,
   SubscriptionPlanTier,
   Language,
-  Theme,
 } from '../types';
+import { useOaoTheme } from '../lib/themeUtils';
 import {
   ShieldCheck,
   AlertCircle,
@@ -59,20 +59,12 @@ export const StandaloneSubscribePage: React.FC = () => {
   const [language, setLanguage] = useState<Language>(() => {
     return (localStorage.getItem('oao_lang') as Language) || 'ar';
   });
-  const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('oao_theme') as Theme) || 'dark';
-  });
+  const { theme, toggleTheme } = useOaoTheme();
 
   const toggleLanguage = () => {
     const next = language === 'ar' ? 'en' : 'ar';
     setLanguage(next);
     localStorage.setItem('oao_lang', next);
-  };
-
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    localStorage.setItem('oao_theme', next);
   };
 
   // Navigation Steps: 1 = Plan Selection, 2 = Declaration Form, 3 = Confirmation & WhatsApp
@@ -789,7 +781,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between mt-1 mb-3">
                     <VIPBadge variant="hero" language={language} />
-                    <span className="font-mono text-xs font-bold text-amber-400">
+                    <span className="font-mono text-xs font-bold text-amber-600 dark:text-amber-400">
                       {DURATION_DATA.platinum[selectedDurationKey].labelAr}
                     </span>
                   </div>
@@ -812,15 +804,33 @@ export const StandaloneSubscribePage: React.FC = () => {
                   </p>
 
                   {/* Pricing Display */}
-                  <div className="p-4 rounded-2xl bg-black/40 border border-amber-500/30 mb-5">
+                  <div
+                    className={`p-4 rounded-2xl border mb-5 ${
+                      theme === 'dark'
+                        ? 'bg-black/40 border-amber-500/30'
+                        : 'bg-amber-50/90 border-amber-300'
+                    }`}
+                  >
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl sm:text-4xl font-black text-amber-400 font-mono">
+                      <span
+                        className={`text-3xl sm:text-4xl font-black font-mono ${
+                          theme === 'dark' ? 'text-amber-400' : 'text-amber-600'
+                        }`}
+                      >
                         {DURATION_DATA.platinum[selectedDurationKey].price}
                       </span>
-                      <span className="text-xs font-bold text-amber-300">
+                      <span
+                        className={`text-xs font-bold ${
+                          theme === 'dark' ? 'text-amber-300' : 'text-amber-800'
+                        }`}
+                      >
                         {language === 'ar' ? 'ريال سعودي' : 'SAR'}
                       </span>
-                      <span className="text-[11px] text-slate-400 font-mono ms-auto">
+                      <span
+                        className={`text-[11px] font-mono ms-auto ${
+                          theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                        }`}
+                      >
                         ~{Math.round(DURATION_DATA.platinum[selectedDurationKey].price / (DURATION_DATA.platinum[selectedDurationKey].days / 30))} {language === 'ar' ? 'ريال/شهر' : 'SAR/mo'}
                       </span>
                     </div>
@@ -828,7 +838,11 @@ export const StandaloneSubscribePage: React.FC = () => {
 
                   {/* Duration Selector for VIP */}
                   <div className="space-y-1.5 mb-5">
-                    <span className="text-[11px] font-bold text-amber-300/80 block">
+                    <span
+                      className={`text-[11px] font-bold block ${
+                        theme === 'dark' ? 'text-amber-300/80' : 'text-amber-800'
+                      }`}
+                    >
                       {language === 'ar' ? 'اختر مدة الاشتراك:' : 'Select Duration:'}
                     </span>
                     <div className="grid grid-cols-3 gap-2">
@@ -847,7 +861,9 @@ export const StandaloneSubscribePage: React.FC = () => {
                             className={`py-2 px-1 rounded-xl text-center text-xs font-black transition-all cursor-pointer ${
                               isSel
                                 ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-md border border-amber-300'
-                                : 'bg-black/50 text-slate-300 border border-white/10 hover:border-amber-400/40'
+                                : theme === 'dark'
+                                ? 'bg-black/50 text-slate-300 border border-white/10 hover:border-amber-400/40'
+                                : 'bg-white text-slate-800 border border-slate-300 hover:border-amber-500'
                             }`}
                           >
                             <span className="block text-[10px]">{language === 'ar' ? d.labelAr : d.labelEn}</span>
@@ -867,15 +883,28 @@ export const StandaloneSubscribePage: React.FC = () => {
                       language === 'ar' ? 'تجميد الاشتراك عند السفر أو الانشغال' : 'Pause subscription feature during travels',
                       language === 'ar' ? 'كرت الإنجاز ومشاركة السلسلة والأوسمة' : 'Shareable progress card, streaks & badges',
                     ].map((feat, i) => (
-                      <li key={i} className="flex items-center gap-2 text-amber-100">
-                        <Check className="w-4 h-4 text-amber-400 shrink-0 stroke-[3]" />
+                      <li
+                        key={i}
+                        className={`flex items-center gap-2 ${
+                          theme === 'dark' ? 'text-amber-100' : 'text-slate-800'
+                        }`}
+                      >
+                        <Check
+                          className={`w-4 h-4 shrink-0 stroke-[3] ${
+                            theme === 'dark' ? 'text-amber-400' : 'text-amber-600'
+                          }`}
+                        />
                         <span>{feat}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-amber-500/20">
+                <div
+                  className={`mt-6 pt-4 border-t ${
+                    theme === 'dark' ? 'border-amber-500/20' : 'border-amber-300/60'
+                  }`}
+                >
                   <div className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-black font-black text-xs sm:text-sm text-center uppercase tracking-wider shadow-lg">
                     {activePlanId === 'platinum'
                       ? language === 'ar'
@@ -905,11 +934,21 @@ export const StandaloneSubscribePage: React.FC = () => {
               >
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5">
-                      <Shield className="w-3.5 h-3.5 text-slate-300" />
+                    <span
+                      className={`px-3 py-1 rounded-full border font-bold text-xs flex items-center gap-1.5 ${
+                        theme === 'dark'
+                          ? 'bg-slate-800 border-slate-700 text-slate-300'
+                          : 'bg-slate-100 border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <Shield
+                        className={`w-3.5 h-3.5 ${
+                          theme === 'dark' ? 'text-slate-300' : 'text-slate-600'
+                        }`}
+                      />
                       <span>{language === 'ar' ? 'الأساس المتين للالتزام' : 'Core Discipline'}</span>
                     </span>
-                    <span className="font-mono text-xs font-bold text-orange-400">
+                    <span className="font-mono text-xs font-bold text-orange-600 dark:text-orange-400">
                       {DURATION_DATA.standard[selectedDurationKey].labelAr}
                     </span>
                   </div>
@@ -932,15 +971,33 @@ export const StandaloneSubscribePage: React.FC = () => {
                   </p>
 
                   {/* Pricing Display */}
-                  <div className="p-4 rounded-2xl bg-black/40 border border-white/10 mb-5">
+                  <div
+                    className={`p-4 rounded-2xl border mb-5 ${
+                      theme === 'dark'
+                        ? 'bg-black/40 border-white/10'
+                        : 'bg-slate-100/90 border-slate-200'
+                    }`}
+                  >
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl sm:text-4xl font-black text-white font-mono">
+                      <span
+                        className={`text-3xl sm:text-4xl font-black font-mono ${
+                          theme === 'dark' ? 'text-white' : 'text-[#0F172A]'
+                        }`}
+                      >
                         {DURATION_DATA.standard[selectedDurationKey].price}
                       </span>
-                      <span className="text-xs font-bold text-slate-300">
+                      <span
+                        className={`text-xs font-bold ${
+                          theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+                        }`}
+                      >
                         {language === 'ar' ? 'ريال سعودي' : 'SAR'}
                       </span>
-                      <span className="text-[11px] text-slate-400 font-mono ms-auto">
+                      <span
+                        className={`text-[11px] font-mono ms-auto ${
+                          theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                        }`}
+                      >
                         ~{Math.round(DURATION_DATA.standard[selectedDurationKey].price / (DURATION_DATA.standard[selectedDurationKey].days / 30))} {language === 'ar' ? 'ريال/شهر' : 'SAR/mo'}
                       </span>
                     </div>
@@ -948,7 +1005,11 @@ export const StandaloneSubscribePage: React.FC = () => {
 
                   {/* Duration Selector for Standard */}
                   <div className="space-y-1.5 mb-5">
-                    <span className="text-[11px] font-bold text-slate-400 block">
+                    <span
+                      className={`text-[11px] font-bold block ${
+                        theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                      }`}
+                    >
                       {language === 'ar' ? 'اختر مدة الاشتراك:' : 'Select Duration:'}
                     </span>
                     <div className="grid grid-cols-3 gap-2">
@@ -967,7 +1028,9 @@ export const StandaloneSubscribePage: React.FC = () => {
                             className={`py-2 px-1 rounded-xl text-center text-xs font-black transition-all cursor-pointer ${
                               isSel
                                 ? 'bg-orange-500 text-white shadow-md border border-orange-400'
-                                : 'bg-black/50 text-slate-300 border border-white/10 hover:border-orange-500/40'
+                                : theme === 'dark'
+                                ? 'bg-black/50 text-slate-300 border border-white/10 hover:border-orange-500/40'
+                                : 'bg-white text-slate-800 border border-slate-300 hover:border-orange-500'
                             }`}
                           >
                             <span className="block text-[10px]">{language === 'ar' ? d.labelAr : d.labelEn}</span>
@@ -987,20 +1050,35 @@ export const StandaloneSubscribePage: React.FC = () => {
                       language === 'ar' ? 'المتابعة الدورية الشهرية مع الكوتش' : 'Monthly progress check-in with coach',
                       language === 'ar' ? 'دخول دائم للبوابة برمز سري' : 'Dedicated access code to athlete portal',
                     ].map((feat, i) => (
-                      <li key={i} className="flex items-center gap-2 text-slate-300">
-                        <Check className="w-4 h-4 text-emerald-400 shrink-0 stroke-[3]" />
+                      <li
+                        key={i}
+                        className={`flex items-center gap-2 ${
+                          theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+                        }`}
+                      >
+                        <Check
+                          className={`w-4 h-4 shrink-0 stroke-[3] ${
+                            theme === 'dark' ? 'text-emerald-400' : 'text-emerald-600'
+                          }`}
+                        />
                         <span>{feat}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-white/10">
+                <div
+                  className={`mt-6 pt-4 border-t ${
+                    theme === 'dark' ? 'border-white/10' : 'border-slate-200'
+                  }`}
+                >
                   <div
                     className={`w-full py-3 rounded-2xl font-black text-xs sm:text-sm text-center uppercase tracking-wider transition-all ${
                       activePlanId === 'standard'
                         ? 'bg-orange-500 text-white shadow-lg'
-                        : 'bg-white/10 text-slate-300'
+                        : theme === 'dark'
+                        ? 'bg-white/10 text-slate-300'
+                        : 'bg-slate-200 text-slate-800'
                     }`}
                   >
                     {activePlanId === 'standard'
@@ -1022,11 +1100,11 @@ export const StandaloneSubscribePage: React.FC = () => {
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center font-black">
-                  <Sparkles className="w-5 h-5 text-orange-400" />
+                <div className="w-10 h-10 rounded-2xl bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 flex items-center justify-center font-black">
+                  <Sparkles className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
-                  <span className="text-xs text-slate-400 block font-bold">
+                  <span className="text-xs text-slate-600 dark:text-slate-400 block font-bold">
                     {language === 'ar' ? 'الباقة المحددة:' : 'Selected Plan:'}
                   </span>
                   <span
@@ -1035,11 +1113,11 @@ export const StandaloneSubscribePage: React.FC = () => {
                     }`}
                   >
                     {language === 'ar' ? currentPlanNameAr : currentPlanNameEn} (
-                    <strong className="text-orange-400">
+                    <strong className="text-orange-600 dark:text-orange-400">
                       {language === 'ar' ? currentDurationInfo.labelAr : currentDurationInfo.labelEn}
                     </strong>{' '}
                     -{' '}
-                    <strong className="text-amber-400 font-mono">
+                    <strong className="text-amber-700 dark:text-amber-400 font-mono">
                       {currentDurationInfo.price} {language === 'ar' ? 'ريال' : 'SAR'}
                     </strong>
                     )
@@ -1098,9 +1176,13 @@ export const StandaloneSubscribePage: React.FC = () => {
                   : 'bg-white border-slate-200 shadow-sm'
               }`}
             >
-              <div className="flex items-center gap-3 border-b border-white/10 pb-3">
-                <div className="w-9 h-9 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center font-black">
-                  <User className="w-5 h-5 text-orange-400" />
+              <div
+                className={`flex items-center gap-3 border-b pb-3 ${
+                  theme === 'dark' ? 'border-white/10' : 'border-slate-200'
+                }`}
+              >
+                <div className="w-9 h-9 rounded-2xl bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 flex items-center justify-center font-black">
+                  <User className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
                   <h3
@@ -1110,7 +1192,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                   >
                     {language === 'ar' ? 'الجزء الأول: البيانات الشخصية والصحية' : 'Part 1: Personal & Health Info'}
                   </h3>
-                  <p className="text-xs text-slate-400 font-medium">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                     {language === 'ar' ? 'تُستخدم لإنشاء سجلك الرياضي المعتمد' : 'Used for your official training record'}
                   </p>
                 </div>
@@ -1125,7 +1207,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                     }`}
                   >
                     <span>{language === 'ar' ? 'الاسم الثلاثي بالكامل:' : 'Full Name (Triple):'}</span>
-                    <span className="text-red-400 ms-1">*</span>
+                    <span className="text-red-600 dark:text-red-400 ms-1">*</span>
                   </label>
                   <input
                     type="text"
@@ -1139,7 +1221,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                         : 'bg-slate-50 border-slate-300 focus:border-orange-500 text-[#0F172A] placeholder:text-slate-400'
                     }`}
                   />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
                     {language === 'ar' ? 'يجب أن يطابق تماماً الاسم الذي ستوقعه في الأسفل' : 'Must match the signature name below'}
                   </span>
                 </div>
@@ -1241,7 +1323,11 @@ export const StandaloneSubscribePage: React.FC = () => {
                     }`}
                   >
                     {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map((bt) => (
-                      <option key={bt} value={bt} className="bg-[#0B132B] text-white">
+                      <option
+                        key={bt}
+                        value={bt}
+                        className={theme === 'dark' ? 'bg-[#0B132B] text-white' : 'bg-white text-[#0F172A]'}
+                      >
                         {bt}
                       </option>
                     ))}
@@ -1267,16 +1353,28 @@ export const StandaloneSubscribePage: React.FC = () => {
                         : 'bg-slate-50 border-slate-300 focus:border-orange-500 text-orange-600'
                     }`}
                   >
-                    <option value="تضخيم وبناء عضلي (Bulking)" className="bg-[#0B132B] text-white">
+                    <option
+                      value="تضخيم وبناء عضلي (Bulking)"
+                      className={theme === 'dark' ? 'bg-[#0B132B] text-white' : 'bg-white text-[#0F172A]'}
+                    >
                       تضخيم وبناء عضلي (Bulking)
                     </option>
-                    <option value="تنشيف وحرق دهون (Cut)" className="bg-[#0B132B] text-white">
+                    <option
+                      value="تنشيف وحرق دهون (Cut)"
+                      className={theme === 'dark' ? 'bg-[#0B132B] text-white' : 'bg-white text-[#0F172A]'}
+                    >
                       تنشيف وحرق دهون (Cut)
                     </option>
-                    <option value="ثبات وإعادة تشكيل (Maintenance)" className="bg-[#0B132B] text-white">
+                    <option
+                      value="ثبات وإعادة تشكيل (Maintenance)"
+                      className={theme === 'dark' ? 'bg-[#0B132B] text-white' : 'bg-white text-[#0F172A]'}
+                    >
                       ثبات وإعادة تشكيل (Maintenance)
                     </option>
-                    <option value="كيتو لو كارب (Keto)" className="bg-[#0B132B] text-white">
+                    <option
+                      value="كيتو لو كارب (Keto)"
+                      className={theme === 'dark' ? 'bg-[#0B132B] text-white' : 'bg-white text-[#0F172A]'}
+                    >
                       كيتو لو كارب (Keto)
                     </option>
                   </select>
@@ -1284,7 +1382,11 @@ export const StandaloneSubscribePage: React.FC = () => {
               </div>
 
               {/* THIRD ROW: PAYMENT INSTALLMENTS SELECTOR & INBODY ATTACHMENT */}
-              <div className="pt-3 border-t border-white/10 space-y-4">
+              <div
+                className={`pt-3 border-t space-y-4 ${
+                  theme === 'dark' ? 'border-white/10' : 'border-slate-200'
+                }`}
+              >
                 {/* Payment Installments Selector */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -1293,12 +1395,18 @@ export const StandaloneSubscribePage: React.FC = () => {
                         theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
                       }`}
                     >
-                      <CreditCard className="w-3.5 h-3.5 text-orange-400" />
+                      <CreditCard className="w-3.5 h-3.5 text-orange-500 dark:text-orange-400" />
                       <span>{language === 'ar' ? 'خطة سداد الرسوم والأقساط:' : 'Payment Plan / Installments:'}</span>
                     </label>
 
                     {!isInstallmentsAllowed && (
-                      <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                          theme === 'dark'
+                            ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                            : 'text-amber-800 bg-amber-50 border-amber-300'
+                        }`}
+                      >
                         {language === 'ar'
                           ? 'الأقساط متاحة لاشتراك السنة في الباقة القياسية، ولجميع المدد في VIP'
                           : 'Installments available for 1-Year Standard & all VIP'}
@@ -1313,7 +1421,9 @@ export const StandaloneSubscribePage: React.FC = () => {
                       onClick={() => setPaymentInstallments('full')}
                       className={`p-3 rounded-2xl border text-start transition-all cursor-pointer ${
                         paymentInstallments === 'full'
-                          ? 'bg-orange-500/15 border-orange-500 text-white shadow-md'
+                          ? theme === 'dark'
+                            ? 'bg-orange-500/15 border-orange-500 text-white shadow-md'
+                            : 'bg-orange-50 border-orange-500 text-[#0F172A] shadow-sm'
                           : theme === 'dark'
                           ? 'bg-black/40 border-white/10 text-slate-400 hover:border-white/20'
                           : 'bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400'
@@ -1327,10 +1437,14 @@ export const StandaloneSubscribePage: React.FC = () => {
                           {paymentInstallments === 'full' ? '✓' : ''}
                         </span>
                       </div>
-                      <span className="text-sm font-mono font-black text-amber-400 block">
+                      <span
+                        className={`text-sm font-mono font-black block ${
+                          theme === 'dark' ? 'text-amber-400' : 'text-amber-700'
+                        }`}
+                      >
                         {currentDurationInfo.price} ريال
                       </span>
-                      <span className="text-[10px] text-slate-400">
+                      <span className={`text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                         {language === 'ar' ? 'سداد المبلغ كاملاً لمرة واحدة' : 'One-time full payment'}
                       </span>
                     </button>
@@ -1342,9 +1456,13 @@ export const StandaloneSubscribePage: React.FC = () => {
                       onClick={() => isInstallmentsAllowed && setPaymentInstallments('2_installments')}
                       className={`p-3 rounded-2xl border text-start transition-all ${
                         !isInstallmentsAllowed
-                          ? 'opacity-40 cursor-not-allowed border-white/5 bg-black/20'
+                          ? theme === 'dark'
+                            ? 'opacity-40 cursor-not-allowed border-white/5 bg-black/20 text-slate-400'
+                            : 'opacity-45 cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500'
                           : paymentInstallments === '2_installments'
-                          ? 'bg-orange-500/15 border-orange-500 text-white shadow-md cursor-pointer'
+                          ? theme === 'dark'
+                            ? 'bg-orange-500/15 border-orange-500 text-white shadow-md cursor-pointer'
+                            : 'bg-orange-50 border-orange-500 text-[#0F172A] shadow-sm cursor-pointer'
                           : theme === 'dark'
                           ? 'bg-black/40 border-white/10 text-slate-400 hover:border-white/20 cursor-pointer'
                           : 'bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400 cursor-pointer'
@@ -1358,10 +1476,14 @@ export const StandaloneSubscribePage: React.FC = () => {
                           {paymentInstallments === '2_installments' ? '✓' : ''}
                         </span>
                       </div>
-                      <span className="text-sm font-mono font-black text-amber-400 block">
+                      <span
+                        className={`text-sm font-mono font-black block ${
+                          theme === 'dark' ? 'text-amber-400' : 'text-amber-700'
+                        }`}
+                      >
                         {Math.round(currentDurationInfo.price / 2)} ريال / دفعة
                       </span>
-                      <span className="text-[10px] text-slate-400">
+                      <span className={`text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                         {language === 'ar' ? 'مقسمة على دفعتين متساويتين' : 'Split into 2 equal payments'}
                       </span>
                     </button>
@@ -1373,9 +1495,13 @@ export const StandaloneSubscribePage: React.FC = () => {
                       onClick={() => isInstallmentsAllowed && setPaymentInstallments('3_installments')}
                       className={`p-3 rounded-2xl border text-start transition-all ${
                         !isInstallmentsAllowed
-                          ? 'opacity-40 cursor-not-allowed border-white/5 bg-black/20'
+                          ? theme === 'dark'
+                            ? 'opacity-40 cursor-not-allowed border-white/5 bg-black/20 text-slate-400'
+                            : 'opacity-45 cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500'
                           : paymentInstallments === '3_installments'
-                          ? 'bg-orange-500/15 border-orange-500 text-white shadow-md cursor-pointer'
+                          ? theme === 'dark'
+                            ? 'bg-orange-500/15 border-orange-500 text-white shadow-md cursor-pointer'
+                            : 'bg-orange-50 border-orange-500 text-[#0F172A] shadow-sm cursor-pointer'
                           : theme === 'dark'
                           ? 'bg-black/40 border-white/10 text-slate-400 hover:border-white/20 cursor-pointer'
                           : 'bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400 cursor-pointer'
@@ -1389,10 +1515,14 @@ export const StandaloneSubscribePage: React.FC = () => {
                           {paymentInstallments === '3_installments' ? '✓' : ''}
                         </span>
                       </div>
-                      <span className="text-sm font-mono font-black text-amber-400 block">
+                      <span
+                        className={`text-sm font-mono font-black block ${
+                          theme === 'dark' ? 'text-amber-400' : 'text-amber-700'
+                        }`}
+                      >
                         {Math.round(currentDurationInfo.price / 3)} ريال / دفعة
                       </span>
-                      <span className="text-[10px] text-slate-400">
+                      <span className={`text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                         {language === 'ar' ? 'مقسمة على 3 دفعات ميسرة' : 'Split into 3 equal payments'}
                       </span>
                     </button>
@@ -1407,7 +1537,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                     }`}
                   >
                     <span className="flex items-center gap-1.5">
-                      <Paperclip className="w-3.5 h-3.5 text-orange-400" />
+                      <Paperclip className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
                       <span>
                         {language === 'ar'
                           ? 'إرفاق فحص InBody أو تحليل مكونات الجسم (اختياري / موصى به):'
@@ -1446,11 +1576,21 @@ export const StandaloneSubscribePage: React.FC = () => {
                   />
 
                   {inBodyFileName ? (
-                    <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-between text-xs">
+                    <div
+                      className={`p-3 rounded-2xl border flex items-center justify-between text-xs ${
+                        theme === 'dark'
+                          ? 'bg-emerald-500/10 border-emerald-500/40'
+                          : 'bg-emerald-50 border-emerald-300'
+                      }`}
+                    >
                       <div className="flex items-center gap-2">
-                        <FileCheck className="w-4 h-4 text-emerald-400" />
-                        <span className="font-bold text-emerald-300">{inBodyFileName}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">({inBodyFileSize})</span>
+                        <FileCheck className={`w-4 h-4 ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                        <span className={`font-bold ${theme === 'dark' ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                          {inBodyFileName}
+                        </span>
+                        <span className={`text-[10px] font-mono ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                          ({inBodyFileSize})
+                        </span>
                       </div>
                       <button
                         type="button"
@@ -1460,7 +1600,11 @@ export const StandaloneSubscribePage: React.FC = () => {
                           setInBodyFileSize('');
                           if (inBodyInputRef.current) inBodyInputRef.current.value = '';
                         }}
-                        className="text-red-400 hover:text-red-300 p-1 rounded-lg bg-white/5 cursor-pointer"
+                        className={`p-1 rounded-lg cursor-pointer ${
+                          theme === 'dark'
+                            ? 'text-red-400 hover:text-red-300 bg-white/5'
+                            : 'text-red-600 hover:text-red-700 bg-red-50'
+                        }`}
                         title="إلغاء المرفق"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1475,7 +1619,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                           : 'border-slate-300 bg-slate-50 hover:border-orange-500 text-slate-700'
                       }`}
                     >
-                      <Upload className="w-4 h-4 text-orange-400" />
+                      <Upload className="w-4 h-4 text-orange-500 dark:text-orange-400" />
                       <span className="text-xs font-bold">
                         {language === 'ar'
                           ? 'اضغط هنا لرفع ملف فحص InBody بصيغة PDF أو صورة'
@@ -1487,7 +1631,11 @@ export const StandaloneSubscribePage: React.FC = () => {
               </div>
 
               {/* Health Status Disclosure */}
-              <div className="pt-3 border-t border-white/10 space-y-3">
+              <div
+                className={`pt-3 border-t space-y-3 ${
+                  theme === 'dark' ? 'border-white/10' : 'border-slate-200'
+                }`}
+              >
                 <label
                   className={`block text-xs font-black ${
                     theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
@@ -1500,10 +1648,10 @@ export const StandaloneSubscribePage: React.FC = () => {
                   <label
                     className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
                       healthStatus === 'healthy'
-                        ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 font-black'
+                        ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-700 dark:text-emerald-400 font-black'
                         : theme === 'dark'
                         ? 'bg-black/40 border-white/10 text-slate-400'
-                        : 'bg-slate-50 border-slate-300 text-slate-600'
+                        : 'bg-slate-50 border-slate-300 text-slate-700'
                     }`}
                   >
                     <input
@@ -1521,10 +1669,10 @@ export const StandaloneSubscribePage: React.FC = () => {
                   <label
                     className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
                       healthStatus === 'has_issues'
-                        ? 'bg-orange-500/10 border-orange-500/50 text-orange-400 font-black'
+                        ? 'bg-orange-500/10 border-orange-500/50 text-orange-700 dark:text-orange-400 font-black'
                         : theme === 'dark'
                         ? 'bg-black/40 border-white/10 text-slate-400'
-                        : 'bg-slate-50 border-slate-300 text-slate-600'
+                        : 'bg-slate-50 border-slate-300 text-slate-700'
                     }`}
                   >
                     <input
@@ -1570,10 +1718,14 @@ export const StandaloneSubscribePage: React.FC = () => {
               }`}
             >
               {/* Header Box Matching Screenshot 1 */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div
+                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4 ${
+                  theme === 'dark' ? 'border-white/10' : 'border-slate-200'
+                }`}
+              >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-orange-500/20 border border-orange-500/40 text-orange-400 flex items-center justify-center shrink-0">
-                    <Scale className="w-5 h-5 text-orange-400" />
+                  <div className="w-10 h-10 rounded-2xl bg-orange-500/20 border border-orange-500/40 text-orange-500 dark:text-orange-400 flex items-center justify-center shrink-0">
+                    <Scale className="w-5 h-5" />
                   </div>
                   <div>
                     <h3
@@ -1587,7 +1739,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                           : 'Part 2: Declaration & Liability Waiver Clauses ⚖️'}
                       </span>
                     </h3>
-                    <p className="text-xs text-slate-400 font-medium mt-0.5">
+                    <p className={`text-xs font-medium mt-0.5 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                       {language === 'ar'
                         ? 'طريقة الإعداد: قم بقراءة كل بند وتفعيل خيار (أوافق وأتعهد بذلك) بشكل منفصل وإلزامي'
                         : 'Instruction: Read each clause and activate the required agreement checkbox individually'}
@@ -1595,7 +1747,13 @@ export const StandaloneSubscribePage: React.FC = () => {
                   </div>
                 </div>
 
-                <span className="self-start sm:self-center text-xs font-black text-orange-400 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/30 shrink-0">
+                <span
+                  className={`self-start sm:self-center text-xs font-black px-3 py-1 rounded-full border shrink-0 ${
+                    theme === 'dark'
+                      ? 'text-orange-400 bg-orange-500/10 border-orange-500/30'
+                      : 'text-orange-700 bg-orange-50 border-orange-300'
+                  }`}
+                >
                   {language === 'ar' ? '4 بنود قانونية' : '4 Legal Clauses'}
                 </span>
               </div>
@@ -1616,7 +1774,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                       theme === 'dark' ? 'text-white' : 'text-[#0F172A]'
                     }`}
                   >
-                    <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center text-xs font-black">
+                    <span className="w-5 h-5 rounded-full bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 flex items-center justify-center text-xs font-black">
                       1
                     </span>
                     <span>
@@ -1625,7 +1783,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                         : 'Health Status & Remote Training Liability'}
                     </span>
                   </span>
-                  <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20 font-bold shrink-0">
+                  <span className="text-[10px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-md border border-red-300 dark:border-red-500/20 font-bold shrink-0">
                     {language === 'ar' ? '[خيار إجباري]' : '[Mandatory]'}
                   </span>
                 </div>
@@ -1662,7 +1820,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                     }`}
                   >
                     <span>{language === 'ar' ? 'أوافق وأتعهد بذلك' : 'I agree and pledge'}</span>
-                    <span className="text-orange-400">☑</span>
+                    <span className="text-orange-600 dark:text-orange-400">☑</span>
                   </span>
                 </label>
               </div>
@@ -1683,14 +1841,14 @@ export const StandaloneSubscribePage: React.FC = () => {
                       theme === 'dark' ? 'text-white' : 'text-[#0F172A]'
                     }`}
                   >
-                    <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center text-xs font-black">
+                    <span className="w-5 h-5 rounded-full bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 flex items-center justify-center text-xs font-black">
                       2
                     </span>
                     <span>
                       {language === 'ar' ? 'النظام الغذائي والمكملات' : 'Nutrition & Supplements'}
                     </span>
                   </span>
-                  <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20 font-bold shrink-0">
+                  <span className="text-[10px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-md border border-red-300 dark:border-red-500/20 font-bold shrink-0">
                     {language === 'ar' ? '[خيار إجباري]' : '[Mandatory]'}
                   </span>
                 </div>
@@ -1727,7 +1885,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                     }`}
                   >
                     <span>{language === 'ar' ? 'أوافق وأتعهد بذلك' : 'I agree and pledge'}</span>
-                    <span className="text-orange-400">☑</span>
+                    <span className="text-orange-600 dark:text-orange-400">☑</span>
                   </span>
                 </label>
               </div>
@@ -1748,7 +1906,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                       theme === 'dark' ? 'text-white' : 'text-[#0F172A]'
                     }`}
                   >
-                    <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center text-xs font-black">
+                    <span className="w-5 h-5 rounded-full bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 flex items-center justify-center text-xs font-black">
                       3
                     </span>
                     <span>
@@ -1757,7 +1915,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                         : 'Intellectual Property & Non-Leakage Terms'}
                     </span>
                   </span>
-                  <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20 font-bold shrink-0">
+                  <span className="text-[10px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-md border border-red-300 dark:border-red-500/20 font-bold shrink-0">
                     {language === 'ar' ? '[خيار إجباري]' : '[Mandatory]'}
                   </span>
                 </div>
@@ -1799,7 +1957,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                     }`}
                   >
                     <span>{language === 'ar' ? 'أوافق وأتعهد بذلك' : 'I agree and pledge'}</span>
-                    <span className="text-orange-400">☑</span>
+                    <span className="text-orange-600 dark:text-orange-400">☑</span>
                   </span>
                 </label>
               </div>
@@ -1820,7 +1978,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                       theme === 'dark' ? 'text-white' : 'text-[#0F172A]'
                     }`}
                   >
-                    <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center text-xs font-black">
+                    <span className="w-5 h-5 rounded-full bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 flex items-center justify-center text-xs font-black">
                       4
                     </span>
                     <span>
@@ -1829,7 +1987,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                         : 'Payment, Refund & Transformation Results Policy'}
                     </span>
                   </span>
-                  <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20 font-bold shrink-0">
+                  <span className="text-[10px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-md border border-red-300 dark:border-red-500/20 font-bold shrink-0">
                     {language === 'ar' ? '[خيار إجباري]' : '[Mandatory]'}
                   </span>
                 </div>
@@ -1866,7 +2024,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                     }`}
                   >
                     <span>{language === 'ar' ? 'أوافق وأتعهد بذلك' : 'I agree and pledge'}</span>
-                    <span className="text-orange-400">☑</span>
+                    <span className="text-orange-600 dark:text-orange-400">☑</span>
                   </span>
                 </label>
               </div>
@@ -1883,9 +2041,13 @@ export const StandaloneSubscribePage: React.FC = () => {
               }`}
             >
               {/* Header Box Matching Screenshot 3 */}
-              <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-                <div className="w-10 h-10 rounded-2xl bg-orange-500/20 border border-orange-500/40 text-orange-400 flex items-center justify-center shrink-0">
-                  <PenTool className="w-5 h-5 text-orange-400" />
+              <div
+                className={`flex items-center gap-3 border-b pb-4 ${
+                  theme === 'dark' ? 'border-white/10' : 'border-slate-200'
+                }`}
+              >
+                <div className="w-10 h-10 rounded-2xl bg-orange-500/20 border border-orange-500/40 text-orange-500 dark:text-orange-400 flex items-center justify-center shrink-0">
+                  <PenTool className="w-5 h-5" />
                 </div>
                 <div>
                   <h3
@@ -1899,7 +2061,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                         : 'Part 3: Final Declaration & Digital Signature 🖊️'}
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">
+                  <p className={`text-xs font-medium mt-0.5 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                     {language === 'ar'
                       ? 'اعتماد قانوني رسمي ملزم للطرفين'
                       : 'Legally binding official confirmation for both parties'}
@@ -1915,7 +2077,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                     : 'bg-orange-50/70 border-orange-300 text-slate-800'
                 }`}
               >
-                <p className="font-black text-orange-400 mb-1">
+                <p className={`font-black mb-1 ${theme === 'dark' ? 'text-orange-400' : 'text-orange-700'}`}>
                   {language === 'ar'
                     ? 'الموافقة والتوقيع الإلكتروني [Required - إجباري]:'
                     : 'Confirmation & Electronic Signature [Required]:'}
@@ -1941,7 +2103,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                         ? '• كتابة الاسم الثلاثي (التوقيع الإلكتروني المعتمد):'
                         : '• Typed Full Name (Official Signature):'}
                     </span>
-                    <span className="text-red-400 ms-1">*</span>
+                    <span className="text-red-500 ms-1">*</span>
                   </label>
 
                   <input
@@ -1967,8 +2129,14 @@ export const StandaloneSubscribePage: React.FC = () => {
                   {cleanSignature.length > 0 && (
                     <div className="animate-in fade-in duration-200">
                       {isNameMatching ? (
-                        <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/30">
-                          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                        <div
+                          className={`flex items-center gap-1.5 text-xs font-bold p-2 rounded-xl border ${
+                            theme === 'dark'
+                              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                              : 'text-emerald-700 bg-emerald-50 border-emerald-300'
+                          }`}
+                        >
+                          <CheckCircle2 className={`w-4 h-4 shrink-0 ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-600'}`} />
                           <span>
                             {language === 'ar'
                               ? '✓ الاسم متطابق تماماً مع بيانات المشترك المدخلة أعلاه'
@@ -1976,8 +2144,14 @@ export const StandaloneSubscribePage: React.FC = () => {
                           </span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 text-xs text-amber-400 font-bold bg-amber-500/10 p-2 rounded-xl border border-amber-500/30">
-                          <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                        <div
+                          className={`flex items-center gap-1.5 text-xs font-bold p-2 rounded-xl border ${
+                            theme === 'dark'
+                              ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                              : 'text-amber-800 bg-amber-50 border-amber-300'
+                          }`}
+                        >
+                          <AlertCircle className={`w-4 h-4 shrink-0 ${theme === 'dark' ? 'text-amber-400' : 'text-amber-600'}`} />
                           <span>
                             {language === 'ar'
                               ? `⚠ يجب أن يطابق تماماً الاسم الثلاثي: "${cleanFullName || 'المدخل أعلاه'}"`
@@ -1998,7 +2172,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                   >
                     <div className="flex items-center gap-1.5">
                       <span>{language === 'ar' ? 'رقم توثيق العقد:' : 'Contract ID:'}</span>
-                      <strong className="text-orange-400 font-mono">{contractId}</strong>
+                      <strong className="text-orange-600 dark:text-orange-400 font-mono">{contractId}</strong>
                     </div>
                     <span className="font-mono text-[10px]">{signedDate}</span>
                   </div>
@@ -2012,7 +2186,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                         theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
                       }`}
                     >
-                      <PenTool className="w-3.5 h-3.5 text-orange-400" />
+                      <PenTool className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
                       <span>
                         {language === 'ar'
                           ? '✍️ رسم التوقيع الرقمي باللمس / الماوس (اختياري إضافي):'
@@ -2023,7 +2197,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                       <button
                         type="button"
                         onClick={clearCanvas}
-                        className="text-[11px] text-slate-400 hover:text-red-400 flex items-center gap-1 cursor-pointer transition-colors"
+                        className="text-[11px] text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-1 cursor-pointer transition-colors"
                       >
                         <RotateCcw className="w-3 h-3" />
                         <span>{language === 'ar' ? 'مسح' : 'Clear'}</span>
@@ -2052,7 +2226,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                       className="w-full h-24 cursor-crosshair touch-none"
                     />
                     {!hasCanvasSignature && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs font-bold gap-1.5">
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-500 dark:text-slate-400 text-xs font-bold gap-1.5">
                         <span>{language === 'ar' ? 'وقع هنا بيدك أو الماوس ✍️' : 'Draw your signature here ✍️'}</span>
                       </div>
                     )}
@@ -2118,7 +2292,7 @@ export const StandaloneSubscribePage: React.FC = () => {
             </div>
 
             <div>
-              <span className="text-xs font-black tracking-widest text-emerald-400 uppercase block mb-1">
+              <span className="text-xs font-black tracking-widest text-emerald-700 dark:text-emerald-400 uppercase block mb-1">
                 {language === 'ar' ? 'تم توثيق اشتراكك وحفظ العقد بنجاح في قاعدة البيانات ✅' : 'Subscription & Contract Saved Directly to Database ✅'}
               </span>
               <h2
@@ -2147,8 +2321,12 @@ export const StandaloneSubscribePage: React.FC = () => {
                   : 'bg-white border-emerald-500/50 text-[#0F172A]'
               }`}
             >
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <span className="text-xs font-black text-emerald-400 font-mono">
+              <div
+                className={`flex items-center justify-between border-b pb-3 ${
+                  theme === 'dark' ? 'border-white/10' : 'border-slate-200'
+                }`}
+              >
+                <span className={`text-xs font-black font-mono ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700'}`}>
                   {completedAgreement.id}
                 </span>
                 <span className="text-xs font-bold">{completedAgreement.fullName}</span>
@@ -2156,16 +2334,16 @@ export const StandaloneSubscribePage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <span className="text-slate-400 block text-[10px]">
+                  <span className={`block text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                     {language === 'ar' ? 'الباقة المختارة:' : 'Selected Plan:'}
                   </span>
-                  <strong className="text-orange-400">{completedAgreement.planNameAr}</strong>
+                  <strong className={theme === 'dark' ? 'text-orange-400' : 'text-orange-600'}>{completedAgreement.planNameAr}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px]">
+                  <span className={`block text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                     {language === 'ar' ? 'خطة الرسوم والسداد:' : 'Payment Plan:'}
                   </span>
-                  <strong className="text-amber-400 font-mono">
+                  <strong className={`font-mono ${theme === 'dark' ? 'text-amber-400' : 'text-amber-700'}`}>
                     {completedAgreement.paymentInstallments === '3_installments'
                       ? `ثلاث دفعات (${completedAgreement.installmentAmount} ريال/دفعة)`
                       : completedAgreement.paymentInstallments === '2_installments'
@@ -2174,46 +2352,64 @@ export const StandaloneSubscribePage: React.FC = () => {
                   </strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px]">
+                  <span className={`block text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                     {language === 'ar' ? 'الهدف التصوري:' : 'Visual Goal:'}
                   </span>
-                  <strong className="text-slate-200">
+                  <strong className={theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}>
                     {completedAgreement.visualGoal || visualGoal}
                   </strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px]">
+                  <span className={`block text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                     {language === 'ar' ? 'العمر وفصيلة الدم:' : 'Age & Blood Type:'}
                   </span>
-                  <strong className="text-slate-200">
+                  <strong className={theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}>
                     {completedAgreement.age ? `${completedAgreement.age} سنة` : '—'} • {completedAgreement.bloodType || '—'}
                   </strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px]">
+                  <span className={`block text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                     {language === 'ar' ? 'فحص InBody المرفق:' : 'InBody Attachment:'}
                   </span>
-                  <strong className={completedAgreement.inBodyFileName ? 'text-emerald-400' : 'text-slate-400'}>
+                  <strong
+                    className={
+                      completedAgreement.inBodyFileName
+                        ? theme === 'dark'
+                          ? 'text-emerald-400'
+                          : 'text-emerald-700'
+                        : theme === 'dark'
+                        ? 'text-slate-400'
+                        : 'text-slate-600'
+                    }
+                  >
                     {completedAgreement.inBodyFileName ? `✓ ${completedAgreement.inBodyFileName}` : 'غير مرفق'}
                   </strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px]">
+                  <span className={`block text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                     {language === 'ar' ? 'التوقيع الرقمي المعتمد:' : 'Signature:'}
                   </span>
-                  <strong className="font-mono text-emerald-400">{completedAgreement.digitalSignature}</strong>
+                  <strong className={`font-mono ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                    {completedAgreement.digitalSignature}
+                  </strong>
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs">
-                <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+              <div
+                className={`pt-3 border-t flex items-center justify-between text-xs ${
+                  theme === 'dark' ? 'border-white/10' : 'border-slate-200'
+                }`}
+              >
+                <span className={`font-bold flex items-center gap-1.5 ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700'}`}>
                   <Check className="w-4 h-4 stroke-[3]" />
                   <span>{language === 'ar' ? 'تم تنزيل ملف PDF وحفظ العقد في قاعدة البيانات' : 'PDF Saved & Synced to Database'}</span>
                 </span>
                 <button
                   type="button"
                   onClick={generateAndDownloadPDF}
-                  className="text-orange-400 hover:text-white underline text-xs font-bold flex items-center gap-1 cursor-pointer"
+                  className={`underline text-xs font-bold flex items-center gap-1 cursor-pointer ${
+                    theme === 'dark' ? 'text-orange-400 hover:text-white' : 'text-orange-600 hover:text-[#0F172A]'
+                  }`}
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>{language === 'ar' ? 'تنزيل PDF مجدداً' : 'Re-download PDF'}</span>
@@ -2255,7 +2451,7 @@ export const StandaloneSubscribePage: React.FC = () => {
                     : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
                 }`}
               >
-                <Download className="w-4 h-4 text-orange-400" />
+                <Download className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                 <span>{language === 'ar' ? 'تحميل وثيقة PDF' : 'Download Contract PDF'}</span>
               </button>
 

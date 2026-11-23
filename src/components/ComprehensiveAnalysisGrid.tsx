@@ -63,8 +63,8 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3 border-b border-orange-500/20 pb-2">
         <h3 className="text-orange-600 dark:text-orange-400 font-extrabold text-sm md:text-base flex items-center gap-2">
           {/* Vibrant icon badge */}
-          <span className="p-1 rounded-lg bg-gradient-to-br from-[#0B132B] to-[#1C2541] text-orange-400">
-            <Activity className="w-4 h-4 text-orange-400" />
+          <span className="p-1.5 rounded-lg bg-orange-100 border border-orange-300 text-orange-600 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] dark:border-transparent dark:text-orange-400">
+            <Activity className="w-4 h-4 text-orange-600 dark:text-orange-400" />
           </span>
           <span>
             {language === 'ar'
@@ -74,7 +74,7 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
         </h3>
         <div className="flex items-center gap-2">
           <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-500" />
             <span>{language === 'ar' ? 'الماكروز والسعرات معتمدة من الكوتش عمر ✓' : 'Coach Certified Macros ✓'}</span>
           </span>
         </div>
@@ -92,8 +92,8 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
             >
               <div className="flex items-start justify-between w-full">
                 {/* Vibrant Navy + Orange + White Badge */}
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-[#0B132B] to-[#1C2541] ring-2 ring-orange-500/30 text-orange-400 shadow-md group-hover:ring-orange-500 transition-all">
-                  <Icon className="w-5 h-5 text-orange-400 stroke-[2.2]" />
+                <div className="p-2.5 rounded-xl bg-orange-50 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] ring-2 ring-orange-500/30 text-[#EA580C] dark:text-orange-400 shadow-md group-hover:ring-orange-500 transition-all">
+                  <Icon className="w-5 h-5 text-[#EA580C] dark:text-orange-400 stroke-[2.2]" />
                 </div>
                 <span className="text-xs text-orange-600 dark:text-orange-400 font-bold tracking-wider group-hover:translate-x-1 transition-transform">
                   {language === 'ar' ? 'تفاصيل ↗' : 'View ↗'}
@@ -115,7 +115,7 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
 
       {/* Modal Popup with Detailed Analysis */}
       {activeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/55 dark:bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-[#FAFBFD] dark:bg-[#0b132b] border-2 border-slate-300 dark:border-orange-500/40 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative text-[#0B132B] dark:text-white">
             {/* Close button */}
             <button
@@ -129,8 +129,8 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
             {activeModal === 'muscle' && (
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="p-3 rounded-2xl bg-gradient-to-br from-[#0B132B] to-[#1C2541] ring-2 ring-orange-500/30 text-orange-400 shadow-md">
-                    <Activity className="w-7 h-7 text-orange-400" />
+                  <div className="p-3 rounded-2xl bg-orange-100 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] ring-2 ring-orange-500/30 text-[#EA580C] dark:text-orange-400 shadow-md">
+                    <Activity className="w-7 h-7 text-[#EA580C] dark:text-orange-400" />
                   </div>
                   <div>
                     <h3 className="text-xl font-black text-[#0B132B] dark:text-white">
@@ -203,10 +203,10 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
 
                   {profile.analysisData?.customCoachNotes && (
                     <div className="bg-orange-500/10 p-3 rounded-2xl border border-orange-500/30 text-xs">
-                      <span className="font-black text-orange-400 block mb-1">
+                      <span className="font-black text-orange-700 dark:text-orange-400 block mb-1">
                         {language === 'ar' ? 'ملاحظة خاصة من الكوتش عمر:' : "Coach Omar's Custom Note:"}
                       </span>
-                      <p className="text-slate-300 font-medium">{profile.analysisData.customCoachNotes}</p>
+                      <p className="text-slate-700 dark:text-slate-300 font-medium">{profile.analysisData.customCoachNotes}</p>
                     </div>
                   )}
                 </div>
@@ -216,8 +216,8 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
             {activeModal === 'nutrition' && (
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="p-3 rounded-2xl bg-gradient-to-br from-[#0B132B] to-[#1C2541] ring-2 ring-blue-500/30 text-blue-400 shadow-md">
-                    <Utensils className="w-7 h-7 text-blue-400" />
+                  <div className="p-3 rounded-2xl bg-blue-100 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] ring-2 ring-blue-500/30 text-blue-600 dark:text-blue-400 shadow-md">
+                    <Utensils className="w-7 h-7 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
                     <h3 className="text-xl font-black text-[#0B132B] dark:text-white">
@@ -295,8 +295,8 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
             {activeModal === 'protocol' && (
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="p-3 rounded-2xl bg-gradient-to-br from-[#0B132B] to-[#1C2541] ring-2 ring-amber-500/30 text-amber-400 shadow-md">
-                    <Dumbbell className="w-7 h-7 text-amber-400" />
+                  <div className="p-3 rounded-2xl bg-amber-100 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] ring-2 ring-amber-500/30 text-amber-600 dark:text-amber-400 shadow-md">
+                    <Dumbbell className="w-7 h-7 text-amber-600 dark:text-amber-400" />
                   </div>
                   <div>
                     <h3 className="text-xl font-black text-[#0B132B] dark:text-white">
@@ -339,8 +339,8 @@ export const ComprehensiveAnalysisGrid: React.FC<ComprehensiveAnalysisGridProps>
             {activeModal === 'recovery' && (
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="p-3 rounded-2xl bg-gradient-to-br from-[#0B132B] to-[#1C2541] ring-2 ring-emerald-500/30 text-emerald-400 shadow-md">
-                    <HeartPulse className="w-7 h-7 text-emerald-400" />
+                  <div className="p-3 rounded-2xl bg-emerald-100 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] ring-2 ring-emerald-500/30 text-emerald-600 dark:text-emerald-400 shadow-md">
+                    <HeartPulse className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div>
                     <h3 className="text-xl font-black text-[#0B132B] dark:text-white">

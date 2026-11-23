@@ -3,9 +3,15 @@ import oaoImg from '../assets/images/logo.png';
 
 interface OAO3DLogoStageProps {
   className?: string;
+  showCaption?: boolean;
+  compact?: boolean;
 }
 
-export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({ className = '' }) => {
+export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({
+  className = '',
+  showCaption = true,
+  compact = false,
+}) => {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const logoRef = useRef<HTMLDivElement | null>(null);
 
@@ -43,14 +49,13 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({ className = '' }
     <div className={`relative w-full flex items-center justify-center ${className}`}>
       <style>{`
         .oao-stage {
-          --orange: #ed651b;
-          --navy: #07152e;
-          --blue: #173f80;
-          --silver: #bcc7d8;
+          --orange: #f97316;
+          --orange-deep: #ea580c;
+          --navy: #0b132b;
+          --blue-deep: #1e3a8a;
           position: relative;
-          width: min(94vw, 560px);
-          height: min(94vw, 560px);
-          max-height: 580px;
+          width: ${compact ? 'min(86vw, 400px)' : 'min(92vw, 480px)'};
+          height: ${compact ? 'min(86vw, 370px)' : 'min(92vw, 450px)'};
           display: grid;
           place-items: center;
           perspective: 1200px;
@@ -59,95 +64,117 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({ className = '' }
         .oao-stage::before {
           content: '';
           position: absolute;
-          width: 58%;
-          height: 22%;
-          bottom: 9%;
+          width: 56%;
+          height: 20%;
+          bottom: 8%;
           border-radius: 50%;
-          background: rgba(0,0,0,.85);
-          filter: blur(32px);
+          background: rgba(11, 19, 43, 0.35);
+          filter: blur(28px);
           transform: rotateX(72deg);
-          animation: oao-shadow-pulse 5s ease-in-out infinite;
+          animation: oao-shadow-pulse 7.5s ease-in-out infinite;
         }
-        .oao-ambient {
+        .dark .oao-stage::before {
+          background: rgba(0, 0, 0, 0.85);
+        }
+        /* Calm Navy & Orange Dual Aura Glow */
+        .oao-ambient-navy {
           position: absolute;
-          width: 65%;
+          width: 82%;
           aspect-ratio: 1;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(237,101,27,.3), rgba(7,21,46,.2) 45%, transparent 70%);
-          filter: blur(40px);
-          animation: oao-ambient-breathe 4s ease-in-out infinite;
+          background: radial-gradient(circle, rgba(30, 58, 138, 0.32) 0%, rgba(11, 19, 43, 0.24) 45%, transparent 72%);
+          filter: blur(42px);
+          animation: oao-ambient-navy-breathe 8.5s ease-in-out infinite;
+          pointer-events: none;
+        }
+        .oao-ambient-orange {
+          position: absolute;
+          width: 68%;
+          aspect-ratio: 1;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(249, 115, 22, 0.28) 0%, rgba(234, 88, 12, 0.14) 48%, transparent 72%);
+          filter: blur(36px);
+          animation: oao-ambient-orange-breathe 7.5s ease-in-out infinite;
+          pointer-events: none;
         }
         .oao-light-beam {
           position: absolute;
-          width: 26%;
-          height: 80%;
-          opacity: .25;
-          background: linear-gradient(90deg, transparent, #ed651b, transparent);
-          filter: blur(35px);
-          transform: rotate(38deg);
-          animation: oao-light-sweep 7s ease-in-out infinite;
+          width: 28%;
+          height: 78%;
+          opacity: 0.18;
+          background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.75), rgba(30, 58, 138, 0.55), transparent);
+          filter: blur(36px);
+          transform: rotate(35deg);
+          animation: oao-light-sweep 9.5s ease-in-out infinite;
+          pointer-events: none;
         }
         .oao-logo-wrap {
           position: relative;
           z-index: 5;
-          width: min(72vw, 380px);
+          width: ${compact ? 'min(64vw, 270px)' : 'min(68vw, 315px)'};
           aspect-ratio: 1;
           transform-style: preserve-3d;
           transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
-          transition: transform .18s ease-out;
-          animation: oao-levitate 6s ease-in-out infinite;
+          transition: transform 0.22s ease-out;
+          animation: oao-levitate 7s ease-in-out infinite;
         }
-        /* 3D Depth Layer: Realistic metallic extrusion behind the emblem */
+        /* 3D Depth Layer: Metallic extrusion behind emblem */
         .oao-emblem-depth {
           position: absolute;
           inset: 0;
-          transform: translateZ(-20px) scale(0.985);
-          filter: drop-shadow(0 25px 40px rgba(0,0,0,0.92)) drop-shadow(0 0 30px rgba(237,101,27,0.4)) brightness(0.25) contrast(1.3);
+          transform: translateZ(-22px) scale(0.985);
+          filter: drop-shadow(0 22px 35px rgba(11, 19, 43, 0.45)) drop-shadow(0 0 26px rgba(234, 88, 12, 0.3)) brightness(0.28) contrast(1.25);
           pointer-events: none;
-          opacity: 0.95;
+          opacity: 0.92;
+        }
+        .dark .oao-emblem-depth {
+          filter: drop-shadow(0 25px 40px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 30px rgba(249, 115, 22, 0.35)) brightness(0.25) contrast(1.3);
         }
         .oao-emblem-depth img {
           width: 100%;
           height: 100%;
           object-fit: contain;
         }
-        /* Core 3D Free-Floating Emblem (Muscle Arm + Energetic Flames + Outcome Typography) */
+        /* Core 3D Free-Floating Emblem */
         .oao-emblem-main {
           position: absolute;
           inset: 0;
-          transform: translateZ(30px);
-          filter: drop-shadow(0 15px 30px rgba(0,0,0,0.8)) drop-shadow(0 0 35px rgba(237,101,27,0.5));
+          transform: translateZ(32px);
+          filter: drop-shadow(0 14px 28px rgba(11, 19, 43, 0.42)) drop-shadow(0 0 28px rgba(234, 88, 12, 0.38));
           display: flex;
           align-items: center;
           justify-content: center;
+        }
+        .dark .oao-emblem-main {
+          filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.85)) drop-shadow(0 0 34px rgba(249, 115, 22, 0.48));
         }
         .oao-emblem-main img {
           display: block;
           width: 100%;
           height: 100%;
           object-fit: contain;
-          transition: transform 0.4s ease;
+          transition: transform 0.45s ease;
         }
         .oao-logo-wrap:hover .oao-emblem-main img {
-          transform: scale(1.05);
+          transform: scale(1.04);
         }
-        /* Specular Gleam Sweep across metallic arm and flame edges */
+        /* Calm Specular Gleam Sweep */
         .oao-specular-gleam {
           position: absolute;
           inset: 0;
           pointer-events: none;
           border-radius: 50%;
-          background: linear-gradient(115deg, transparent 38%, rgba(255,255,255,0.45) 50%, rgba(237,101,27,0.25) 58%, transparent 68%);
+          background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.38) 50%, rgba(249, 115, 22, 0.2) 58%, transparent 68%);
           mix-blend-mode: overlay;
-          animation: oao-gleam-sweep 5.5s ease-in-out infinite;
-          opacity: 0.7;
+          animation: oao-gleam-sweep 7.5s ease-in-out infinite;
+          opacity: 0.65;
         }
         .oao-ring {
           position: absolute;
           z-index: 1;
           left: 50%;
           top: 50%;
-          border: 1.5px solid rgba(237,101,27,.45);
+          border: 1.5px solid rgba(234, 88, 12, 0.42);
           border-radius: 50%;
           transform-style: preserve-3d;
           pointer-events: none;
@@ -156,106 +183,142 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({ className = '' }
           content: '';
           position: absolute;
           left: 50%;
-          top: -5px;
-          width: 10px;
-          height: 10px;
+          top: -4px;
+          width: 8px;
+          height: 8px;
           border-radius: 50%;
-          background: #ed651b;
-          box-shadow: 0 0 18px 4px rgba(237,101,27,.85);
+          background: #f97316;
+          box-shadow: 0 0 14px 3px rgba(249, 115, 22, 0.72);
         }
         .oao-ring-a {
-          width: 125%;
-          height: 50%;
+          width: 124%;
+          height: 48%;
           transform: translate(-50%, -50%) rotateX(67deg) rotateZ(12deg) translateZ(16px);
-          animation: oao-ring-a 12s linear infinite;
+          animation: oao-ring-a 16s linear infinite;
         }
         .oao-ring-b {
-          width: 148%;
-          height: 60%;
-          border-color: rgba(72,167,255,.35);
+          width: 146%;
+          height: 58%;
+          border-color: rgba(30, 58, 138, 0.45);
           transform: translate(-50%, -50%) rotateX(68deg) rotateY(18deg) translateZ(-5px);
-          animation: oao-ring-b 18s linear infinite reverse;
+          animation: oao-ring-b 22s linear infinite reverse;
+        }
+        .dark .oao-ring-b {
+          border-color: rgba(59, 130, 246, 0.35);
         }
         .oao-ring-b::before {
-          background: #48a7ff;
-          box-shadow: 0 0 18px 4px rgba(72,167,255,.8);
+          background: #1e3a8a;
+          box-shadow: 0 0 14px 3px rgba(30, 58, 138, 0.7);
+        }
+        .dark .oao-ring-b::before {
+          background: #60a5fa;
+          box-shadow: 0 0 14px 3px rgba(96, 165, 250, 0.72);
         }
         .oao-ring-c {
-          width: 168%;
-          height: 70%;
-          border-color: rgba(189,203,226,.25);
+          width: 166%;
+          height: 68%;
+          border-color: rgba(11, 19, 43, 0.22);
           transform: translate(-50%, -50%) rotateX(70deg) rotateZ(-18deg) translateZ(-18px);
-          animation: oao-ring-c 23s linear infinite;
+          animation: oao-ring-c 28s linear infinite;
+        }
+        .dark .oao-ring-c {
+          border-color: rgba(189, 203, 226, 0.22);
         }
         .oao-caption {
           position: absolute;
           z-index: 8;
-          bottom: 2%;
+          bottom: 1%;
           display: flex;
           align-items: center;
-          gap: 13px;
-          color: #8d9bb3;
+          gap: 12px;
           font-size: 11px;
           font-weight: 800;
-          letter-spacing: .28em;
+          letter-spacing: 0.24em;
         }
         .oao-caption i {
           display: block;
-          width: 46px;
-          height: 1px;
-          background: #ed651b;
-          box-shadow: 0 0 10px #ed651b;
+          width: 40px;
+          height: 1.5px;
+          background: linear-gradient(90deg, transparent, #ea580c);
         }
-        @keyframes oao-levitate { 0%, 100% { translate: 0 0; } 50% { translate: 0 -13px; } }
-        @keyframes oao-ambient-breathe { 0%, 100% { opacity: .6; scale: 1; } 50% { opacity: .95; scale: 1.16; } }
-        @keyframes oao-shadow-pulse { 0%, 100% { scale: 1; opacity: .7; } 50% { scale: .8; opacity: .42; } }
-        @keyframes oao-light-sweep { 0%, 100% { translate: -180px 0; opacity: 0; } 45% { opacity: .3; } 70% { translate: 180px 0; opacity: 0; } }
+        .oao-caption i:last-child {
+          background: linear-gradient(90deg, #ea580c, transparent);
+        }
+        @keyframes oao-levitate {
+          0%, 100% { transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(0px); }
+          50% { transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-10px); }
+        }
+        @keyframes oao-ambient-navy-breathe {
+          0%, 100% { opacity: 0.45; transform: scale(0.96); }
+          50% { opacity: 0.82; transform: scale(1.08); }
+        }
+        @keyframes oao-ambient-orange-breathe {
+          0%, 100% { opacity: 0.42; transform: scale(1.02); }
+          50% { opacity: 0.78; transform: scale(0.94); }
+        }
+        @keyframes oao-shadow-pulse {
+          0%, 100% { transform: rotateX(72deg) scale(1); opacity: 0.7; }
+          50% { transform: rotateX(72deg) scale(0.86); opacity: 0.45; }
+        }
+        @keyframes oao-light-sweep {
+          0%, 100% { transform: translateX(-140px) rotate(35deg); opacity: 0; }
+          45% { opacity: 0.24; }
+          75% { transform: translateX(140px) rotate(35deg); opacity: 0; }
+        }
         @keyframes oao-gleam-sweep {
-          0%, 100% { opacity: 0; transform: translateX(-60%) rotate(25deg); }
-          30% { opacity: 0.85; }
-          60% { opacity: 0; transform: translateX(60%) rotate(25deg); }
+          0%, 100% { opacity: 0; transform: translateX(-55%) rotate(25deg); }
+          35% { opacity: 0.65; }
+          65% { opacity: 0; transform: translateX(55%) rotate(25deg); }
         }
         @keyframes oao-ring-a { to { rotate: 360deg; } }
         @keyframes oao-ring-b { to { rotate: -360deg; } }
         @keyframes oao-ring-c { to { rotate: 360deg; } }
+        @media (prefers-reduced-motion: reduce) {
+          .oao-logo-wrap, .oao-ambient-navy, .oao-ambient-orange, .oao-light-beam, .oao-specular-gleam, .oao-ring {
+            animation: none !important;
+          }
+        }
         @media (max-width: 560px) {
-          .oao-logo-wrap { width: min(78vw, 320px); }
-          .oao-caption { bottom: 3%; font-size: 9px; }
+          .oao-logo-wrap { width: ${compact ? 'min(62vw, 230px)' : 'min(68vw, 255px)'}; }
+          .oao-caption { bottom: 2%; font-size: 9px; }
           .oao-ring-c { display: none; }
         }
       `}</style>
 
-      <main ref={stageRef} className="oao-stage" aria-label="شعار Own Aura Outcome بتصميم ثلاثي الأبعاد">
-        <div className="oao-ambient"></div>
-        <div className="oao-light-beam"></div>
+      <div ref={stageRef} className="oao-stage" aria-label="شعار Own Aura Outcome بتصميم ثلاثي الأبعاد">
+        <div className="oao-ambient-navy" />
+        <div className="oao-ambient-orange" />
+        <div className="oao-light-beam" />
         <div ref={logoRef} className="oao-logo-wrap">
-          <div className="oao-ring oao-ring-a"></div>
-          <div className="oao-ring oao-ring-b"></div>
-          <div className="oao-ring oao-ring-c"></div>
+          <div className="oao-ring oao-ring-a" />
+          <div className="oao-ring oao-ring-b" />
+          <div className="oao-ring oao-ring-c" />
 
           {/* 3D Depth Extrusion Layer */}
           <div className="oao-emblem-depth" aria-hidden="true">
             <img src={oaoImg} alt="" />
           </div>
 
-          {/* Core 3D Free-Standing Emblem Shape */}
+          {/* Core 3D Free-Standing Emblem */}
           <div className="oao-emblem-main">
             <img src={oaoImg} alt="Own Aura Outcome" />
-            <div className="oao-specular-gleam" aria-hidden="true"></div>
+            <div className="oao-specular-gleam" aria-hidden="true" />
           </div>
         </div>
-        <div className="oao-caption">
-          <i></i>
-          <span className="flex items-center gap-1.5 font-black text-xs tracking-wider select-none">
-            <span className="text-white">OWN</span>
-            <span className="px-1.5 py-0.5 rounded bg-gradient-to-r from-slate-100 via-white to-slate-200 text-[#07182E] text-[10px] font-black tracking-widest uppercase border border-slate-300 shadow-xs">
-              AURA
+        {showCaption && (
+          <div className="oao-caption">
+            <i />
+            <span className="flex items-center gap-1.5 font-black text-xs tracking-wider select-none">
+              <span className="text-[#0B132B] dark:text-white">OWN</span>
+              <span className="px-1.5 py-0.5 rounded bg-[#0B132B] text-white dark:bg-gradient-to-r dark:from-slate-100 dark:via-white dark:to-slate-200 dark:text-[#07182E] text-[10px] font-black tracking-widest uppercase border border-orange-500/40 dark:border-slate-300 shadow-xs">
+                AURA
+              </span>
+              <span className="text-[#EA580C] dark:text-[#f97316]">OUTCOME</span>
             </span>
-            <span className="text-[#ed651b]">OUTCOME</span>
-          </span>
-          <i></i>
-        </div>
-      </main>
+            <i />
+          </div>
+        )}
+      </div>
     </div>
   );
 };

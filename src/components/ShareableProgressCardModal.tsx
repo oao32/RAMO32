@@ -283,25 +283,25 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
   const unlockedBadges = badges.filter((b) => b.isUnlocked);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xl overflow-y-auto animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 dark:bg-black/85 backdrop-blur-xl overflow-y-auto animate-in fade-in duration-200">
       <div
         className={`relative w-full max-w-4xl my-auto rounded-3xl border shadow-2xl overflow-hidden transition-all flex flex-col max-h-[92vh] ${
           theme === 'dark'
             ? 'bg-[#070b19] border-orange-500/35 text-white'
-            : 'bg-white border-slate-300 text-[#0B132B]'
+            : 'bg-[#FAFBFD] border-slate-300 text-[#0B132B]'
         }`}
       >
         {/* Top Header Controls */}
-        <div className="p-4 sm:p-6 border-b border-white/10 flex items-center justify-between">
+        <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-600 to-amber-500 text-white flex items-center justify-center shadow-[0_0_15px_rgba(249,115,22,0.6)]">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-black">
+              <h2 className="text-lg sm:text-xl font-black text-[#0B132B] dark:text-white">
                 {isAr ? 'تصدير كرت الإنجاز الرياضي (Shareable Progress Card)' : 'Shareable Progress Card'}
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
                 {isAr ? 'صمّم كرتك الفاخر بجودة عالية لمشاركته على انستقرام وواتساب وتيك توك' : 'Export your high-resolution athletic achievement card for social stories'}
               </p>
             </div>
@@ -309,7 +309,7 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
 
           <button
             onClick={onClose}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            className="p-2 rounded-full bg-slate-200/80 dark:bg-white/10 hover:bg-slate-300/80 dark:hover:bg-white/20 text-slate-700 dark:text-slate-300 hover:text-[#0B132B] dark:hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -321,7 +321,7 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
           <div className="lg:col-span-5 space-y-5">
             {/* 1. Format Selector */}
             <div>
-              <span className="text-xs font-black uppercase tracking-wider text-slate-400 block mb-2">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-2">
                 {isAr ? '1. مقاس كرت المشاركة (Card Format)' : '1. Card Format'}
               </span>
               <div className="grid grid-cols-3 gap-2">
@@ -329,46 +329,46 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
                   onClick={() => setFormat('story')}
                   className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
                     format === 'story'
-                      ? 'bg-gradient-to-br from-orange-500/20 to-orange-600/30 border-orange-500 text-orange-400 shadow-md ring-2 ring-orange-500/30'
-                      : 'bg-black/30 border-white/10 text-slate-400 hover:text-white'
+                      ? 'bg-gradient-to-br from-orange-500/15 to-orange-600/20 dark:from-orange-500/20 dark:to-orange-600/30 border-orange-500 text-orange-600 dark:text-orange-400 shadow-md ring-2 ring-orange-500/30'
+                      : 'bg-white dark:bg-black/30 border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white'
                   }`}
                 >
                   <Smartphone className="w-5 h-5" />
                   <span className="text-xs font-bold">{isAr ? 'ستوري (9:16)' : 'Story 9:16'}</span>
-                  <span className="text-[9px] text-slate-400">Snap / Insta</span>
+                  <span className="text-[9px] text-slate-500 dark:text-slate-400">Snap / Insta</span>
                 </button>
 
                 <button
                   onClick={() => setFormat('square')}
                   className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
                     format === 'square'
-                      ? 'bg-gradient-to-br from-orange-500/20 to-orange-600/30 border-orange-500 text-orange-400 shadow-md ring-2 ring-orange-500/30'
-                      : 'bg-black/30 border-white/10 text-slate-400 hover:text-white'
+                      ? 'bg-gradient-to-br from-orange-500/15 to-orange-600/20 dark:from-orange-500/20 dark:to-orange-600/30 border-orange-500 text-orange-600 dark:text-orange-400 shadow-md ring-2 ring-orange-500/30'
+                      : 'bg-white dark:bg-black/30 border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white'
                   }`}
                 >
                   <Square className="w-5 h-5" />
                   <span className="text-xs font-bold">{isAr ? 'مربع (1:1)' : 'Post 1:1'}</span>
-                  <span className="text-[9px] text-slate-400">Feed / X</span>
+                  <span className="text-[9px] text-slate-500 dark:text-slate-400">Feed / X</span>
                 </button>
 
                 <button
                   onClick={() => setFormat('card')}
                   className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
                     format === 'card'
-                      ? 'bg-gradient-to-br from-orange-500/20 to-orange-600/30 border-orange-500 text-orange-400 shadow-md ring-2 ring-orange-500/30'
-                      : 'bg-black/30 border-white/10 text-slate-400 hover:text-white'
+                      ? 'bg-gradient-to-br from-orange-500/15 to-orange-600/20 dark:from-orange-500/20 dark:to-orange-600/30 border-orange-500 text-orange-600 dark:text-orange-400 shadow-md ring-2 ring-orange-500/30'
+                      : 'bg-white dark:bg-black/30 border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white'
                   }`}
                 >
                   <CreditCard className="w-5 h-5" />
                   <span className="text-xs font-bold">{isAr ? 'بطاقة VIP' : 'VIP Card'}</span>
-                  <span className="text-[9px] text-slate-400">Member Pass</span>
+                  <span className="text-[9px] text-slate-500 dark:text-slate-400">Member Pass</span>
                 </button>
               </div>
             </div>
 
             {/* 2. Theme / Color Mood */}
             <div>
-              <span className="text-xs font-black uppercase tracking-wider text-slate-400 block mb-2">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-2">
                 {isAr ? '2. النمط اللوني الفاخر (Color Theme)' : '2. Color Theme'}
               </span>
               <div className="grid grid-cols-3 gap-2">
@@ -376,8 +376,8 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
                   onClick={() => setCardTheme('aura')}
                   className={`p-2.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-center gap-2 ${
                     cardTheme === 'aura'
-                      ? 'border-orange-500 bg-orange-500/15 text-orange-300 ring-2 ring-orange-500/30 font-bold'
-                      : 'border-white/10 bg-black/30 text-slate-400 hover:text-white'
+                      ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300 ring-2 ring-orange-500/30 font-bold'
+                      : 'border-slate-300 dark:border-white/10 bg-white dark:bg-black/30 text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white'
                   }`}
                 >
                   <div className="w-3.5 h-3.5 rounded-full bg-orange-500 shadow-[0_0_8px_#f97316]" />
@@ -388,8 +388,8 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
                   onClick={() => setCardTheme('titan')}
                   className={`p-2.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-center gap-2 ${
                     cardTheme === 'titan'
-                      ? 'border-cyan-500 bg-cyan-500/15 text-cyan-300 ring-2 ring-cyan-500/30 font-bold'
-                      : 'border-white/10 bg-black/30 text-slate-400 hover:text-white'
+                      ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 ring-2 ring-cyan-500/30 font-bold'
+                      : 'border-slate-300 dark:border-white/10 bg-white dark:bg-black/30 text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white'
                   }`}
                 >
                   <div className="w-3.5 h-3.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#38bdf8]" />
@@ -400,8 +400,8 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
                   onClick={() => setCardTheme('gold')}
                   className={`p-2.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-center gap-2 ${
                     cardTheme === 'gold'
-                      ? 'border-amber-500 bg-amber-500/15 text-amber-300 ring-2 ring-amber-500/30 font-bold'
-                      : 'border-white/10 bg-black/30 text-slate-400 hover:text-white'
+                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-2 ring-amber-500/30 font-bold'
+                      : 'border-slate-300 dark:border-white/10 bg-white dark:bg-black/30 text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white'
                   }`}
                 >
                   <div className="w-3.5 h-3.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" />
@@ -412,7 +412,7 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
 
             {/* 3. Highlight Stat to Feature */}
             <div>
-              <span className="text-xs font-black uppercase tracking-wider text-slate-400 block mb-2">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-2">
                 {isAr ? '3. الإحصائية الرئيسية البارزة (Highlight)' : '3. Featured Stat'}
               </span>
               <div className="grid grid-cols-3 gap-2">
@@ -421,7 +421,7 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
                   className={`p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                     highlightStat === 'streak'
                       ? 'bg-orange-500 text-white border-orange-400'
-                      : 'bg-black/20 border-white/10 text-slate-400'
+                      : 'bg-white dark:bg-black/20 border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white'
                   }`}
                 >
                   🔥 {isAr ? 'سلسلة الأيام' : 'Streak Days'}
@@ -432,7 +432,7 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
                   className={`p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                     highlightStat === 'pr'
                       ? 'bg-orange-500 text-white border-orange-400'
-                      : 'bg-black/20 border-white/10 text-slate-400'
+                      : 'bg-white dark:bg-black/20 border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white'
                   }`}
                 >
                   🏋️ {isAr ? 'الرقم القياسي' : 'Best PR'}
@@ -443,7 +443,7 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
                   className={`p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                     highlightStat === 'transformation'
                       ? 'bg-orange-500 text-white border-orange-400'
-                      : 'bg-black/20 border-white/10 text-slate-400'
+                      : 'bg-white dark:bg-black/20 border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-[#0B132B] dark:hover:text-white'
                   }`}
                 >
                   ⚡ {isAr ? 'إجمالي الجلسات' : 'Total Workouts'}
@@ -456,7 +456,7 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
               <button
                 onClick={handleExportPNG}
                 disabled={isExporting}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-sm tracking-wider uppercase shadow-[0_0_25px_rgba(249,115,22,0.6)] transition-all hover:scale-[1.02] active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-sm tracking-wider uppercase shadow-[0_0_25px_rgba(249,115,22,0.5)] transition-all hover:scale-[1.02] active:scale-95 cursor-pointer flex items-center justify-center gap-2"
               >
                 <Download className="w-5 h-5" />
                 <span>{isExporting ? (isAr ? 'جارِ إنشاء الصورة بدقة عالية...' : 'Rendering Card...') : (isAr ? 'تحميل الصورة عالية الدقة (PNG) 📥' : 'Download High-Res PNG 📥')}</span>
@@ -465,9 +465,9 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={handleNativeShare}
-                  className="py-3 rounded-xl bg-blue-950/70 hover:bg-blue-900 border border-cyan-500/40 text-cyan-300 font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="py-3 rounded-xl bg-cyan-50 dark:bg-blue-950/70 hover:bg-cyan-100 dark:hover:bg-blue-900 border border-cyan-400 dark:border-cyan-500/40 text-cyan-800 dark:text-cyan-300 font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <Share2 className="w-4 h-4 text-cyan-400" />
+                  <Share2 className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
                   <span>{isAr ? 'مشاركة مباشرة 📲' : 'Share Card'}</span>
                 </button>
 
@@ -477,9 +477,9 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
                     setCopied(true);
                     setTimeout(() => setCopied(false), 2500);
                   }}
-                  className="py-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="py-3 rounded-xl bg-slate-200/80 dark:bg-white/10 hover:bg-slate-300/80 dark:hover:bg-white/20 border border-slate-300 dark:border-white/20 text-[#0B132B] dark:text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  {copied ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   <span>{copied ? (isAr ? 'تم النسخ!' : 'Copied!') : (isAr ? 'نسخ النص 📋' : 'Copy Text')}</span>
                 </button>
               </div>
@@ -488,7 +488,7 @@ export const ShareableProgressCardModal: React.FC<ShareableProgressCardModalProp
 
           {/* Live Card Interactive Preview */}
           <div className="lg:col-span-7 flex flex-col items-center justify-center">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">
+            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-3">
               {isAr ? 'معاينة حية للكرت (Live Interactive Preview)' : 'Live Interactive Preview'}
             </span>
 

@@ -10,6 +10,7 @@ import {
 import { VipDashboard } from './VipDashboard';
 import { StandardDashboard } from './StandardDashboard';
 import { BrandLogo } from '../../components/BrandLogo';
+import { useOaoTheme } from '../../lib/themeUtils';
 import { AlertTriangle, ArrowRight, Loader2, ShieldAlert } from 'lucide-react';
 
 interface AuthenticatedTokenSubscriber {
@@ -28,6 +29,8 @@ interface AuthenticatedTokenSubscriber {
 export const SubscriberTokenPortal: React.FC = () => {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  const { theme } = useOaoTheme();
+  const isLight = theme === 'light';
 
   const [status, setStatus] = useState<'loading' | 'authorized' | 'invalid' | 'suspended'>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -109,15 +112,21 @@ export const SubscriberTokenPortal: React.FC = () => {
   if (status === 'loading') {
     return (
       <div
-        className="min-h-screen bg-[#030712] text-white flex flex-col items-center justify-center p-6 font-['Alexandria',sans-serif]"
+        className={`min-h-screen flex flex-col items-center justify-center p-6 font-['Alexandria',sans-serif] transition-colors ${
+          isLight ? 'bg-[#EEF2F6] text-[#0B132B]' : 'bg-[#030712] text-white'
+        }`}
         dir="rtl"
       >
-        <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-orange-600/15 rounded-full blur-[140px] pointer-events-none" />
+        <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-orange-600/12 rounded-full blur-[140px] pointer-events-none" />
         <div className="relative z-10 flex flex-col items-center gap-4 text-center">
           <BrandLogo size="md" showText={false} />
-          <Loader2 className="w-9 h-9 text-orange-400 animate-spin" />
-          <p className="text-sm font-black text-white">جاري فتح بوابتك التدريبية المعزولة...</p>
-          <p className="text-xs text-slate-400">التحقق المشفر من رابط الدخول الخاص عبر Supabase</p>
+          <Loader2 className="w-9 h-9 text-[#EA580C] dark:text-orange-400 animate-spin" />
+          <p className={`text-sm font-black ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>
+            جاري فتح بوابتك التدريبية المعزولة...
+          </p>
+          <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+            التحقق المشفر من رابط الدخول الخاص عبر Supabase
+          </p>
         </div>
       </div>
     );
@@ -127,24 +136,36 @@ export const SubscriberTokenPortal: React.FC = () => {
     const isSuspended = status === 'suspended';
     return (
       <div
-        className="min-h-screen bg-[#030712] text-white flex items-center justify-center p-6 font-['Alexandria',sans-serif]"
+        className={`min-h-screen flex items-center justify-center p-6 font-['Alexandria',sans-serif] transition-colors ${
+          isLight ? 'bg-[#EEF2F6] text-[#0B132B]' : 'bg-[#030712] text-white'
+        }`}
         dir="rtl"
       >
-        <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-orange-600/15 rounded-full blur-[140px] pointer-events-none" />
-        <div className="relative z-10 max-w-md w-full rounded-3xl p-8 bg-gradient-to-br from-[#0B132B] via-[#070E24] to-[#040817] border-2 border-orange-500/40 shadow-[0_0_50px_rgba(249,115,22,0.18)] text-center space-y-5">
+        <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-orange-600/12 rounded-full blur-[140px] pointer-events-none" />
+        <div
+          className={`relative z-10 max-w-md w-full rounded-3xl p-8 border-2 text-center space-y-5 ${
+            isLight
+              ? 'bg-[#FAFBFD] border-orange-500/45 shadow-xl'
+              : 'bg-gradient-to-br from-[#0B132B] via-[#070E24] to-[#040817] border-orange-500/40 shadow-[0_0_50px_rgba(249,115,22,0.18)]'
+          }`}
+        >
           <div
             className={`w-16 h-16 mx-auto rounded-2xl flex items-center justify-center border ${
               isSuspended
-                ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                ? isLight
+                  ? 'bg-amber-100 border-amber-400 text-amber-700'
+                  : 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                : isLight
+                ? 'bg-rose-100 border-rose-400 text-rose-700'
                 : 'bg-rose-500/15 border-rose-500/40 text-rose-400'
             }`}
           >
             {isSuspended ? <AlertTriangle className="w-8 h-8" /> : <ShieldAlert className="w-8 h-8" />}
           </div>
-          <h1 className="text-xl font-black text-white">
+          <h1 className={`text-xl font-black ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>
             {isSuspended ? 'تم تعليق الاشتراك مؤقتاً' : 'رابط الدخول الخاص غير صالح'}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+          <p className={`text-xs sm:text-sm leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
             {errorMessage ||
               'لم يتم العثور على اشتراك نشط مرتبط بهذا الرابط. يرجى التأكد من الرابط أو التواصل مع الكوتش عمر عدنان.'}
           </p>

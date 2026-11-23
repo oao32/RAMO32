@@ -34,12 +34,12 @@ export const WaterBottleTracker: React.FC<WaterBottleTrackerProps> = ({
       <div className="w-full flex items-center justify-between mb-3 border-b border-slate-200/90 dark:border-white/5 pb-2.5">
         <h3 className="text-cyan-700 dark:text-cyan-400 font-extrabold text-sm tracking-wide flex items-center gap-2">
           {/* Vibrant Navy + Orange + White Icon Badge */}
-          <span className="p-1.5 rounded-xl bg-gradient-to-br from-[#0B132B] to-[#1C2541] text-cyan-400 ring-2 ring-cyan-500/30 shadow-md flex items-center justify-center">
-            <Droplets className="w-4 h-4 text-cyan-400 stroke-[2.5]" />
+          <span className="p-1.5 rounded-xl bg-cyan-100 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] text-cyan-700 dark:text-cyan-400 ring-2 ring-cyan-500/30 shadow-md flex items-center justify-center">
+            <Droplets className="w-4 h-4 text-cyan-700 dark:text-cyan-400 stroke-[2.5]" />
           </span>
           <span>{language === 'ar' ? 'قارورة الماء اليومية' : 'Daily Hydration Bottle'}</span>
         </h3>
-        <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#0B132B] to-[#1C2541] text-cyan-300 border border-cyan-500/40 font-bold shadow-xs">
+        <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-50 text-cyan-800 border border-cyan-300 dark:bg-gradient-to-r dark:from-[#0B132B] dark:to-[#1C2541] dark:text-cyan-300 dark:border-cyan-500/40 font-bold shadow-xs">
           {percentage}% {language === 'ar' ? 'مكتمل' : 'Done'}
         </span>
       </div>
@@ -47,13 +47,13 @@ export const WaterBottleTracker: React.FC<WaterBottleTrackerProps> = ({
       {/* Visual Water Bottle */}
       <div className="relative w-28 h-44 my-2 flex items-center justify-center">
         {/* Bottle Cap */}
-        <div className="absolute -top-3 w-8 h-3.5 bg-gradient-to-r from-slate-600 via-slate-400 to-slate-600 rounded-t-md border border-cyan-400/60 shadow-sm z-10" />
+        <div className="absolute -top-3 w-8 h-3.5 bg-gradient-to-r from-slate-300 via-slate-100 to-slate-300 dark:from-slate-600 dark:via-slate-400 dark:to-slate-600 rounded-t-md border border-cyan-500/60 dark:border-cyan-400/60 shadow-sm z-10" />
 
         {/* Bottle Neck */}
-        <div className="absolute -top-1 w-10 h-3 bg-slate-700/70 border-x border-cyan-400/50 z-10" />
+        <div className="absolute -top-1 w-10 h-3 bg-slate-200/90 dark:bg-slate-700/70 border-x border-cyan-500/50 dark:border-cyan-400/50 z-10" />
 
         {/* Main Bottle Body */}
-        <div className="relative w-24 h-40 rounded-2xl border-2 border-cyan-500/70 bg-[#0B132B]/90 overflow-hidden shadow-[0_0_25px_rgba(6,182,212,0.3)] flex flex-col justify-end">
+        <div className="relative w-24 h-40 rounded-2xl border-2 border-cyan-500/70 bg-sky-50/95 dark:bg-[#0B132B]/90 overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.2)] dark:shadow-[0_0_25px_rgba(6,182,212,0.3)] flex flex-col justify-end">
           {/* Water Fill Layer */}
           <div
             className="w-full bg-gradient-to-t from-cyan-600 via-cyan-400 to-sky-300 transition-all duration-500 relative flex items-center justify-center shadow-inner"
@@ -68,22 +68,24 @@ export const WaterBottleTracker: React.FC<WaterBottleTrackerProps> = ({
           </div>
 
           {/* Measurement ticks on bottle */}
-          <div className="absolute inset-y-0 right-1 flex flex-col justify-between py-3 pointer-events-none opacity-50">
-            <div className="w-2.5 h-[1.5px] bg-white" />
-            <div className="w-3.5 h-[1.5px] bg-white" />
-            <div className="w-2.5 h-[1.5px] bg-white" />
-            <div className="w-3.5 h-[1.5px] bg-white" />
-            <div className="w-2.5 h-[1.5px] bg-white" />
+          <div className="absolute inset-y-0 right-1 flex flex-col justify-between py-3 pointer-events-none opacity-55">
+            <div className="w-2.5 h-[1.5px] bg-cyan-700/40 dark:bg-white" />
+            <div className="w-3.5 h-[1.5px] bg-cyan-700/40 dark:bg-white" />
+            <div className="w-2.5 h-[1.5px] bg-cyan-700/40 dark:bg-white" />
+            <div className="w-3.5 h-[1.5px] bg-cyan-700/40 dark:bg-white" />
+            <div className="w-2.5 h-[1.5px] bg-cyan-700/40 dark:bg-white" />
           </div>
 
           {/* Centered Liters Display on Bottle */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-            <span className="text-base font-black text-white tracking-wider">
-              {currentLiters} / {goalLiters} L
-            </span>
-            <span className="text-[10px] text-cyan-200 font-bold">
-              {language === 'ar' ? 'لتر مستهلك' : 'Consumed'}
-            </span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none px-1">
+            <div className="bg-white/85 dark:bg-black/45 backdrop-blur-xs px-2 py-1 rounded-xl border border-cyan-500/25 flex flex-col items-center shadow-xs">
+              <span className="text-sm font-black text-[#0B132B] dark:text-white tracking-wider leading-tight">
+                {currentLiters} / {goalLiters} L
+              </span>
+              <span className="text-[10px] text-cyan-800 dark:text-cyan-200 font-bold">
+                {language === 'ar' ? 'لتر مستهلك' : 'Consumed'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -104,30 +106,30 @@ export const WaterBottleTracker: React.FC<WaterBottleTrackerProps> = ({
       <div className="w-full grid grid-cols-2 gap-2 mt-2">
         <button
           onClick={() => addAmount(0.15)}
-          className="bg-gradient-to-r from-[#0B132B] to-[#1C2541] hover:from-orange-600 hover:to-orange-500 border border-cyan-500/40 hover:border-orange-400 text-white text-xs py-2 px-2.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer group"
+          className="bg-white hover:bg-orange-500 dark:bg-gradient-to-r dark:from-[#0B132B] dark:to-[#1C2541] dark:hover:from-orange-600 dark:hover:to-orange-500 border border-cyan-500/40 hover:border-orange-500 dark:hover:border-orange-400 text-[#0B132B] hover:text-white dark:text-white text-xs py-2 px-2.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer group"
         >
-          <Plus className="w-3.5 h-3.5 text-orange-400 group-hover:text-white" />
+          <Plus className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 group-hover:text-white" />
           <span>{language === 'ar' ? '150 مل' : '150 ml'}</span>
         </button>
         <button
           onClick={() => addAmount(0.2)}
-          className="bg-gradient-to-r from-[#0B132B] to-[#1C2541] hover:from-orange-600 hover:to-orange-500 border border-cyan-500/40 hover:border-orange-400 text-white text-xs py-2 px-2.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer group"
+          className="bg-white hover:bg-orange-500 dark:bg-gradient-to-r dark:from-[#0B132B] dark:to-[#1C2541] dark:hover:from-orange-600 dark:hover:to-orange-500 border border-cyan-500/40 hover:border-orange-500 dark:hover:border-orange-400 text-[#0B132B] hover:text-white dark:text-white text-xs py-2 px-2.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer group"
         >
-          <Plus className="w-3.5 h-3.5 text-orange-400 group-hover:text-white" />
+          <Plus className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 group-hover:text-white" />
           <span>{language === 'ar' ? '200 مل' : '200 ml'}</span>
         </button>
         <button
           onClick={() => addAmount(0.6)}
-          className="bg-gradient-to-r from-[#0B132B] to-[#1C2541] hover:from-orange-600 hover:to-orange-500 border border-cyan-500/40 hover:border-orange-400 text-white text-xs py-2 px-2.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer group"
+          className="bg-white hover:bg-orange-500 dark:bg-gradient-to-r dark:from-[#0B132B] dark:to-[#1C2541] dark:hover:from-orange-600 dark:hover:to-orange-500 border border-cyan-500/40 hover:border-orange-500 dark:hover:border-orange-400 text-[#0B132B] hover:text-white dark:text-white text-xs py-2 px-2.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer group"
         >
-          <Plus className="w-3.5 h-3.5 text-orange-400 group-hover:text-white" />
+          <Plus className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 group-hover:text-white" />
           <span>{language === 'ar' ? '600 مل' : '600 ml'}</span>
         </button>
         <button
           onClick={() => addAmount(1.0)}
-          className="bg-gradient-to-r from-[#0B132B] to-[#1C2541] hover:from-orange-600 hover:to-orange-500 border border-cyan-500/40 hover:border-orange-400 text-white text-xs py-2 px-2.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer group"
+          className="bg-white hover:bg-orange-500 dark:bg-gradient-to-r dark:from-[#0B132B] dark:to-[#1C2541] dark:hover:from-orange-600 dark:hover:to-orange-500 border border-cyan-500/40 hover:border-orange-500 dark:hover:border-orange-400 text-[#0B132B] hover:text-white dark:text-white text-xs py-2 px-2.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer group"
         >
-          <Plus className="w-3.5 h-3.5 text-orange-400 group-hover:text-white" />
+          <Plus className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 group-hover:text-white" />
           <span>{language === 'ar' ? '1 لتر' : '1.0 L'}</span>
         </button>
       </div>

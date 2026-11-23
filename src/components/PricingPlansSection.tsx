@@ -359,7 +359,7 @@ export const PricingPlansSection: React.FC<PricingPlansSectionProps> = ({
                           className={`p-3 rounded-2xl shrink-0 shadow-md ${
                             plan.isVip
                               ? 'bg-gradient-to-br from-[#FF5722] to-amber-500 text-white shadow-[0_0_20px_rgba(255,87,34,0.45)]'
-                              : 'bg-gradient-to-br from-[#0B132B] to-[#1C2541] text-slate-200 border border-slate-500/30'
+                              : 'bg-slate-200/90 text-[#0B132B] border border-slate-300 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] dark:text-slate-200 dark:border-slate-500/30'
                           }`}
                         >
                           <TierIcon className="w-6 h-6" />
@@ -402,7 +402,7 @@ export const PricingPlansSection: React.FC<PricingPlansSectionProps> = ({
                             className={`mt-1 p-1 rounded-full shrink-0 shadow-xs ${
                               plan.isVip
                                 ? 'bg-gradient-to-br from-[#FF5722] to-amber-500 text-white'
-                                : 'bg-gradient-to-br from-[#0B132B] to-[#1C2541] ring-1 ring-orange-500/30 text-orange-400'
+                                : 'bg-orange-100 text-[#EA580C] ring-1 ring-orange-400/40 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] dark:ring-orange-500/30 dark:text-orange-400'
                             }`}
                           >
                             <Check className="w-3 h-3 stroke-[3]" />
@@ -609,7 +609,7 @@ export const PricingPlansSection: React.FC<PricingPlansSectionProps> = ({
                         ? 'المكتبة التفاعلية (شرح فيديو، تسجيل أوزان، مؤقت راحة)'
                         : 'Interactive Video Library, Weight Log & Rest Timer'}
                     </td>
-                    <td className="py-3.5 px-3 text-center text-slate-400">
+                    <td className="py-3.5 px-3 text-center text-slate-500 dark:text-slate-400">
                       <Minus className="w-4 h-4 mx-auto" />
                     </td>
                     <td className="py-3.5 px-3 text-center text-emerald-600 dark:text-emerald-400 bg-orange-500/5 border-x border-orange-500/20">
@@ -637,7 +637,7 @@ export const PricingPlansSection: React.FC<PricingPlansSectionProps> = ({
                         ? 'التواصل الفوري ونظام التحفيز والتحديات والمكافآت'
                         : 'Instant Messaging + Gamified Streaks & Rewards'}
                     </td>
-                    <td className="py-3.5 px-3 text-center text-slate-400">
+                    <td className="py-3.5 px-3 text-center text-slate-500 dark:text-slate-400">
                       <Minus className="w-4 h-4 mx-auto" />
                     </td>
                     <td className="py-3.5 px-3 text-center text-emerald-600 dark:text-emerald-400 bg-orange-500/5 border-x border-orange-500/20">
@@ -651,7 +651,7 @@ export const PricingPlansSection: React.FC<PricingPlansSectionProps> = ({
                         ? 'جدول تمارين الطوارئ (للسفر أو انتهاء اشتراك النادي)'
                         : 'Emergency & Travel Backup Workout Plans'}
                     </td>
-                    <td className="py-3.5 px-3 text-center text-slate-400">
+                    <td className="py-3.5 px-3 text-center text-slate-500 dark:text-slate-400">
                       <Minus className="w-4 h-4 mx-auto" />
                     </td>
                     <td className="py-3.5 px-3 text-center text-emerald-600 dark:text-emerald-400 bg-orange-500/5 border-x border-orange-500/20">

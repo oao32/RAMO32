@@ -6,7 +6,6 @@ import {
   ClientNote,
   Exercise,
   Language,
-  Theme,
   SubscriptionPlanTier,
 } from '../../types';
 import {
@@ -42,6 +41,7 @@ import {
   isCoachAuthenticated,
   setCoachAuthenticated,
 } from '../../lib/authStore';
+import { useOaoTheme } from '../../lib/themeUtils';
 import {
   Home,
   LogOut,
@@ -52,6 +52,8 @@ import {
   Dumbbell,
   Lock,
   Loader2,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export interface StandardDashboardProps {
@@ -78,13 +80,12 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
 }) => {
   const navigate = useNavigate();
 
-  // Load language & theme from storage
+  // Load language & reactive theme from shared storage
   const [language] = useState<Language>(() => {
     return (localStorage.getItem('oao_lang') as Language) || 'ar';
   });
-  const [theme] = useState<Theme>(() => {
-    return (localStorage.getItem('oao_theme') as Theme) || 'dark';
-  });
+  const { theme, toggleTheme } = useOaoTheme();
+  const isLight = theme === 'light';
 
   const [accessStatus, setAccessStatus] = useState<
     'checking' | 'authorized' | 'unauthorized' | 'tier_mismatch' | 'suspended'
@@ -297,9 +298,15 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
 
   if (accessStatus === 'checking') {
     return (
-      <div className="min-h-screen bg-[#030712] text-white flex flex-col items-center justify-center p-6 font-['Alexandria',sans-serif]">
-        <Loader2 className="w-10 h-10 text-orange-400 animate-spin mb-4" />
-        <p className="text-sm font-bold text-slate-300">جاري التحقق من صلاحية الحساب وتحميل بياناتك الخاصة...</p>
+      <div
+        className={`min-h-screen flex flex-col items-center justify-center p-6 font-['Alexandria',sans-serif] transition-colors ${
+          isLight ? 'bg-[#EEF2F6] text-[#0B132B]' : 'bg-[#030712] text-white'
+        }`}
+      >
+        <Loader2 className="w-10 h-10 text-[#EA580C] dark:text-orange-400 animate-spin mb-4" />
+        <p className={`text-sm font-bold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+          جاري التحقق من صلاحية الحساب وتحميل بياناتك الخاصة...
+        </p>
       </div>
     );
   }
@@ -315,13 +322,32 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
         : 'لضمان خصوصية وعزل بيانات كل مشترك، لا يمكن فتح هذه الصفحة بدون تسجيل الدخول أو استخدام الرابط الخاص المرسل من الكوتش.';
 
     return (
-      <div className="min-h-screen bg-[#030712] text-white flex items-center justify-center p-6 font-['Alexandria',sans-serif]" dir="rtl">
-        <div className="max-w-md w-full rounded-3xl p-8 bg-gradient-to-br from-[#0B132B] via-[#070E24] to-[#040817] border border-orange-500/35 shadow-2xl text-center space-y-5">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-orange-500/15 border border-orange-500/40 flex items-center justify-center text-orange-400">
+      <div
+        className={`min-h-screen flex items-center justify-center p-6 font-['Alexandria',sans-serif] transition-colors ${
+          isLight ? 'bg-[#EEF2F6] text-[#0B132B]' : 'bg-[#030712] text-white'
+        }`}
+        dir="rtl"
+      >
+        <div
+          className={`max-w-md w-full rounded-3xl p-8 border text-center space-y-5 ${
+            isLight
+              ? 'bg-[#FAFBFD] border-orange-500/40 shadow-xl'
+              : 'bg-gradient-to-br from-[#0B132B] via-[#070E24] to-[#040817] border-orange-500/35 shadow-2xl'
+          }`}
+        >
+          <div
+            className={`w-16 h-16 mx-auto rounded-2xl border flex items-center justify-center ${
+              isLight
+                ? 'bg-orange-100 border-orange-300 text-[#EA580C]'
+                : 'bg-orange-500/15 border-orange-500/40 text-orange-400'
+            }`}
+          >
             <Lock className="w-8 h-8" />
           </div>
-          <h1 className="text-xl font-black text-white">{title}</h1>
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{desc}</p>
+          <h1 className={`text-xl font-black ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>{title}</h1>
+          <p className={`text-xs sm:text-sm leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+            {desc}
+          </p>
           <button
             onClick={() => navigate('/')}
             className="w-full py-3.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-all"
@@ -337,7 +363,9 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
   if (isSubscriptionLocked) {
     return (
       <div
-        className="min-h-screen bg-[#030712] text-white font-['Alexandria',sans-serif]"
+        className={`min-h-screen font-['Alexandria',sans-serif] transition-colors ${
+          isLight ? 'bg-[#EEF2F6] text-[#0B132B]' : 'bg-[#030712] text-white'
+        }`}
         dir={language === 'ar' ? 'rtl' : 'ltr'}
       >
         <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-rose-600/10 rounded-full blur-[160px] pointer-events-none" />
@@ -365,12 +393,24 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-[#030712] text-white selection:bg-orange-500 selection:text-white font-['Alexandria',sans-serif]">
+    <div
+      className={`min-h-screen selection:bg-orange-500 selection:text-white font-['Alexandria',sans-serif] transition-colors ${
+        isLight
+          ? 'bg-gradient-to-b from-[#EEF2F6] via-[#E8EDF5] to-[#EEF2F6] text-[#0B132B]'
+          : 'bg-[#030712] text-white'
+      }`}
+    >
       {/* Top Background Ambient Glow */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-orange-600/10 rounded-full blur-[160px] pointer-events-none" />
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-orange-600/8 rounded-full blur-[160px] pointer-events-none" />
 
       {/* TOP NAVIGATION BAR */}
-      <header className="sticky top-0 z-40 bg-[#070e24]/90 backdrop-blur-xl border-b border-white/10 px-4 sm:px-8 py-3.5 flex items-center justify-between">
+      <header
+        className={`sticky top-0 z-40 backdrop-blur-xl border-b px-4 sm:px-8 py-3.5 flex items-center justify-between transition-colors ${
+          isLight
+            ? 'bg-[#EEF2F6]/95 border-slate-300/80 shadow-[0_4px_20px_rgba(11,19,43,0.06)]'
+            : 'bg-[#070e24]/90 border-white/10'
+        }`}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/')}
@@ -379,30 +419,44 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
           >
             <BrandLogo size="sm" showText={false} />
             <div className="flex flex-col text-start">
-              <span className="text-sm font-black tracking-wider text-white flex items-center gap-1">
+              <span
+                className={`text-sm font-black tracking-wider flex items-center gap-1 ${
+                  isLight ? 'text-[#0B132B]' : 'text-white'
+                }`}
+              >
                 <span>OWN</span>
                 <span className="text-[#EA580C]">AURA</span>
                 <span>OUTCOME</span>
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">STANDARD PORTAL</span>
+              <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono">STANDARD PORTAL</span>
             </div>
           </button>
 
           {/* Standard Tier Badge */}
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800/80 border border-slate-600 text-slate-200 text-xs font-bold">
-            <Shield className="w-3.5 h-3.5 text-slate-300" />
+          <div
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl border text-xs font-bold ${
+              isLight
+                ? 'bg-white border-slate-300 text-[#0B132B]'
+                : 'bg-slate-800/80 border-slate-600 text-slate-200'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5 text-[#EA580C] dark:text-slate-300" />
             <span>الباقة القياسية (Standard)</span>
           </div>
         </div>
 
         {/* Center / Right Status & Actions */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           {/* Subscription remaining days & months */}
           <div
-            className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-xs font-mono text-slate-300"
+            className={`hidden md:flex items-center gap-1.5 px-3 py-1 rounded-xl border text-xs font-mono ${
+              isLight
+                ? 'bg-white border-slate-300 text-[#0B132B]'
+                : 'bg-white/5 border-white/10 text-slate-300'
+            }`}
             title={`من ${subDetails.startDate} إلى ${subDetails.endDate}`}
           >
-            <Clock className="w-3.5 h-3.5 text-orange-400" />
+            <Clock className="w-3.5 h-3.5 text-[#EA580C] dark:text-orange-400" />
             <span>
               {subDetails.remainingMonths > 0
                 ? `${subDetails.formattedRemainingDurationAr} (${subDetails.daysRemaining} يوم)`
@@ -419,10 +473,33 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
             <span>ترقية إلى VIP</span>
           </button>
 
+          {/* Theme Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${
+              isLight
+                ? 'bg-white hover:bg-slate-100 border-slate-300 text-[#0B132B]'
+                : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
+            }`}
+            title={isLight ? 'الوضع الليلي' : 'الوضع النهاري'}
+          >
+            {isLight ? (
+              <Moon className="w-4 h-4 text-[#0B132B]" />
+            ) : (
+              <Sun className="w-4 h-4 text-orange-400" />
+            )}
+          </button>
+
           {/* Return Home Button */}
           <button
             onClick={() => navigate('/')}
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer"
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${
+              isLight
+                ? 'bg-white hover:bg-slate-100 border-slate-300 text-[#0B132B]'
+                : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
+            }`}
             title="الرئيسية"
           >
             <Home className="w-4 h-4" />
@@ -431,7 +508,11 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
           {/* Logout Button */}
           <button
             onClick={handleLogout}
-            className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 transition-all cursor-pointer"
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${
+              isLight
+                ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700'
+                : 'bg-red-500/10 hover:bg-red-500/20 border-red-500/20 text-red-400'
+            }`}
             title="تسجيل الخروج"
           >
             <LogOut className="w-4 h-4" />
@@ -440,28 +521,40 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
       </header>
 
       {/* DASHBOARD BODY */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 relative z-10">
         {/* Welcome Header Card */}
-        <div className="relative rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-[#0B132B] via-[#070E24] to-[#040817] border border-orange-500/25 shadow-2xl overflow-hidden">
+        <div
+          className={`relative rounded-3xl p-6 sm:p-8 border overflow-hidden transition-colors ${
+            isLight
+              ? 'bg-[#FAFBFD] border-slate-300 shadow-[0_10px_35px_rgba(11,19,43,0.06)]'
+              : 'bg-gradient-to-r from-[#0B132B] via-[#070E24] to-[#040817] border-orange-500/25 shadow-2xl'
+          }`}
+        >
           <div className="absolute top-0 right-0 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
 
           <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold mb-2">
-                <Shield className="w-3.5 h-3.5 text-slate-300" />
+              <div
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold mb-2 ${
+                  isLight
+                    ? 'bg-slate-100 border-slate-300 text-[#0B132B]'
+                    : 'bg-slate-800 border-slate-700 text-slate-300'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5 text-[#EA580C] dark:text-slate-300" />
                 <span>عضوية الباقة القياسية (Standard Athlete)</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-white">
+              <h1 className={`text-2xl sm:text-3xl font-black ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>
                 أهلاً بك يا بطل! {profile.name} 👋
               </h1>
-              <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1">
+              <p className={`text-xs sm:text-sm font-medium mt-1 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                 جدول تمارينك المعتمد والمتابعة الدورية مع الكوتش عمر عدنان
               </p>
             </div>
           </div>
 
-          {/* 5-Card Official Biometrics Bar (المشترك، الوزن، الطول، العضلات، الدهون) */}
-          <div className="relative z-10 mt-6 pt-6 border-t border-white/10">
+          {/* 5-Card Official Biometrics Bar */}
+          <div className={`relative z-10 mt-6 pt-6 border-t ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
             <AthleteBiometricsBar
               profile={profile}
               language={language}
@@ -481,16 +574,28 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
         />
 
         {/* Upgrade to VIP Callout Banner */}
-        <div className="rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-amber-500/10 via-[#0B132B] to-orange-500/10 border border-amber-400/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div
+          className={`rounded-2xl p-4 sm:p-5 border flex flex-col sm:flex-row items-center justify-between gap-4 ${
+            isLight
+              ? 'bg-gradient-to-r from-amber-50 via-[#FAFBFD] to-orange-50 border-amber-400/70 shadow-sm'
+              : 'bg-gradient-to-r from-amber-500/10 via-[#0B132B] to-orange-500/10 border-amber-400/40'
+          }`}
+        >
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-400/30 shrink-0">
+            <div
+              className={`p-3 rounded-xl border shrink-0 ${
+                isLight
+                  ? 'bg-amber-100 text-amber-700 border-amber-300'
+                  : 'bg-amber-500/20 text-amber-400 border-amber-400/30'
+              }`}
+            >
               <Crown className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="text-sm font-black text-amber-300">
+              <h4 className={`text-sm font-black ${isLight ? 'text-amber-900' : 'text-amber-300'}`}>
                 هل ترغب في الحصول على مميزات الباقة البلاتينية VIP؟
               </h4>
-              <p className="text-xs text-slate-300 mt-0.5">
+              <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                 متابعة أسبوعية دقيقة، تواصل مباشر عبر الواتساب، وتحديث أسبوعي للجداول مع كرت الإنجاز.
               </p>
             </div>
@@ -507,8 +612,10 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
         {/* WORKOUT SCHEDULE & EXERCISES */}
         <section className="space-y-4">
           <div className="flex items-center gap-2">
-            <Dumbbell className="w-5 h-5 text-orange-400" />
-            <h2 className="text-lg font-black text-white">جدول التمارين الأسبوعي</h2>
+            <Dumbbell className="w-5 h-5 text-[#EA580C] dark:text-orange-400" />
+            <h2 className={`text-lg font-black ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>
+              جدول التمارين الأسبوعي
+            </h2>
           </div>
           <WorkoutSchedule
             days={workoutDays}

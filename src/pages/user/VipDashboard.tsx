@@ -6,7 +6,6 @@ import {
   ClientNote,
   Exercise,
   Language,
-  Theme,
   StreakData,
   Badge,
   AthleteRank,
@@ -59,6 +58,7 @@ import {
   isCoachAuthenticated,
   setCoachAuthenticated,
 } from '../../lib/authStore';
+import { useOaoTheme } from '../../lib/themeUtils';
 import {
   Home,
   LogOut,
@@ -72,6 +72,8 @@ import {
   Lock,
   ArrowRight,
   Loader2,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export interface VipDashboardProps {
@@ -98,13 +100,12 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
 }) => {
   const navigate = useNavigate();
 
-  // Load language & theme
+  // Load language & reactive theme
   const [language] = useState<Language>(() => {
     return (localStorage.getItem('oao_lang') as Language) || 'ar';
   });
-  const [theme] = useState<Theme>(() => {
-    return (localStorage.getItem('oao_theme') as Theme) || 'dark';
-  });
+  const { theme, toggleTheme } = useOaoTheme();
+  const isLight = theme === 'light';
 
   const [accessStatus, setAccessStatus] = useState<
     'checking' | 'authorized' | 'unauthorized' | 'tier_mismatch' | 'suspended'
@@ -427,9 +428,15 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
 
   if (accessStatus === 'checking') {
     return (
-      <div className="min-h-screen bg-[#030712] text-white flex flex-col items-center justify-center p-6 font-['Alexandria',sans-serif]">
-        <Loader2 className="w-10 h-10 text-amber-400 animate-spin mb-4" />
-        <p className="text-sm font-bold text-amber-200">جاري التحقق من صلاحية الحساب وتحميل بياناتك الخاصة...</p>
+      <div
+        className={`min-h-screen flex flex-col items-center justify-center p-6 font-['Alexandria',sans-serif] transition-colors ${
+          isLight ? 'bg-[#EEF2F6] text-[#0B132B]' : 'bg-[#030712] text-white'
+        }`}
+      >
+        <Loader2 className="w-10 h-10 text-amber-500 dark:text-amber-400 animate-spin mb-4" />
+        <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+          جاري التحقق من صلاحية الحساب وتحميل بياناتك الخاصة...
+        </p>
       </div>
     );
   }
@@ -449,13 +456,32 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
         : 'لضمان خصوصية وعزل بيانات كل مشترك، لا يمكن فتح هذه الصفحة بدون تسجيل الدخول أو استخدام الرابط الخاص المرسل من الكوتش.';
 
     return (
-      <div className="min-h-screen bg-[#030712] text-white flex items-center justify-center p-6 font-['Alexandria',sans-serif]" dir="rtl">
-        <div className="max-w-md w-full rounded-3xl p-8 bg-gradient-to-br from-[#0B132B] via-[#070E24] to-[#040817] border-2 border-amber-500/40 shadow-[0_0_50px_rgba(245,158,11,0.18)] text-center space-y-5">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/15 border border-amber-400/40 flex items-center justify-center text-amber-400">
+      <div
+        className={`min-h-screen flex items-center justify-center p-6 font-['Alexandria',sans-serif] transition-colors ${
+          isLight ? 'bg-[#EEF2F6] text-[#0B132B]' : 'bg-[#030712] text-white'
+        }`}
+        dir="rtl"
+      >
+        <div
+          className={`max-w-md w-full rounded-3xl p-8 border-2 text-center space-y-5 ${
+            isLight
+              ? 'bg-[#FAFBFD] border-amber-500/50 shadow-xl'
+              : 'bg-gradient-to-br from-[#0B132B] via-[#070E24] to-[#040817] border-amber-500/40 shadow-[0_0_50px_rgba(245,158,11,0.18)]'
+          }`}
+        >
+          <div
+            className={`w-16 h-16 mx-auto rounded-2xl border flex items-center justify-center ${
+              isLight
+                ? 'bg-amber-100 border-amber-400 text-amber-700'
+                : 'bg-amber-500/15 border-amber-400/40 text-amber-400'
+            }`}
+          >
             <Lock className="w-8 h-8" />
           </div>
-          <h1 className="text-xl font-black text-white">{title}</h1>
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{desc}</p>
+          <h1 className={`text-xl font-black ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>{title}</h1>
+          <p className={`text-xs sm:text-sm leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+            {desc}
+          </p>
           <button
             onClick={() => navigate('/')}
             className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-all"
@@ -471,7 +497,9 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
   if (isSubscriptionLocked) {
     return (
       <div
-        className="min-h-screen bg-[#030712] text-white font-['Alexandria',sans-serif]"
+        className={`min-h-screen font-['Alexandria',sans-serif] transition-colors ${
+          isLight ? 'bg-[#EEF2F6] text-[#0B132B]' : 'bg-[#030712] text-white'
+        }`}
         dir={language === 'ar' ? 'rtl' : 'ltr'}
       >
         <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-rose-600/10 rounded-full blur-[160px] pointer-events-none" />
@@ -499,12 +527,24 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-[#030712] text-white selection:bg-amber-500 selection:text-black font-['Alexandria',sans-serif]">
+    <div
+      className={`min-h-screen selection:bg-amber-500 selection:text-black font-['Alexandria',sans-serif] transition-colors ${
+        isLight
+          ? 'bg-gradient-to-b from-[#EEF2F6] via-[#E8EDF5] to-[#EEF2F6] text-[#0B132B]'
+          : 'bg-[#030712] text-white'
+      }`}
+    >
       {/* Top Background Luxury Gold/Orange Glow */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-b from-amber-500/15 via-orange-600/10 to-transparent rounded-full blur-[160px] pointer-events-none" />
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-b from-amber-500/12 via-orange-600/8 to-transparent rounded-full blur-[160px] pointer-events-none" />
 
       {/* TOP NAVIGATION BAR - LUXURY VIP THEME */}
-      <header className="sticky top-0 z-40 bg-[#070e24]/95 backdrop-blur-xl border-b border-amber-500/30 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-[0_4px_30px_rgba(245,158,11,0.1)]">
+      <header
+        className={`sticky top-0 z-40 backdrop-blur-xl border-b px-4 sm:px-8 py-3.5 flex items-center justify-between transition-colors ${
+          isLight
+            ? 'bg-[#FAF8F2]/95 border-amber-500/40 shadow-[0_4px_20px_rgba(217,119,6,0.08)]'
+            : 'bg-[#070e24]/95 border-amber-500/30 shadow-[0_4px_30px_rgba(245,158,11,0.1)]'
+        }`}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/')}
@@ -513,40 +553,52 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
           >
             <BrandLogo size="sm" showText={false} />
             <div className="flex flex-col text-start">
-              <span className="text-sm font-black tracking-wider text-white flex items-center gap-1">
+              <span
+                className={`text-sm font-black tracking-wider flex items-center gap-1 ${
+                  isLight ? 'text-[#0B132B]' : 'text-white'
+                }`}
+              >
                 <span>OWN</span>
-                <span className="text-amber-400">AURA</span>
+                <span className="text-amber-600 dark:text-amber-400">AURA</span>
                 <span>OUTCOME</span>
               </span>
-              <span className="text-[10px] text-amber-300 font-mono font-bold tracking-widest">
+              <span className="text-[10px] text-amber-700 dark:text-amber-300 font-mono font-bold tracking-widest">
                 VIP ELITE PORTAL
               </span>
             </div>
           </button>
 
           {/* Luxury VIP Tag */}
-          <VIPBadge variant="hero" language={language} />
+          <VIPBadge variant="hero" language={language} className="hidden sm:inline-flex" />
         </div>
 
         {/* Center / Right VIP Status & Actions */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           {/* Streak pill with Share trigger */}
           <button
             onClick={() => setIsShareCardModalOpen(true)}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-orange-500/20 border border-amber-400/50 hover:border-amber-300 text-amber-300 font-black text-xs cursor-pointer transition-all hover:scale-105"
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all hover:scale-105 ${
+              isLight
+                ? 'bg-amber-50 border-amber-400 text-amber-800 hover:bg-amber-100'
+                : 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-orange-500/20 border-amber-400/50 hover:border-amber-300 text-amber-300'
+            }`}
             title="مشاركة كرت الإنجاز والستريك"
           >
-            <Flame className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+            <Flame className="w-3.5 h-3.5 fill-amber-500 text-amber-600 dark:fill-amber-400 dark:text-amber-400" />
             <span className="font-mono tabular-nums">{streakData.currentStreak} يوم التزام</span>
-            <Share2 className="w-3 h-3 text-amber-400" />
+            <Share2 className="w-3 h-3 text-amber-700 dark:text-amber-400" />
           </button>
 
           {/* Subscription remaining days & months */}
           <div
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/50 border border-amber-500/30 text-xs font-mono text-amber-200"
+            className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono ${
+              isLight
+                ? 'bg-white border-amber-400/50 text-[#0B132B]'
+                : 'bg-black/50 border-amber-500/30 text-amber-200'
+            }`}
             title={`من ${subDetails.startDate} إلى ${subDetails.endDate}`}
           >
-            <Clock className="w-3.5 h-3.5 text-amber-400" />
+            <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             <span>
               {subDetails.remainingMonths > 0
                 ? `${subDetails.formattedRemainingDurationAr} (${subDetails.daysRemaining} يوم)`
@@ -559,17 +611,44 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
             href="https://wa.me/966500000000"
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold text-xs transition-all cursor-pointer"
+            className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-bold text-xs transition-all cursor-pointer ${
+              isLight
+                ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-400 text-emerald-800'
+                : 'bg-emerald-600/20 hover:bg-emerald-600/30 border-emerald-500/40 text-emerald-300'
+            }`}
             title="تواصل مباشر مع الكوتش عمر عبر الواتساب"
           >
-            <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+            <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>كوتش عمر</span>
           </a>
+
+          {/* Theme Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${
+              isLight
+                ? 'bg-white hover:bg-slate-100 border-slate-300 text-[#0B132B]'
+                : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
+            }`}
+            title={isLight ? 'الوضع الليلي' : 'الوضع النهاري'}
+          >
+            {isLight ? (
+              <Moon className="w-4 h-4 text-[#0B132B]" />
+            ) : (
+              <Sun className="w-4 h-4 text-amber-400" />
+            )}
+          </button>
 
           {/* Return Home Button */}
           <button
             onClick={() => navigate('/')}
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer"
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${
+              isLight
+                ? 'bg-white hover:bg-slate-100 border-slate-300 text-[#0B132B]'
+                : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
+            }`}
             title="الرئيسية"
           >
             <Home className="w-4 h-4" />
@@ -578,7 +657,11 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
           {/* Logout Button */}
           <button
             onClick={handleLogout}
-            className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 transition-all cursor-pointer"
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${
+              isLight
+                ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700'
+                : 'bg-red-500/10 hover:bg-red-500/20 border-red-500/20 text-red-400'
+            }`}
             title="تسجيل الخروج"
           >
             <LogOut className="w-4 h-4" />
@@ -587,29 +670,53 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
       </header>
 
       {/* DASHBOARD BODY */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 relative z-10">
         {/* Luxury Gold VIP Welcome Banner */}
-        <div className="relative rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-[#171206] via-[#0E1528] to-[#040817] border-2 border-amber-400/50 shadow-[0_0_50px_rgba(245,158,11,0.25)] overflow-hidden">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div
+          className={`relative rounded-3xl p-6 sm:p-8 border-2 overflow-hidden transition-colors ${
+            isLight
+              ? 'bg-gradient-to-r from-[#FFFDF7] via-[#FAF6EC] to-[#F3EFE2] border-amber-500/50 shadow-[0_14px_40px_rgba(217,119,6,0.1)]'
+              : 'bg-gradient-to-r from-[#171206] via-[#0E1528] to-[#040817] border-amber-400/50 shadow-[0_0_50px_rgba(245,158,11,0.25)]'
+          }`}
+        >
+          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/12 rounded-full blur-3xl pointer-events-none" />
 
           <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-400/60 text-amber-300 text-xs font-black mb-2 shadow-sm">
-                <Crown className="w-4 h-4 text-amber-400" />
+              <div
+                className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full border text-xs font-black mb-2 shadow-xs ${
+                  isLight
+                    ? 'bg-amber-100 border-amber-400 text-amber-900'
+                    : 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-400/60 text-amber-300'
+                }`}
+              >
+                <Crown className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 <span>عضوية الباقة البلاتينية النخبوية (Platinum VIP Member)</span>
               </div>
-              <h1 className="text-2xl sm:text-4xl font-black text-white flex items-center gap-2">
+              <h1
+                className={`text-2xl sm:text-4xl font-black flex items-center gap-2 ${
+                  isLight ? 'text-[#0B132B]' : 'text-white'
+                }`}
+              >
                 <span>أهلاً بك يا بطل! {profile.name}</span>
-                <span className="text-amber-400">👑</span>
+                <span className="text-amber-500 dark:text-amber-400">👑</span>
               </h1>
-              <p className="text-xs sm:text-sm text-amber-200/80 font-medium mt-1 max-w-xl">
+              <p
+                className={`text-xs sm:text-sm font-medium mt-1 max-w-xl ${
+                  isLight ? 'text-amber-900/80' : 'text-amber-200/80'
+                }`}
+              >
                 كامل مميزات المنظومة التدريبية مفتوحة لك: متابعة أسبوعية دقيقة، توجيه مباشر، وتحديثات دورية.
               </p>
             </div>
           </div>
 
-          {/* 5-Card Official Biometrics Bar (المشترك، الوزن، الطول، العضلات، الدهون) */}
-          <div className="relative z-10 mt-6 pt-6 border-t border-amber-500/20">
+          {/* 5-Card Official Biometrics Bar */}
+          <div
+            className={`relative z-10 mt-6 pt-6 border-t ${
+              isLight ? 'border-amber-500/25' : 'border-amber-500/20'
+            }`}
+          >
             <AthleteBiometricsBar
               profile={profile}
               language={language}
@@ -641,10 +748,12 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Dumbbell className="w-5 h-5 text-amber-400" />
-              <h2 className="text-lg font-black text-white">جدول التمارين الأسبوعي VIP</h2>
+              <Dumbbell className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              <h2 className={`text-lg font-black ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>
+                جدول التمارين الأسبوعي VIP
+              </h2>
             </div>
-            <span className="text-xs font-bold text-amber-300 font-mono">
+            <span className="text-xs font-bold text-amber-700 dark:text-amber-300 font-mono">
               متابعة أسبوعية مباشرة
             </span>
           </div>
@@ -688,20 +797,32 @@ export const VipDashboard: React.FC<VipDashboardProps> = ({
           />
 
           {/* VIP Concierge Card */}
-          <div className="rounded-3xl p-6 bg-gradient-to-br from-[#120F05] via-[#0B132B] to-[#040817] border-2 border-amber-400/40 shadow-xl flex flex-col justify-between">
+          <div
+            className={`rounded-3xl p-6 border-2 shadow-xl flex flex-col justify-between transition-colors ${
+              isLight
+                ? 'bg-[#FAFBFD] border-amber-500/50'
+                : 'bg-gradient-to-br from-[#120F05] via-[#0B132B] to-[#040817] border-amber-400/40'
+            }`}
+          >
             <div>
-              <div className="flex items-center gap-2 text-amber-400 mb-2">
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 mb-2">
                 <Crown className="w-5 h-5" />
-                <h3 className="text-base font-black text-white">المساعد الرياضي الخاص VIP</h3>
+                <h3 className={`text-base font-black ${isLight ? 'text-[#0B132B]' : 'text-white'}`}>
+                  المساعد الرياضي الخاص VIP
+                </h3>
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed font-medium">
+              <p className={`text-xs leading-relaxed font-medium ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
                 بصفتك مشتركاً في الباقة البلاتينية، لديك أولوية مطلقة في الرد على الاستفسارات،
                 مراجعة تكنيك التمارين بالفيديو، وإمكانية تجميد الاشتراك عند السفر أو الانشغال.
               </p>
             </div>
 
-            <div className="mt-5 pt-4 border-t border-amber-500/20 flex flex-wrap items-center justify-between gap-3">
-              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+            <div
+              className={`mt-5 pt-4 border-t flex flex-wrap items-center justify-between gap-3 ${
+                isLight ? 'border-amber-500/25' : 'border-amber-500/20'
+              }`}
+            >
+              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4" />
                 <span>إشراف مباشر: الكوتش عمر عدنان</span>
               </span>

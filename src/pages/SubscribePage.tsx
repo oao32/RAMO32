@@ -9,6 +9,7 @@ import {
 import { BrandLogo } from '../components/BrandLogo';
 import { VIPBadge } from '../components/VIPBadge';
 import { saveDeclarationToSupabase } from '../lib/supabase';
+import { useOaoTheme } from '../lib/themeUtils';
 import {
   FileText,
   ShieldCheck,
@@ -29,6 +30,8 @@ import {
   MessageCircle,
   Home,
   CheckSquare,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -36,6 +39,7 @@ import html2canvas from 'html2canvas';
 export const SubscribePage: React.FC = () => {
   const navigate = useNavigate();
   const [language, setLanguage] = useState<Language>('ar');
+  const { theme, toggleTheme } = useOaoTheme();
 
   // Step 1 = Plan Selection, Step 2 = Declaration & Terms Form, Step 3 = PDF Download & WhatsApp Confirmation
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
@@ -384,28 +388,41 @@ export const SubscribePage: React.FC = () => {
   const whatsappDirectUrl = `https://wa.me/${coachPhoneNumber}?text=${whatsappPreFilledText}`;
 
   return (
-    <div className="min-h-screen bg-[#070E24] text-white selection:bg-orange-500 selection:text-white" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+    <div className="min-h-screen bg-[#F2F5F9] dark:bg-[#070E24] text-[#0B132B] dark:text-white selection:bg-orange-500 selection:text-white transition-colors duration-300" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 bg-[#0B132B]/90 backdrop-blur-xl border-b border-orange-500/20 px-4 sm:px-8 py-3.5">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#0B132B]/90 backdrop-blur-xl border-b border-slate-200 dark:border-orange-500/20 px-4 sm:px-8 py-3.5 shadow-xs dark:shadow-none">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <BrandLogo size="sm" showText={true} />
-            <div className="hidden sm:block h-5 w-[1px] bg-white/10" />
-            <span className="hidden sm:inline-block text-xs font-black tracking-widest text-orange-400 uppercase">
+            <div className="hidden sm:block h-5 w-[1px] bg-slate-300 dark:bg-white/10" />
+            <span className="hidden sm:inline-block text-xs font-black tracking-widest text-orange-600 dark:text-orange-400 uppercase">
               {language === 'ar' ? 'بوابة الاشتراك والتوثيق المباشر' : 'Standalone Subscription Portal'}
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 dark:bg-white/10 dark:hover:bg-white/15 dark:border-white/10 text-slate-800 dark:text-slate-200 transition-all cursor-pointer"
+              title={theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-[#0B132B]" />
+              )}
+            </button>
             <button
               onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-slate-300 transition-all cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 dark:bg-white/10 dark:hover:bg-white/15 dark:border-transparent text-xs font-bold text-slate-800 dark:text-slate-300 transition-all cursor-pointer"
             >
               {language === 'ar' ? 'English' : 'عربي'}
             </button>
             <button
               onClick={() => navigate('/')}
-              className="px-4 py-2 rounded-xl bg-white/10 hover:bg-orange-600 text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-orange-600 border border-slate-300 hover:border-orange-600 dark:bg-white/10 dark:hover:bg-orange-600 dark:border-transparent text-[#0B132B] hover:text-white dark:text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
             >
               <Home className="w-4 h-4" />
               <span>{language === 'ar' ? 'العودة للرئيسية' : 'Back to Home'}</span>
@@ -417,11 +434,11 @@ export const SubscribePage: React.FC = () => {
       {/* Main Container */}
       <div className="max-w-5xl mx-auto px-4 py-8 sm:py-12">
         {/* Progress Tracker */}
-        <div className="mb-8 p-4 rounded-2xl bg-[#0B132B] border border-orange-500/20 flex items-center justify-between text-xs max-w-2xl mx-auto shadow-lg">
+        <div className="mb-8 p-4 rounded-2xl bg-white dark:bg-[#0B132B] border border-slate-200 dark:border-orange-500/20 flex items-center justify-between text-xs max-w-2xl mx-auto shadow-md dark:shadow-lg">
           {/* Step 1 Indicator */}
           <div
             className={`flex items-center gap-2 cursor-pointer ${
-              currentStep >= 1 ? 'text-orange-400 font-black' : 'text-slate-500 font-bold'
+              currentStep >= 1 ? 'text-orange-600 dark:text-orange-400 font-black' : 'text-slate-500 font-bold'
             }`}
             onClick={() => currentStep > 1 && setCurrentStep(1)}
           >
@@ -437,12 +454,12 @@ export const SubscribePage: React.FC = () => {
             <span>{language === 'ar' ? '1. اختيار الباقة' : '1. Select Plan'}</span>
           </div>
 
-          <div className="h-0.5 flex-1 bg-white/10 mx-3" />
+          <div className="h-0.5 flex-1 bg-slate-200 dark:bg-white/10 mx-3" />
 
           {/* Step 2 Indicator */}
           <div
             className={`flex items-center gap-2 ${
-              currentStep >= 2 ? 'text-orange-400 font-black' : 'text-slate-500 font-bold'
+              currentStep >= 2 ? 'text-orange-600 dark:text-orange-400 font-black' : 'text-slate-500 font-bold'
             }`}
           >
             <span
@@ -451,7 +468,7 @@ export const SubscribePage: React.FC = () => {
                   ? 'bg-emerald-500 text-white'
                   : currentStep === 2
                   ? 'bg-orange-500 text-white shadow-[0_0_12px_rgba(255,87,34,0.8)]'
-                  : 'bg-white/10 text-slate-400'
+                  : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400'
               }`}
             >
               {currentStep > 2 ? <Check className="w-4 h-4 stroke-[3]" /> : '2'}
@@ -459,19 +476,19 @@ export const SubscribePage: React.FC = () => {
             <span>{language === 'ar' ? '2. نموذج الإقرار والتعهد' : '2. Declaration'}</span>
           </div>
 
-          <div className="h-0.5 flex-1 bg-white/10 mx-3" />
+          <div className="h-0.5 flex-1 bg-slate-200 dark:bg-white/10 mx-3" />
 
           {/* Step 3 Indicator */}
           <div
             className={`flex items-center gap-2 ${
-              currentStep === 3 ? 'text-emerald-400 font-black' : 'text-slate-500 font-bold'
+              currentStep === 3 ? 'text-emerald-600 dark:text-emerald-400 font-black' : 'text-slate-500 font-bold'
             }`}
           >
             <span
               className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${
                 currentStep === 3
                   ? 'bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.8)]'
-                  : 'bg-white/10 text-slate-400'
+                  : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400'
               }`}
             >
               3
@@ -482,26 +499,26 @@ export const SubscribePage: React.FC = () => {
 
         {/* Mandatory Warning Alert Banner */}
         {errorMessage && (
-          <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-red-950/80 via-red-900/60 to-red-950/80 border-2 border-red-500 text-white shadow-[0_0_25px_rgba(239,68,68,0.5)]">
+          <div className="mb-6 p-4 rounded-2xl bg-red-50 dark:bg-gradient-to-r dark:from-red-950/80 dark:via-red-900/60 dark:to-red-950/80 border-2 border-red-500 text-red-950 dark:text-white shadow-lg dark:shadow-[0_0_25px_rgba(239,68,68,0.5)]">
             <div className="flex items-start gap-3">
               <div className="p-2 rounded-xl bg-red-600 text-white shrink-0 shadow-md">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="flex-1">
-                <h4 className="text-sm font-black text-red-200 uppercase tracking-wide">
+                <h4 className="text-sm font-black text-red-700 dark:text-red-200 uppercase tracking-wide">
                   {language === 'ar' ? 'تنبيه إلزامي ومطلوب' : 'Mandatory Requirement Alert'}
                 </h4>
-                <p className="text-sm font-black text-white mt-1 leading-relaxed">{errorMessage}</p>
+                <p className="text-sm font-black text-red-950 dark:text-white mt-1 leading-relaxed">{errorMessage}</p>
 
                 {missingFields.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-red-500/30">
-                    <span className="text-xs font-bold text-red-300 block mb-1.5">
+                  <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-500/30">
+                    <span className="text-xs font-bold text-red-700 dark:text-red-300 block mb-1.5">
                       {language === 'ar' ? 'يرجى استكمال البنود التالية أولاً:' : 'Please complete the following:'}
                     </span>
-                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-red-100 font-semibold">
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-red-900 dark:text-red-100 font-semibold">
                       {missingFields.map((field, idx) => (
                         <li key={idx} className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 dark:bg-red-400 shrink-0" />
                           <span>{field}</span>
                         </li>
                       ))}
@@ -511,7 +528,7 @@ export const SubscribePage: React.FC = () => {
               </div>
               <button
                 onClick={() => setErrorMessage(null)}
-                className="text-xs text-red-300 hover:text-white px-2 py-1 rounded-lg bg-red-800/40"
+                className="text-xs text-red-700 dark:text-red-300 hover:text-red-950 dark:hover:text-white px-2 py-1 rounded-lg bg-red-100 dark:bg-red-800/40 cursor-pointer"
               >
                 ✕
               </button>
@@ -525,13 +542,13 @@ export const SubscribePage: React.FC = () => {
         {currentStep === 1 && (
           <div className="space-y-8 animate-in fade-in duration-300">
             <div className="text-center max-w-xl mx-auto">
-              <span className="text-xs font-black tracking-widest text-[#FF7043] uppercase block mb-1">
+              <span className="text-xs font-black tracking-widest text-[#EA580C] dark:text-[#FF7043] uppercase block mb-1">
                 {language === 'ar' ? 'الخطوة الأولى: اختيار الباقة والمدة' : 'Step 1: Select Plan & Duration'}
               </span>
-              <h1 className="text-3xl font-black text-white">
+              <h1 className="text-3xl font-black text-[#0B132B] dark:text-white">
                 {language === 'ar' ? 'اختر الباقة الرياضية المناسبة لك' : 'Choose Your Elite Coaching Tier'}
               </h1>
-              <p className="text-sm text-slate-400 font-medium mt-2">
+              <p className="text-sm text-slate-600 dark:text-slate-400 font-medium mt-2">
                 {language === 'ar'
                   ? 'جميع الباقات تحت إشراف وتصميم مباشر ومخصص من الكوتش عمر عدنان'
                   : 'Tailored athletic and nutritional coaching directly from Coach Omar Adnan'}
@@ -545,45 +562,45 @@ export const SubscribePage: React.FC = () => {
                 onClick={() => setActivePlanId('standard')}
                 className={`p-6 sm:p-8 rounded-3xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
                   activePlanId === 'standard'
-                    ? 'bg-slate-900/90 border-slate-300 shadow-[0_0_35px_rgba(255,255,255,0.15)] ring-2 ring-slate-300'
-                    : 'bg-[#0B132B]/80 border-white/10 hover:border-white/30 text-slate-400'
+                    ? 'bg-white dark:bg-slate-900/90 border-slate-500 dark:border-slate-300 shadow-xl dark:shadow-[0_0_35px_rgba(255,255,255,0.15)] ring-2 ring-slate-400 dark:ring-slate-300'
+                    : 'bg-white/80 dark:bg-[#0B132B]/80 border-slate-200 dark:border-white/10 hover:border-slate-400 dark:hover:border-white/30 text-slate-600 dark:text-slate-400'
                 }`}
               >
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <span className="px-3.5 py-1 rounded-full bg-slate-800 text-slate-200 border border-slate-700 text-xs font-black">
+                    <span className="px-3.5 py-1 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs font-black">
                       STANDARD
                     </span>
-                    <Shield className="w-6 h-6 text-slate-300" />
+                    <Shield className="w-6 h-6 text-slate-600 dark:text-slate-300" />
                   </div>
-                  <h3 className="text-2xl font-black text-white">الباقة القياسية (Standard)</h3>
-                  <p className="text-xs text-slate-400 font-medium mt-2 leading-relaxed">
+                  <h3 className="text-2xl font-black text-[#0B132B] dark:text-white">الباقة القياسية (Standard)</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 font-medium mt-2 leading-relaxed">
                     الباقة المثالية لمن يمتلك الخبرة الأساسية ويفضل المتابعة الشهرية المنتظمة.
                   </p>
 
-                  <div className="my-6 space-y-2.5 text-xs text-slate-300">
+                  <div className="my-6 space-y-2.5 text-xs text-slate-700 dark:text-slate-300">
                     <div className="flex items-center gap-2.5">
-                      <Check className="w-4 h-4 text-slate-400 shrink-0" />
+                      <Check className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
                       <span>تقييم البنية العضلية وحساب الاحتياج اليومي</span>
                     </div>
                     <div className="flex items-center gap-2.5">
-                      <Check className="w-4 h-4 text-slate-400 shrink-0" />
+                      <Check className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
                       <span>تصميم النظام الغذائي مع التحديث شهرياً</span>
                     </div>
                     <div className="flex items-center gap-2.5">
-                      <Check className="w-4 h-4 text-slate-400 shrink-0" />
+                      <Check className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
                       <span>تحديث جدول التمارين شهرياً حسب التطور</span>
                     </div>
                     <div className="flex items-center gap-2.5">
-                      <Check className="w-4 h-4 text-slate-400 shrink-0" />
+                      <Check className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
                       <span>متابعة شهرية مع الكوتش</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Duration options for standard */}
-                <div className="mt-4 pt-4 border-t border-white/10">
-                  <span className="text-[11px] font-bold text-slate-400 block mb-2.5">
+                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/10">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-2.5">
                     اختر مدة الاشتراك:
                   </span>
                   <div className="grid grid-cols-3 gap-2">
@@ -601,8 +618,8 @@ export const SubscribePage: React.FC = () => {
                           }}
                           className={`p-3 rounded-2xl border text-center transition-all cursor-pointer ${
                             isSelected
-                              ? 'bg-white text-slate-900 border-white font-black shadow-lg scale-105'
-                              : 'bg-black/50 text-slate-300 border-white/10 hover:border-white/20'
+                              ? 'bg-[#0B132B] dark:bg-white text-white dark:text-slate-900 border-[#0B132B] dark:border-white font-black shadow-lg scale-105'
+                              : 'bg-slate-100 dark:bg-black/50 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-white/10 hover:border-slate-400 dark:hover:border-white/20'
                           }`}
                         >
                           <span className="block text-xs font-bold">{dInfo.labelAr}</span>
@@ -621,8 +638,8 @@ export const SubscribePage: React.FC = () => {
                 onClick={() => setActivePlanId('platinum')}
                 className={`p-6 sm:p-8 rounded-3xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
                   activePlanId === 'platinum'
-                    ? 'bg-gradient-to-b from-[#1C1605] via-[#120F05] to-[#0A0802] border-amber-400 shadow-[0_0_45px_rgba(245,158,11,0.35)] ring-2 ring-amber-400'
-                    : 'bg-[#0B132B]/80 border-white/10 hover:border-amber-400/30 text-slate-400'
+                    ? 'bg-gradient-to-b from-amber-50 via-white to-amber-50/40 dark:from-[#1C1605] dark:via-[#120F05] dark:to-[#0A0802] border-amber-500 dark:border-amber-400 shadow-xl dark:shadow-[0_0_45px_rgba(245,158,11,0.35)] ring-2 ring-amber-400'
+                    : 'bg-white/80 dark:bg-[#0B132B]/80 border-slate-200 dark:border-white/10 hover:border-amber-400/60 dark:hover:border-amber-400/30 text-slate-600 dark:text-slate-400'
                 }`}
               >
                 <div>
@@ -633,34 +650,34 @@ export const SubscribePage: React.FC = () => {
                     </span>
                     <VIPBadge variant="compact" language={language} />
                   </div>
-                  <h3 className="text-2xl font-black text-amber-300">الباقة البلاتينية (VIP)</h3>
-                  <p className="text-xs text-amber-200/80 font-medium mt-2 leading-relaxed">
+                  <h3 className="text-2xl font-black text-amber-800 dark:text-amber-300">الباقة البلاتينية (VIP)</h3>
+                  <p className="text-xs text-amber-900/80 dark:text-amber-200/80 font-medium mt-2 leading-relaxed">
                     التجربة التدريبية المتكاملة مع متابعة أسبوعية دقيقة، وتوجيه مباشر من الكوتش.
                   </p>
 
-                  <div className="my-6 space-y-2.5 text-xs text-slate-200">
+                  <div className="my-6 space-y-2.5 text-xs text-slate-800 dark:text-slate-200">
                     <div className="flex items-center gap-2.5">
-                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <Check className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <span>تقييم وتحديث مستمر كل أسبوع مع الكوتش</span>
                     </div>
                     <div className="flex items-center gap-2.5">
-                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <Check className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <span>نظام غذائي وتمارين تفاعلية متجددة</span>
                     </div>
                     <div className="flex items-center gap-2.5">
-                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <Check className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <span>تواصل مباشر وأولوية استجابة فورية</span>
                     </div>
                     <div className="flex items-center gap-2.5">
-                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <Check className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <span>ميزة تجميد الاشتراك عند السفر أو الطوارئ</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Duration options for VIP */}
-                <div className="mt-4 pt-4 border-t border-amber-500/20">
-                  <span className="text-[11px] font-bold text-amber-300 block mb-2.5">
+                <div className="mt-4 pt-4 border-t border-amber-300/60 dark:border-amber-500/20">
+                  <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 block mb-2.5">
                     اختر مدة الاشتراك:
                   </span>
                   <div className="grid grid-cols-3 gap-2">
@@ -678,8 +695,8 @@ export const SubscribePage: React.FC = () => {
                           }}
                           className={`p-3 rounded-2xl border text-center transition-all cursor-pointer ${
                             isSelected
-                              ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-300 font-black shadow-lg scale-105'
-                              : 'bg-black/50 text-amber-100/70 border-amber-500/30 hover:border-amber-400/50'
+                              ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-400 dark:border-amber-300 font-black shadow-lg scale-105'
+                              : 'bg-white dark:bg-black/50 text-amber-900 dark:text-amber-100/70 border-amber-300 dark:border-amber-500/30 hover:border-amber-500'
                           }`}
                         >
                           <span className="block text-xs font-bold">{dInfo.labelAr}</span>
@@ -695,13 +712,13 @@ export const SubscribePage: React.FC = () => {
             </div>
 
             {/* Step 1 Footer Action */}
-            <div className="p-6 rounded-3xl bg-[#0B132B] border border-orange-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
-              <div className="text-xs sm:text-sm text-slate-300 flex items-center gap-2">
+            <div className="p-6 rounded-3xl bg-white dark:bg-[#0B132B] border border-orange-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg dark:shadow-xl">
+              <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-orange-500 animate-pulse" />
                 <span>
-                  الباقة المحددة: <strong className="text-white font-black">{currentPlanNameAr}</strong> (
-                  <strong className="text-orange-400">{currentDurationInfo.labelAr}</strong> -{' '}
-                  <strong className="text-amber-300 font-mono">{currentDurationInfo.price} ريال</strong>)
+                  الباقة المحددة: <strong className="text-[#0B132B] dark:text-white font-black">{currentPlanNameAr}</strong> (
+                  <strong className="text-orange-600 dark:text-orange-400">{currentDurationInfo.labelAr}</strong> -{' '}
+                  <strong className="text-amber-700 dark:text-amber-300 font-mono">{currentDurationInfo.price} ريال</strong>)
                 </span>
               </div>
 
@@ -731,19 +748,19 @@ export const SubscribePage: React.FC = () => {
         {currentStep === 2 && (
           <div className="space-y-8 animate-in fade-in duration-300">
             {/* Top Banner */}
-            <div className="bg-gradient-to-r from-orange-500/10 via-[#1C2541]/70 to-blue-900/20 border border-orange-500/30 rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-xl">
+            <div className="bg-gradient-to-r from-orange-50 via-white to-blue-50 dark:from-orange-500/10 dark:via-[#1C2541]/70 dark:to-blue-900/20 border border-orange-500/30 rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-lg dark:shadow-xl">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-orange-500/20 border border-orange-500/40 text-orange-400 font-black text-xs uppercase mb-2">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-orange-500/15 dark:bg-orange-500/20 border border-orange-500/40 text-orange-600 dark:text-orange-400 font-black text-xs uppercase mb-2">
                     <FileText className="w-3.5 h-3.5" />
                     <span>{language === 'ar' ? 'الوثيقة القانونية والإقرار' : 'Official Legal Contract'}</span>
                   </div>
-                  <h1 className="text-2xl sm:text-3xl font-black text-white leading-tight">
+                  <h1 className="text-2xl sm:text-3xl font-black text-[#0B132B] dark:text-white leading-tight">
                     {language === 'ar'
                       ? 'نموذج إقرار وإخلاء مسؤولية وشروط الاشتراك (تدريب أونلاين) 📋'
                       : 'Declaration, Disclaimer & Service Terms Agreement'}
                   </h1>
-                  <p className="text-xs sm:text-sm text-slate-300 font-semibold mt-2 max-w-2xl leading-relaxed">
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-semibold mt-2 max-w-2xl leading-relaxed">
                     {language === 'ar'
                       ? 'يرجى قراءة البنود التالية بعناية وتعبئة البيانات المطلوبة والتوقيع الرقمي لتوليد وثيقة الـ PDF الرسمية.'
                       : 'Please read the terms carefully, enter your information, and sign to generate your certified PDF.'}
@@ -751,17 +768,17 @@ export const SubscribePage: React.FC = () => {
                 </div>
 
                 {/* Plan Summary Badge */}
-                <div className="bg-[#0B132B] border border-orange-500/40 rounded-2xl p-4 text-center shrink-0 shadow-lg">
-                  <span className="text-[10px] text-slate-400 font-bold block">الباقة والمدة</span>
-                  <span className="text-sm font-black text-white block mt-0.5">
+                <div className="bg-white dark:bg-[#0B132B] border border-orange-500/40 rounded-2xl p-4 text-center shrink-0 shadow-md dark:shadow-lg">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block">الباقة والمدة</span>
+                  <span className="text-sm font-black text-[#0B132B] dark:text-white block mt-0.5">
                     {currentPlanNameAr}
                   </span>
-                  <span className="text-xs font-black text-orange-400 block font-mono tabular-nums mt-0.5">
+                  <span className="text-xs font-black text-orange-600 dark:text-orange-400 block font-mono tabular-nums mt-0.5">
                     {currentDurationInfo.price.toLocaleString()} ريال • {currentDurationInfo.labelAr}
                   </span>
                   <button
                     onClick={() => setCurrentStep(1)}
-                    className="text-[10px] text-slate-400 hover:text-white underline mt-2 block"
+                    className="text-[10px] text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-white underline mt-2 block cursor-pointer"
                   >
                     {language === 'ar' ? 'تغيير الباقة' : 'Change Plan'}
                   </button>
@@ -771,16 +788,16 @@ export const SubscribePage: React.FC = () => {
 
             <form onSubmit={handleAgreeAndDeclare} className="space-y-8">
               {/* Part 1: Personal & Health Data */}
-              <div className="bg-[#0B132B]/90 border border-slate-700/80 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
-                <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-                  <div className="p-2.5 rounded-2xl bg-orange-500/20 text-orange-400 border border-orange-500/30">
+              <div className="bg-white dark:bg-[#0B132B]/90 border border-slate-200 dark:border-slate-700/80 rounded-3xl p-6 sm:p-8 space-y-6 shadow-md dark:shadow-xl">
+                <div className="flex items-center gap-3 border-b border-slate-200 dark:border-white/10 pb-4">
+                  <div className="p-2.5 rounded-2xl bg-orange-50 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/30">
                     <User className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-white">
+                    <h3 className="text-lg font-black text-[#0B132B] dark:text-white">
                       الجزء الأول: البيانات الشخصية والحالة الصحية 👤
                     </h3>
-                    <p className="text-xs text-slate-400 font-medium">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                       جميع الحقول في هذا القسم إلزامية لإتمام الإقرار
                     </p>
                   </div>
@@ -789,12 +806,12 @@ export const SubscribePage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   {/* Field 1: Full Three-Part Name */}
                   <div>
-                    <label className="flex items-center justify-between text-xs font-black text-slate-300 mb-2">
+                    <label className="flex items-center justify-between text-xs font-black text-slate-700 dark:text-slate-300 mb-2">
                       <span className="flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5 text-orange-400" />
+                        <User className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
                         <span>1. الاسم الثلاثي</span>
                       </span>
-                      <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20">
+                      <span className="text-[10px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-md border border-red-300 dark:border-red-500/20">
                         [حقل إجباري]
                       </span>
                     </label>
@@ -804,18 +821,18 @@ export const SubscribePage: React.FC = () => {
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="أدخل اسمك الثلاثي الكامل"
-                      className="w-full px-4 py-3 rounded-2xl bg-black/40 border border-white/15 focus:border-orange-500 text-white text-sm font-bold placeholder:text-slate-600 outline-none"
+                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white text-sm font-bold placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none"
                     />
                   </div>
 
                   {/* Field 2: Phone / WhatsApp */}
                   <div>
-                    <label className="flex items-center justify-between text-xs font-black text-slate-300 mb-2">
+                    <label className="flex items-center justify-between text-xs font-black text-slate-700 dark:text-slate-300 mb-2">
                       <span className="flex items-center gap-1.5">
-                        <Phone className="w-3.5 h-3.5 text-orange-400" />
+                        <Phone className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
                         <span>2. رقم الجوال / الواتساب</span>
                       </span>
-                      <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20">
+                      <span className="text-[10px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-md border border-red-300 dark:border-red-500/20">
                         [حقل إجباري]
                       </span>
                     </label>
@@ -825,18 +842,18 @@ export const SubscribePage: React.FC = () => {
                       value={phoneWhatsapp}
                       onChange={(e) => setPhoneWhatsapp(e.target.value)}
                       placeholder="05xxxxxxxx"
-                      className="w-full px-4 py-3 rounded-2xl bg-black/40 border border-white/15 focus:border-orange-500 text-white text-sm font-bold placeholder:text-slate-600 outline-none font-mono"
+                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white text-sm font-bold placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none font-mono"
                     />
                   </div>
 
                   {/* Field 3: Email */}
                   <div>
-                    <label className="flex items-center justify-between text-xs font-black text-slate-300 mb-2">
+                    <label className="flex items-center justify-between text-xs font-black text-slate-700 dark:text-slate-300 mb-2">
                       <span className="flex items-center gap-1.5">
-                        <Mail className="w-3.5 h-3.5 text-orange-400" />
+                        <Mail className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
                         <span>3. البريد الإلكتروني</span>
                       </span>
-                      <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20">
+                      <span className="text-[10px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-md border border-red-300 dark:border-red-500/20">
                         [حقل إجباري]
                       </span>
                     </label>
@@ -846,14 +863,14 @@ export const SubscribePage: React.FC = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="name@example.com"
-                      className="w-full px-4 py-3 rounded-2xl bg-black/40 border border-white/15 focus:border-orange-500 text-white text-sm font-bold placeholder:text-slate-600 outline-none"
+                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-300 dark:border-white/15 focus:border-orange-500 text-[#0B132B] dark:text-white text-sm font-bold placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none"
                     />
                   </div>
                 </div>
 
                 {/* Field 4: Health Condition */}
-                <div className="pt-2 border-t border-white/10">
-                  <label className="block text-xs font-black text-slate-300 mb-3">
+                <div className="pt-2 border-t border-slate-200 dark:border-white/10">
+                  <label className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-3">
                     4. الإفصاح عن الحالة الصحية والإصابات (اختر بدقة):
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -861,8 +878,8 @@ export const SubscribePage: React.FC = () => {
                       onClick={() => setHealthStatus('healthy')}
                       className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${
                         healthStatus === 'healthy'
-                          ? 'bg-emerald-500/15 border-emerald-500 text-white ring-2 ring-emerald-500/40'
-                          : 'bg-black/30 border-white/10 text-slate-400 hover:border-white/20'
+                          ? 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-500 text-[#0B132B] dark:text-white ring-2 ring-emerald-500/40'
+                          : 'bg-slate-50 dark:bg-black/30 border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-slate-400 dark:hover:border-white/20'
                       }`}
                     >
                       <input
@@ -873,10 +890,10 @@ export const SubscribePage: React.FC = () => {
                         className="accent-emerald-500 w-4 h-4"
                       />
                       <div>
-                        <strong className="block text-sm font-black text-emerald-400">
+                        <strong className="block text-sm font-black text-emerald-700 dark:text-emerald-400">
                           أنا سليم 100% ولا أعاني من أي أمراض مزمنة أو إصابات
                         </strong>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
                           جاهز للتدريب الرياضي الشامل دون أي موانع طبية
                         </span>
                       </div>
@@ -886,8 +903,8 @@ export const SubscribePage: React.FC = () => {
                       onClick={() => setHealthStatus('has_issues')}
                       className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${
                         healthStatus === 'has_issues'
-                          ? 'bg-amber-500/15 border-amber-500 text-white ring-2 ring-amber-500/40'
-                          : 'bg-black/30 border-white/10 text-slate-400 hover:border-white/20'
+                          ? 'bg-amber-50 dark:bg-amber-500/15 border-amber-500 text-[#0B132B] dark:text-white ring-2 ring-amber-500/40'
+                          : 'bg-slate-50 dark:bg-black/30 border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-slate-400 dark:hover:border-white/20'
                       }`}
                     >
                       <input
@@ -898,10 +915,10 @@ export const SubscribePage: React.FC = () => {
                         className="accent-amber-500 w-4 h-4"
                       />
                       <div>
-                        <strong className="block text-sm font-black text-amber-400">
+                        <strong className="block text-sm font-black text-amber-700 dark:text-amber-400">
                           نعم، أعاني من إصابات سابقة أو حالات صحية محددة
                         </strong>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
                           (مثل: خشونة بالركبة، انزلاق غضروفي، ضغط دم، ربو...)
                         </span>
                       </div>
@@ -909,8 +926,8 @@ export const SubscribePage: React.FC = () => {
                   </div>
 
                   {healthStatus === 'has_issues' && (
-                    <div className="mt-4 p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 space-y-2 animate-in fade-in">
-                      <label className="text-xs font-black text-amber-300 block">
+                    <div className="mt-4 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-400 dark:border-amber-500/40 space-y-2 animate-in fade-in">
+                      <label className="text-xs font-black text-amber-800 dark:text-amber-300 block">
                         يرجى توضيح تفاصيل الإصابة أو الحالة الصحية بدقة للكوتش:
                       </label>
                       <textarea
@@ -919,7 +936,7 @@ export const SubscribePage: React.FC = () => {
                         value={healthIssuesDetails}
                         onChange={(e) => setHealthIssuesDetails(e.target.value)}
                         placeholder="اكتب هنا أي تفاصيل أو تقارير طبية حتى يراعيها الكوتش في البرنامج..."
-                        className="w-full p-3 rounded-xl bg-black/50 border border-amber-500/40 text-white text-xs outline-none focus:border-amber-400"
+                        className="w-full p-3 rounded-xl bg-white dark:bg-black/50 border border-amber-400 dark:border-amber-500/40 text-[#0B132B] dark:text-white placeholder:text-slate-400 text-xs outline-none focus:border-amber-500"
                       />
                     </div>
                   )}
@@ -927,16 +944,16 @@ export const SubscribePage: React.FC = () => {
               </div>
 
               {/* Part 2: Mandatory Terms & Declarations */}
-              <div className="bg-[#0B132B]/90 border border-slate-700/80 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
-                <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-                  <div className="p-2.5 rounded-2xl bg-orange-500/20 text-orange-400 border border-orange-500/30">
+              <div className="bg-white dark:bg-[#0B132B]/90 border border-slate-200 dark:border-slate-700/80 rounded-3xl p-6 sm:p-8 space-y-6 shadow-md dark:shadow-xl">
+                <div className="flex items-center gap-3 border-b border-slate-200 dark:border-white/10 pb-4">
+                  <div className="p-2.5 rounded-2xl bg-orange-50 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/30">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-white">
+                    <h3 className="text-lg font-black text-[#0B132B] dark:text-white">
                       الجزء الثاني: بنود الإقرار وإخلاء المسؤولية المعتمدة ⚖️
                     </h3>
-                    <p className="text-xs text-slate-400 font-medium">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                       يجب قراءة جميع البنود وتفعيل خانات الموافقة الأربعة لتوليد الوثيقة
                     </p>
                   </div>
@@ -948,8 +965,8 @@ export const SubscribePage: React.FC = () => {
                     onClick={() => setAgreedHealth(!agreedHealth)}
                     className={`p-5 rounded-2xl border cursor-pointer flex items-start gap-4 transition-all ${
                       agreedHealth
-                        ? 'bg-emerald-500/10 border-emerald-500/60 ring-1 ring-emerald-500/30'
-                        : 'bg-black/40 border-white/10 hover:border-white/20'
+                        ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-500/60 ring-1 ring-emerald-500/30'
+                        : 'bg-slate-50 dark:bg-black/40 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20'
                     }`}
                   >
                     <input
@@ -959,10 +976,10 @@ export const SubscribePage: React.FC = () => {
                       className="mt-1 w-5 h-5 accent-emerald-500 rounded cursor-pointer shrink-0"
                     />
                     <div className="text-xs leading-relaxed space-y-1">
-                      <strong className="text-sm font-black text-white block">
+                      <strong className="text-sm font-black text-[#0B132B] dark:text-white block">
                         1. بند الحالة الصحية والمسؤولية التدريبية عن بُعد
                       </strong>
-                      <p className="text-slate-300">
+                      <p className="text-slate-700 dark:text-slate-300">
                         أقر بأنني لائق بدنياً وصحياً لممارسة النشاط الرياضي، وأن خدمة التدريب المقدمة هي "عن بُعد" (Online Coaching). إن مقاطع الفيديو التوضيحية والإرشادات المعطاة هي للاسترشاد الفني، وأتحمل المسؤولية الكاملة عن أداء التمارين واختيار الأوزان المناسبة لقدرتي داخل النادي أو المنزل دون أدنى مسؤولية مدنية أو جنائية على المدرب عمر عدنان أو منصة OAO عند وقوع أي إصابة ناتجة عن سوء التنفيذ أو الإجهاد الزائد.
                       </p>
                     </div>
@@ -973,8 +990,8 @@ export const SubscribePage: React.FC = () => {
                     onClick={() => setAgreedNutrition(!agreedNutrition)}
                     className={`p-5 rounded-2xl border cursor-pointer flex items-start gap-4 transition-all ${
                       agreedNutrition
-                        ? 'bg-emerald-500/10 border-emerald-500/60 ring-1 ring-emerald-500/30'
-                        : 'bg-black/40 border-white/10 hover:border-white/20'
+                        ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-500/60 ring-1 ring-emerald-500/30'
+                        : 'bg-slate-50 dark:bg-black/40 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20'
                     }`}
                   >
                     <input
@@ -984,10 +1001,10 @@ export const SubscribePage: React.FC = () => {
                       className="mt-1 w-5 h-5 accent-emerald-500 rounded cursor-pointer shrink-0"
                     />
                     <div className="text-xs leading-relaxed space-y-1">
-                      <strong className="text-sm font-black text-white block">
+                      <strong className="text-sm font-black text-[#0B132B] dark:text-white block">
                         2. بند النظام الغذائي والمكملات الغذائية
                       </strong>
-                      <p className="text-slate-300">
+                      <p className="text-slate-700 dark:text-slate-300">
                         أقر بمسؤوليتي التامة عن إشعار المدرب بأي حساسية غذائية أو أمراض باطنية (كالسكري أو الضغط أو حساسية اللاكتوز/الجلوتين). كما أقر بأن أي مكملات غذائية مقترحة هي خيار شخصي وشرائها واستخدامها يكون بناءً على رغبتي ومسؤوليتي بعد مراجعة النشرات الطبية أو الاستشارة المتخصصة.
                       </p>
                     </div>
@@ -998,8 +1015,8 @@ export const SubscribePage: React.FC = () => {
                     onClick={() => setAgreedIP(!agreedIP)}
                     className={`p-5 rounded-2xl border cursor-pointer flex items-start gap-4 transition-all ${
                       agreedIP
-                        ? 'bg-emerald-500/10 border-emerald-500/60 ring-1 ring-emerald-500/30'
-                        : 'bg-black/40 border-white/10 hover:border-white/20'
+                        ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-500/60 ring-1 ring-emerald-500/30'
+                        : 'bg-slate-50 dark:bg-black/40 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20'
                     }`}
                   >
                     <input
@@ -1009,10 +1026,10 @@ export const SubscribePage: React.FC = () => {
                       className="mt-1 w-5 h-5 accent-emerald-500 rounded cursor-pointer shrink-0"
                     />
                     <div className="text-xs leading-relaxed space-y-1">
-                      <strong className="text-sm font-black text-white block">
+                      <strong className="text-sm font-black text-[#0B132B] dark:text-white block">
                         3. بند الملكية الفكرية وحظر التسريب وإعادة النشر
                       </strong>
-                      <p className="text-slate-300">
+                      <p className="text-slate-700 dark:text-slate-300">
                         جميع الجداول والخطط التدريبية والأنظمة الغذائية المصممة من قبل المدرب عمر عدنان (Own Aura Outcome) هي حقوق ملكية فكرية خاصة به وتُمنح لي للاستخدام الشخصي فقط. وأتعهد تعهداً قاطعاً بعدم نشرها أو بيعها أو مشاركتها عبر وسائل التواصل الاجتماعي أو مع أطراف أخرى، مع علمي بأن أي مخالفة تعرضني للمساءلة القانونية والمطالبة بالتعويض المادي والأدبي.
                       </p>
                     </div>
@@ -1023,8 +1040,8 @@ export const SubscribePage: React.FC = () => {
                     onClick={() => setAgreedPaymentPolicy(!agreedPaymentPolicy)}
                     className={`p-5 rounded-2xl border cursor-pointer flex items-start gap-4 transition-all ${
                       agreedPaymentPolicy
-                        ? 'bg-emerald-500/10 border-emerald-500/60 ring-1 ring-emerald-500/30'
-                        : 'bg-black/40 border-white/10 hover:border-white/20'
+                        ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-500/60 ring-1 ring-emerald-500/30'
+                        : 'bg-slate-50 dark:bg-black/40 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20'
                     }`}
                   >
                     <input
@@ -1034,10 +1051,10 @@ export const SubscribePage: React.FC = () => {
                       className="mt-1 w-5 h-5 accent-emerald-500 rounded cursor-pointer shrink-0"
                     />
                     <div className="text-xs leading-relaxed space-y-1">
-                      <strong className="text-sm font-black text-white block">
+                      <strong className="text-sm font-black text-[#0B132B] dark:text-white block">
                         4. بند سياسة الدفع والاسترجاع والنتائج
                       </strong>
-                      <p className="text-slate-300">
+                      <p className="text-slate-700 dark:text-slate-300">
                         أعلم أن رسوم الاشتراك المدفوعة هي مقابل الجهد الفني والوقت المخصص لتصميم البرنامج، وهي غير قابلة للاسترجاع بعد استلام الخطة أو البدء فيها. كما أقر بأن تحقيق النتائج الرياضية والبدنية يعتمد بنسبة 100% على التزامي الشخصي بتطبيق التمارين وتناول الاحتياج الغذائي بدقة.
                       </p>
                     </div>
@@ -1046,16 +1063,16 @@ export const SubscribePage: React.FC = () => {
               </div>
 
               {/* Part 3: Electronic Signature & Execution */}
-              <div className="bg-[#0B132B]/90 border border-emerald-500/40 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
-                <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-                  <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <div className="bg-white dark:bg-[#0B132B]/90 border border-emerald-500/40 rounded-3xl p-6 sm:p-8 space-y-6 shadow-md dark:shadow-xl">
+                <div className="flex items-center gap-3 border-b border-slate-200 dark:border-white/10 pb-4">
+                  <div className="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                     <Lock className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-white">
+                    <h3 className="text-lg font-black text-[#0B132B] dark:text-white">
                       الجزء الثالث: التوقيع الإلكتروني والاعتماد الرسمي ✍️
                     </h3>
-                    <p className="text-xs text-slate-400 font-medium">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                       اكتب اسمك الثلاثي واعتمد توقيعك ليكون ملزماً ونظامياً
                     </p>
                   </div>
@@ -1064,9 +1081,9 @@ export const SubscribePage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Typed Electronic Signature */}
                   <div className="space-y-2">
-                    <label className="block text-xs font-black text-slate-300">
+                    <label className="block text-xs font-black text-slate-700 dark:text-slate-300">
                       أ) كتابة الاسم الثلاثي للتوقيع الإلكتروني:
-                      <span className="text-red-400 mr-1">*</span>
+                      <span className="text-red-600 dark:text-red-400 mr-1">*</span>
                     </label>
                     <input
                       type="text"
@@ -1074,23 +1091,23 @@ export const SubscribePage: React.FC = () => {
                       value={typedSignatureName}
                       onChange={(e) => setTypedSignatureName(e.target.value)}
                       placeholder="أدخل اسمك الثلاثي كتوقيع إلكتروني معتمد"
-                      className={`w-full px-4 py-3 rounded-2xl border text-white text-sm font-black outline-none placeholder:text-slate-600 transition-all ${
+                      className={`w-full px-4 py-3 rounded-2xl border text-[#0B132B] dark:text-white text-sm font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 transition-all ${
                         fullName.trim() &&
                         typedSignatureName.trim() &&
                         fullName.trim().replace(/\s+/g, ' ').toLowerCase() ===
                           typedSignatureName.trim().replace(/\s+/g, ' ').toLowerCase()
-                          ? 'border-emerald-500 bg-emerald-500/10'
+                          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'
                           : typedSignatureName.trim()
-                          ? 'border-amber-500 bg-amber-500/10'
-                          : 'bg-black/40 border-white/15 focus:border-emerald-500'
+                          ? 'border-amber-500 bg-amber-50 dark:bg-amber-500/10'
+                          : 'bg-slate-50 dark:bg-black/40 border-slate-300 dark:border-white/15 focus:border-emerald-500'
                       }`}
                     />
                     {typedSignatureName.trim().length > 0 && (
                       <div className="mt-1 animate-in fade-in duration-200">
                         {fullName.trim().replace(/\s+/g, ' ').toLowerCase() ===
                         typedSignatureName.trim().replace(/\s+/g, ' ').toLowerCase() ? (
-                          <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/30">
-                            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                          <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-xl border border-emerald-300 dark:border-emerald-500/30">
+                            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                             <span>
                               {language === 'ar'
                                 ? '✓ الاسم متطابق تماماً مع بيانات المشترك المدخلة أعلاه'
@@ -1098,8 +1115,8 @@ export const SubscribePage: React.FC = () => {
                             </span>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 text-xs text-amber-400 font-bold bg-amber-500/10 p-2 rounded-xl border border-amber-500/30">
-                            <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                          <div className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-500/10 p-2 rounded-xl border border-amber-300 dark:border-amber-500/30">
+                            <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
                             <span>
                               {language === 'ar'
                                 ? `⚠ يجب أن يطابق تماماً الاسم الثلاثي: "${fullName.trim() || 'المدخل أعلاه'}"`
@@ -1109,7 +1126,7 @@ export const SubscribePage: React.FC = () => {
                         )}
                       </div>
                     )}
-                    <span className="text-[11px] text-slate-500 block">
+                    <span className="text-[11px] text-slate-600 dark:text-slate-500 block">
                       يعتبر إدخال اسمك هنا بمثابة توقيع إلكتروني نافذ نظاماً وفق أحكام المعاملات الإلكترونية.
                     </span>
                   </div>
@@ -1117,14 +1134,14 @@ export const SubscribePage: React.FC = () => {
                   {/* Drawing Signature Pad (Optional Enhancement) */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-black text-slate-300">
+                      <label className="text-xs font-black text-slate-700 dark:text-slate-300">
                         ب) التوقيع اليدوي باللمس أو الماوس (اختياري):
                       </label>
                       {hasCanvasSignature && (
                         <button
                           type="button"
                           onClick={clearCanvas}
-                          className="text-[11px] text-red-400 hover:text-red-300 flex items-center gap-1 cursor-pointer"
+                          className="text-[11px] text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 flex items-center gap-1 cursor-pointer"
                         >
                           <RotateCcw className="w-3 h-3" />
                           <span>مسح التوقيع</span>
@@ -1132,7 +1149,7 @@ export const SubscribePage: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="h-32 rounded-2xl bg-black/50 border border-white/15 overflow-hidden relative touch-none">
+                    <div className="h-32 rounded-2xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/15 overflow-hidden relative touch-none">
                       <canvas
                         ref={canvasRef}
                         width={400}
@@ -1147,7 +1164,7 @@ export const SubscribePage: React.FC = () => {
                         className="w-full h-full cursor-crosshair"
                       />
                       {!hasCanvasSignature && (
-                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-slate-600 text-xs font-bold">
+                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-slate-500 dark:text-slate-600 text-xs font-bold">
                           وقع بيدك أو بالماوس هنا
                         </div>
                       )}
@@ -1156,16 +1173,16 @@ export const SubscribePage: React.FC = () => {
                 </div>
 
                 {/* Audit & Legal Seal */}
-                <div className="p-4 rounded-2xl bg-black/40 border border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="p-4 rounded-2xl bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
                   <div>
-                    <span className="text-slate-400 block text-[11px]">رقم التوثيق المرجعي للعقد:</span>
-                    <strong className="text-orange-400 font-mono text-sm">{contractId}</strong>
+                    <span className="text-slate-600 dark:text-slate-400 block text-[11px]">رقم التوثيق المرجعي للعقد:</span>
+                    <strong className="text-orange-600 dark:text-orange-400 font-mono text-sm">{contractId}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[11px]">تاريخ ووقت التوقيع:</span>
-                    <strong className="text-slate-200">{signedDate}</strong>
+                    <span className="text-slate-600 dark:text-slate-400 block text-[11px]">تاريخ ووقت التوقيع:</span>
+                    <strong className="text-[#0B132B] dark:text-slate-200">{signedDate}</strong>
                   </div>
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-black">
+                  <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-black">
                     <CheckCircle2 className="w-4 h-4" />
                     <span>جاهز للتوثيق والاعتماد</span>
                   </div>
@@ -1177,7 +1194,7 @@ export const SubscribePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setCurrentStep(1)}
-                  className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white/10 hover:bg-white/15 text-slate-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/15 text-[#0B132B] dark:text-slate-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
                   <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
                   <span>{language === 'ar' ? 'الرجوع لاختيار الباقة' : 'Back to Plans'}</span>
@@ -1207,44 +1224,44 @@ export const SubscribePage: React.FC = () => {
             ========================================================================= */}
         {currentStep === 3 && (
           <div className="space-y-8 animate-in fade-in duration-300">
-            <div className="bg-gradient-to-b from-emerald-950/60 via-[#0B132B]/90 to-[#070E24] border-2 border-emerald-500/50 rounded-3xl p-8 sm:p-12 text-center shadow-[0_0_60px_rgba(16,185,129,0.25)] relative overflow-hidden">
+            <div className="bg-gradient-to-b from-emerald-50 via-white to-slate-50 dark:from-emerald-950/60 dark:via-[#0B132B]/90 dark:to-[#070E24] border-2 border-emerald-500/50 rounded-3xl p-8 sm:p-12 text-center shadow-xl dark:shadow-[0_0_60px_rgba(16,185,129,0.25)] relative overflow-hidden">
               <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(16,185,129,0.7)] mb-6">
                 <CheckCircle2 className="w-10 h-10 stroke-[2.5]" />
               </div>
 
-              <span className="text-xs font-black tracking-widest text-emerald-400 uppercase block mb-1">
+              <span className="text-xs font-black tracking-widest text-emerald-700 dark:text-emerald-400 uppercase block mb-1">
                 {language === 'ar' ? 'تم حفظ وتوثيق الإقرار بنجاح' : 'DECLARATION EXECUTED & CERTIFIED'}
               </span>
 
-              <h2 className="text-2xl sm:text-3xl font-black text-white mb-3">
+              <h2 className="text-2xl sm:text-3xl font-black text-[#0B132B] dark:text-white mb-3">
                 {language === 'ar'
                   ? 'تم تنزيل وثيقة إقرارك بصيغة PDF على جهازك بنجاح! 📄'
                   : 'Your Official Signed Declaration PDF Has Been Downloaded!'}
               </h2>
 
-              <p className="text-sm text-slate-300 max-w-xl mx-auto leading-relaxed mb-6 font-medium">
+              <p className="text-sm text-slate-700 dark:text-slate-300 max-w-xl mx-auto leading-relaxed mb-6 font-medium">
                 {language === 'ar'
                   ? `أهلاً بك يا بطل (${fullName})! تم حفظ وتوثيق إقرار اشتراكك بالرقم المرجعي (${contractId}). الخطوة الأخيرة لتأكيد تفعيل جدولك والختم المائي هي إرسال الملف أو البيانات للكوتش عمر عبر الواتساب.`
                   : `Welcome athlete (${fullName})! Your contract (${contractId}) is recorded. Please forward the signed PDF to Coach Omar Adnan via WhatsApp to activate your workouts.`}
               </p>
 
               {/* Contract Summary Box */}
-              <div className="max-w-md mx-auto p-4 rounded-2xl bg-black/50 border border-white/10 text-right text-xs space-y-2 mb-8">
-                <div className="flex justify-between border-b border-white/5 pb-2">
-                  <span className="text-slate-400">اسم المتدرب:</span>
-                  <strong className="text-white">{fullName}</strong>
+              <div className="max-w-md mx-auto p-4 rounded-2xl bg-slate-50 dark:bg-black/50 border border-slate-200 dark:border-white/10 text-right text-xs space-y-2 mb-8">
+                <div className="flex justify-between border-b border-slate-200 dark:border-white/5 pb-2">
+                  <span className="text-slate-600 dark:text-slate-400">اسم المتدرب:</span>
+                  <strong className="text-[#0B132B] dark:text-white">{fullName}</strong>
                 </div>
-                <div className="flex justify-between border-b border-white/5 pb-2">
-                  <span className="text-slate-400">الباقة والمدة:</span>
-                  <strong className="text-orange-400">{currentPlanNameAr} ({currentDurationInfo.labelAr})</strong>
+                <div className="flex justify-between border-b border-slate-200 dark:border-white/5 pb-2">
+                  <span className="text-slate-600 dark:text-slate-400">الباقة والمدة:</span>
+                  <strong className="text-orange-600 dark:text-orange-400">{currentPlanNameAr} ({currentDurationInfo.labelAr})</strong>
                 </div>
-                <div className="flex justify-between border-b border-white/5 pb-2">
-                  <span className="text-slate-400">قيمة الاشتراك:</span>
-                  <strong className="text-amber-300 font-mono">{currentDurationInfo.price} ريال</strong>
+                <div className="flex justify-between border-b border-slate-200 dark:border-white/5 pb-2">
+                  <span className="text-slate-600 dark:text-slate-400">قيمة الاشتراك:</span>
+                  <strong className="text-amber-700 dark:text-amber-300 font-mono">{currentDurationInfo.price} ريال</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">رقم التوثيق المرجعي:</span>
-                  <strong className="text-white font-mono">{contractId}</strong>
+                  <span className="text-slate-600 dark:text-slate-400">رقم التوثيق المرجعي:</span>
+                  <strong className="text-[#0B132B] dark:text-white font-mono">{contractId}</strong>
                 </div>
               </div>
 
@@ -1266,18 +1283,18 @@ export const SubscribePage: React.FC = () => {
                   type="button"
                   onClick={generateAndDownloadPDF}
                   disabled={isGeneratingPdf}
-                  className="w-full sm:w-auto py-4 px-6 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className="w-full sm:w-auto py-4 px-6 rounded-2xl bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/20 text-[#0B132B] dark:text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  <Download className="w-4 h-4 text-orange-400" />
+                  <Download className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                   <span>{isGeneratingPdf ? 'جاري التحميل...' : 'إعادة تحميل الـ PDF'}</span>
                 </button>
               </div>
 
               {/* Return to home link */}
-              <div className="mt-8 pt-6 border-t border-white/10">
+              <div className="mt-8 pt-6 border-t border-slate-200 dark:border-white/10">
                 <button
                   onClick={() => navigate('/')}
-                  className="text-xs text-slate-400 hover:text-white underline font-bold"
+                  className="text-xs text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-white underline font-bold cursor-pointer"
                 >
                   {language === 'ar' ? 'الرجوع إلى الصفحة الرئيسية لمنصة OAO' : 'Return to OAO Homepage'}
                 </button>

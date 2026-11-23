@@ -65,6 +65,37 @@
   animation: pulseGlow 3s infinite ease-in-out;
 }
 
+@keyframes auraFlashGlow {
+  0%, 100% {
+    opacity: 0.28;
+    transform: scale(0.96);
+  }
+  45% {
+    opacity: 0.92;
+    transform: scale(1.06);
+  }
+  55% {
+    opacity: 0.72;
+    transform: scale(1.02);
+  }
+  70% {
+    opacity: 0.98;
+    transform: scale(1.08);
+  }
+}
+
+.animate-aura-glow {
+  animation: auraFlashGlow 2.4s infinite ease-in-out;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-aura-glow {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

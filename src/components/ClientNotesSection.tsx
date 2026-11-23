@@ -53,12 +53,12 @@ export const ClientNotesSection: React.FC<ClientNotesSectionProps> = ({
       <div className="flex items-center justify-between mb-4 border-b border-slate-200/90 dark:border-white/5 pb-2.5">
         <h3 className="text-orange-600 dark:text-orange-400 font-extrabold text-sm md:text-base flex items-center gap-2">
           {/* Vibrant Navy + Orange + White Badge */}
-          <span className="p-1.5 rounded-xl bg-gradient-to-br from-[#0B132B] to-[#1C2541] ring-2 ring-orange-500/30 text-orange-400 shadow-md flex items-center justify-center">
-            <MessageSquare className="w-4 h-4 text-orange-400 stroke-[2.2]" />
+          <span className="p-1.5 rounded-xl bg-orange-100 dark:bg-gradient-to-br dark:from-[#0B132B] dark:to-[#1C2541] ring-2 ring-orange-500/30 text-orange-600 dark:text-orange-400 shadow-md flex items-center justify-center">
+            <MessageSquare className="w-4 h-4 text-orange-600 dark:text-orange-400 stroke-[2.2]" />
           </span>
           <span>{language === 'ar' ? 'ملاحظات واستفسارات المشترك المباشرة' : 'Direct Coach Inquiries & Notes'}</span>
         </h3>
-        <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#0B132B] to-[#1C2541] text-orange-400 border border-orange-500/40 font-bold shadow-xs">
+        <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-300 dark:bg-gradient-to-r dark:from-[#0B132B] dark:to-[#1C2541] dark:text-orange-400 dark:border-orange-500/40 font-bold shadow-xs">
           Coach Omar Adnan
         </span>
       </div>
@@ -150,7 +150,7 @@ export const ClientNotesSection: React.FC<ClientNotesSectionProps> = ({
 
           if (myNotes.length === 0) {
             return (
-              <p className="text-xs text-slate-500 py-3 text-center">
+              <p className="text-xs text-slate-600 dark:text-slate-400 py-3 text-center">
                 {language === 'ar'
                   ? 'لا توجد استفسارات مرسلة بعد. اكتب استفسارك للكوتش وسيصلك الرد هنا مباشرة.'
                   : 'No inquiries sent yet. Post your question and the coach response will appear here.'}

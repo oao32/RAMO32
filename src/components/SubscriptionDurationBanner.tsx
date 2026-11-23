@@ -28,7 +28,7 @@ interface SubscriptionDurationBannerProps {
 export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProps> = ({
   profile,
   language,
-  theme,
+  theme = 'dark',
   onOpenRenewModal,
   onOpenUpgradeToVIP,
   onScrollToCoachChat,
@@ -37,26 +37,31 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
 }) => {
   const details = calculateSubscriptionDetails(profile);
   const isVip = profile.subscription_plan === 'VIP';
-
   const isLight = theme === 'light';
 
   const statusConfig = {
     active: {
       labelAr: 'الاشتراك نشط',
       labelEn: 'Subscription Active',
-      bgClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+      bgClass: isLight
+        ? 'bg-emerald-50 text-emerald-800 border-emerald-400/70'
+        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
       icon: CheckCircle2,
     },
     expiring: {
       labelAr: `ينتهي قريباً (${details.daysRemaining} يوم متبقي)`,
       labelEn: `Expiring Soon (${details.daysRemaining} days left)`,
-      bgClass: 'bg-amber-500/15 text-amber-300 border-amber-500/40 animate-pulse',
+      bgClass: isLight
+        ? 'bg-amber-50 text-amber-800 border-amber-500/60'
+        : 'bg-amber-500/15 text-amber-300 border-amber-500/40',
       icon: AlertTriangle,
     },
     expired: {
       labelAr: 'الاشتراك منتهي ومقفل',
       labelEn: 'Expired & Locked',
-      bgClass: 'bg-rose-500/15 text-rose-400 border-rose-500/40',
+      bgClass: isLight
+        ? 'bg-rose-50 text-rose-800 border-rose-400/70'
+        : 'bg-rose-500/15 text-rose-400 border-rose-500/40',
       icon: Lock,
     },
   }[details.status];
@@ -66,18 +71,20 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
   return (
     <div
       className={`relative overflow-hidden rounded-3xl transition-all duration-300 border ${
-        isVip
+        isLight
+          ? isVip
+            ? 'bg-gradient-to-br from-[#FFFDF7] via-[#FAFBFD] to-[#FEF7E6] border-amber-500/50 shadow-[0_8px_28px_rgba(217,119,6,0.1)]'
+            : 'bg-[#FAFBFD] border-slate-300 shadow-sm'
+          : isVip
           ? 'bg-gradient-to-br from-[#0c1429] via-[#070a14] to-[#141b2d] border-amber-500/35 shadow-[0_4px_30px_rgba(245,158,11,0.12)]'
-          : isLight
-          ? 'bg-white border-slate-200 shadow-sm'
           : 'bg-[#0b132b]/95 border-orange-500/25 shadow-md'
       }`}
     >
-      {/* Top subtle glow banner */}
+      {/* Top accent bar */}
       <div
         className={`h-1.5 w-full ${
           isVip
-            ? 'bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-600 animate-pulse'
+            ? 'bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-600'
             : details.status === 'expiring'
             ? 'bg-gradient-to-r from-amber-500 to-rose-500'
             : details.status === 'expired'
@@ -91,10 +98,14 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
             <div
-              className={`p-2 rounded-2xl ${
-                isVip
-                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                  : 'bg-orange-500/15 text-orange-400 border border-orange-500/30'
+              className={`p-2 rounded-2xl border ${
+                isLight
+                  ? isVip
+                    ? 'bg-amber-100 text-amber-700 border-amber-300'
+                    : 'bg-orange-100 text-[#EA580C] border-orange-300'
+                  : isVip
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  : 'bg-orange-500/15 text-orange-400 border-orange-500/30'
               }`}
             >
               <Calendar className="w-5 h-5" />
@@ -104,7 +115,7 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
               <div className="flex items-center gap-2">
                 <h3
                   className={`text-sm sm:text-base font-black ${
-                    isLight ? 'text-slate-900' : 'text-white'
+                    isLight ? 'text-[#0B132B]' : 'text-white'
                   }`}
                 >
                   {language === 'ar' ? 'فترة وصلاحية اشتراكك التدريبي' : 'Subscription Duration & Period'}
@@ -112,12 +123,18 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
                 {isVip ? (
                   <VIPBadge variant="compact" language={language} />
                 ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-slate-700/60 text-slate-200 border border-slate-500/40">
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase border ${
+                      isLight
+                        ? 'bg-slate-100 text-slate-700 border-slate-300'
+                        : 'bg-slate-700/60 text-slate-200 border-slate-500/40'
+                    }`}
+                  >
                     Standard
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400">
+              <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                 {language === 'ar'
                   ? `المدة المعتمدة: ${details.formattedTotalDurationAr}`
                   : `Total Period: ${details.formattedTotalDurationEn}`}
@@ -138,7 +155,11 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
               <button
                 type="button"
                 onClick={onCoachEditDates}
-                className="px-2.5 py-1 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 text-[11px] font-bold border border-orange-500/40 transition-all cursor-pointer"
+                className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                  isLight
+                    ? 'bg-orange-50 hover:bg-orange-100 text-orange-800 border-orange-400/60'
+                    : 'bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border-orange-500/40'
+                }`}
               >
                 {language === 'ar' ? 'تعديل التواريخ ✏️' : 'Edit Dates ✏️'}
               </button>
@@ -151,15 +172,15 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
           {/* Box 1: Start Date */}
           <div
             className={`p-3.5 rounded-2xl border ${
-              isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#070a14]/80 border-white/5'
+              isLight ? 'bg-slate-100/80 border-slate-300' : 'bg-[#070a14]/80 border-white/5'
             }`}
           >
-            <span className="text-[11px] font-medium text-slate-400 block mb-0.5">
+            <span className={`text-[11px] font-bold block mb-0.5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
               {language === 'ar' ? 'من تاريخ (بداية الاشتراك)' : 'Start Date'}
             </span>
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-slate-400" />
-              <span className={`text-sm font-bold ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>
+              <Calendar className={`w-4 h-4 ${isLight ? 'text-[#0B132B]' : 'text-slate-400'}`} />
+              <span className={`text-sm font-bold ${isLight ? 'text-[#0B132B]' : 'text-slate-100'}`}>
                 {language === 'ar' ? details.formattedStartDateAr : details.formattedStartDateEn}
               </span>
             </div>
@@ -172,35 +193,49 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
           <div
             className={`p-3.5 rounded-2xl border ${
               details.status === 'expiring'
-                ? 'bg-amber-500/10 border-amber-500/30'
+                ? isLight
+                  ? 'bg-amber-50 border-amber-400/60'
+                  : 'bg-amber-500/10 border-amber-500/30'
                 : details.status === 'expired'
-                ? 'bg-rose-500/10 border-rose-500/30'
+                ? isLight
+                  ? 'bg-rose-50 border-rose-400/60'
+                  : 'bg-rose-500/10 border-rose-500/30'
                 : isLight
-                ? 'bg-slate-50 border-slate-200'
+                ? 'bg-slate-100/80 border-slate-300'
                 : 'bg-[#070a14]/80 border-white/5'
             }`}
           >
-            <span className="text-[11px] font-medium text-slate-400 block mb-0.5">
+            <span className={`text-[11px] font-bold block mb-0.5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
               {language === 'ar' ? 'إلى تاريخ (نهاية الاشتراك)' : 'End Date (Expiration)'}
             </span>
             <div className="flex items-center gap-2">
               <Clock
                 className={`w-4 h-4 ${
                   details.status === 'expiring'
-                    ? 'text-amber-400'
+                    ? isLight
+                      ? 'text-amber-700'
+                      : 'text-amber-400'
                     : details.status === 'expired'
-                    ? 'text-rose-400'
+                    ? isLight
+                      ? 'text-rose-700'
+                      : 'text-rose-400'
+                    : isLight
+                    ? 'text-[#0B132B]'
                     : 'text-slate-400'
                 }`}
               />
               <span
                 className={`text-sm font-bold ${
                   details.status === 'expiring'
-                    ? 'text-amber-300'
+                    ? isLight
+                      ? 'text-amber-800'
+                      : 'text-amber-300'
                     : details.status === 'expired'
-                    ? 'text-rose-400 font-black'
+                    ? isLight
+                      ? 'text-rose-700 font-black'
+                      : 'text-rose-400 font-black'
                     : isLight
-                    ? 'text-slate-800'
+                    ? 'text-[#0B132B]'
                     : 'text-slate-100'
                 }`}
               >
@@ -215,16 +250,20 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
           {/* Box 3: Days & Months Remaining + Countdown */}
           <div
             className={`p-3.5 rounded-2xl border flex flex-col justify-between ${
-              isVip
+              isLight
+                ? isVip
+                  ? 'bg-amber-50/90 border-amber-400/50'
+                  : 'bg-orange-50/80 border-orange-300'
+                : isVip
                 ? 'bg-gradient-to-br from-amber-500/15 to-amber-600/5 border-amber-500/30'
                 : 'bg-gradient-to-br from-orange-500/15 to-orange-600/5 border-orange-500/30'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-300">
+              <span className={`text-[11px] font-bold ${isLight ? 'text-[#0B132B]' : 'text-slate-300'}`}>
                 {language === 'ar' ? 'المدة المتبقية' : 'Remaining Time'}
               </span>
-              <span className="text-[10px] text-slate-400">
+              <span className={`text-[10px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                 {details.daysElapsed} / {details.totalDays}{' '}
                 {language === 'ar' ? 'يوم منقضي' : 'days passed'}
               </span>
@@ -235,17 +274,25 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
                 <span
                   className={`text-2xl font-black font-mono ${
                     details.isExpired
-                      ? 'text-rose-400'
+                      ? isLight
+                        ? 'text-rose-700'
+                        : 'text-rose-400'
                       : details.isExpiringSoon
-                      ? 'text-amber-300'
+                      ? isLight
+                        ? 'text-amber-700'
+                        : 'text-amber-300'
                       : isVip
-                      ? 'text-amber-400'
+                      ? isLight
+                        ? 'text-amber-700'
+                        : 'text-amber-400'
+                      : isLight
+                      ? 'text-[#EA580C]'
                       : 'text-orange-400'
                   }`}
                 >
                   {details.daysRemaining}
                 </span>
-                <span className="text-xs font-bold text-slate-300">
+                <span className={`text-xs font-bold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                   {language === 'ar' ? 'يوم متبقي' : 'days left'}
                 </span>
               </div>
@@ -253,7 +300,13 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
               {!details.isExpired && details.remainingMonths > 0 && (
                 <div
                   className={`text-[11px] font-bold ${
-                    isVip ? 'text-amber-200/90' : 'text-orange-300/90'
+                    isVip
+                      ? isLight
+                        ? 'text-amber-800'
+                        : 'text-amber-200/90'
+                      : isLight
+                      ? 'text-orange-800'
+                      : 'text-orange-300/90'
                   }`}
                 >
                   {language === 'ar'
@@ -264,16 +317,20 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
             </div>
 
             {/* Visual Progress Bar */}
-            <div className="w-full bg-black/40 rounded-full h-2 overflow-hidden border border-white/5">
+            <div
+              className={`w-full rounded-full h-2 overflow-hidden border ${
+                isLight ? 'bg-slate-200 border-slate-300' : 'bg-black/40 border-white/5'
+              }`}
+            >
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   details.isExpired
                     ? 'bg-rose-500'
                     : details.isExpiringSoon
-                    ? 'bg-gradient-to-r from-amber-500 to-rose-400'
+                    ? 'bg-gradient-to-r from-amber-500 to-rose-500'
                     : isVip
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-300 shadow-[0_0_10px_rgba(245,158,11,0.5)]'
-                    : 'bg-gradient-to-r from-orange-500 to-amber-400 shadow-[0_0_10px_rgba(249,115,22,0.5)]'
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                    : 'bg-gradient-to-r from-orange-500 to-amber-400'
                 }`}
                 style={{ width: `${details.progressPercent}%` }}
               />
@@ -282,7 +339,11 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
         </div>
 
         {/* Row 3: Quick Action Buttons */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-white/5">
+        <div
+          className={`flex flex-wrap items-center justify-between gap-3 pt-2 border-t ${
+            isLight ? 'border-slate-200' : 'border-white/5'
+          }`}
+        >
           <div className="flex flex-wrap items-center gap-2">
             {onOpenRenewModal && (
               <button
@@ -299,9 +360,13 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
               <button
                 type="button"
                 onClick={onOpenUpgradeToVIP}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/10 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-xs font-black shadow-sm transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                className={`px-4 py-2 rounded-xl border text-xs font-black shadow-sm transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+                  isLight
+                    ? 'bg-amber-100 hover:bg-amber-200 border-amber-400 text-amber-900'
+                    : 'bg-gradient-to-r from-amber-500/20 to-yellow-500/10 hover:bg-amber-500/30 border-amber-400/40 text-amber-300'
+                }`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 <span>{language === 'ar' ? 'ترقية إلى VIP' : 'Upgrade to VIP'}</span>
               </button>
             )}
@@ -312,18 +377,22 @@ export const SubscriptionDurationBanner: React.FC<SubscriptionDurationBannerProp
                 onClick={onScrollToCoachChat}
                 className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   isLight
-                    ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                    ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-[#0B132B]'
                     : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
                 }`}
               >
-                <MessageCircle className="w-3.5 h-3.5 text-orange-400" />
+                <MessageCircle className="w-3.5 h-3.5 text-[#EA580C] dark:text-orange-400" />
                 <span>{language === 'ar' ? 'تواصل مع الكوتش للاستفسار' : 'Ask Coach Omar'}</span>
               </button>
             )}
           </div>
 
-          <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
-            <Shield className="w-3.5 h-3.5 text-slate-400" />
+          <div
+            className={`text-[11px] font-medium flex items-center gap-1 ${
+              isLight ? 'text-slate-600' : 'text-slate-400'
+            }`}
+          >
+            <Shield className={`w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} />
             <span>
               {language === 'ar'
                 ? 'ينتهي الاشتراك تلقائياً ويقفل الحساب عند نهاية المدة'
