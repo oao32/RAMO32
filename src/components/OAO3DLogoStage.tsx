@@ -82,30 +82,33 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({
           width: 82%;
           aspect-ratio: 1;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(30, 58, 138, 0.32) 0%, rgba(11, 19, 43, 0.24) 45%, transparent 72%);
-          filter: blur(42px);
+          background: radial-gradient(circle, rgba(30, 58, 138, 0.34) 0%, rgba(11, 19, 43, 0.24) 45%, transparent 72%);
+          filter: blur(40px);
           animation: oao-ambient-navy-breathe 8.5s ease-in-out infinite;
+          will-change: transform, opacity;
           pointer-events: none;
         }
         .oao-ambient-orange {
           position: absolute;
-          width: 68%;
+          width: 72%;
           aspect-ratio: 1;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(249, 115, 22, 0.28) 0%, rgba(234, 88, 12, 0.14) 48%, transparent 72%);
-          filter: blur(36px);
-          animation: oao-ambient-orange-breathe 7.5s ease-in-out infinite;
+          background: radial-gradient(circle, rgba(255, 165, 60, 0.26) 0%, rgba(249, 115, 22, 0.3) 38%, rgba(234, 88, 12, 0.14) 55%, transparent 74%);
+          filter: blur(34px);
+          animation: oao-ambient-orange-breathe 7.2s ease-in-out infinite;
+          will-change: transform, opacity;
           pointer-events: none;
         }
         .oao-light-beam {
           position: absolute;
           width: 28%;
           height: 78%;
-          opacity: 0.18;
-          background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.75), rgba(30, 58, 138, 0.55), transparent);
-          filter: blur(36px);
+          opacity: 0.22;
+          background: linear-gradient(90deg, transparent, rgba(255, 196, 94, 0.55), rgba(249, 115, 22, 0.72), rgba(30, 58, 138, 0.45), transparent);
+          filter: blur(34px);
           transform: rotate(35deg);
-          animation: oao-light-sweep 9.5s ease-in-out infinite;
+          animation: oao-light-sweep 8.5s ease-in-out infinite;
+          will-change: transform, opacity;
           pointer-events: none;
         }
         .oao-logo-wrap {
@@ -117,18 +120,19 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({
           transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
           transition: transform 0.22s ease-out;
           animation: oao-levitate 7s ease-in-out infinite;
+          will-change: transform;
         }
         /* 3D Depth Layer: Metallic extrusion behind emblem */
         .oao-emblem-depth {
           position: absolute;
           inset: 0;
           transform: translateZ(-22px) scale(0.985);
-          filter: drop-shadow(0 22px 35px rgba(11, 19, 43, 0.45)) drop-shadow(0 0 26px rgba(234, 88, 12, 0.3)) brightness(0.28) contrast(1.25);
+          filter: drop-shadow(0 22px 35px rgba(11, 19, 43, 0.48)) drop-shadow(0 0 28px rgba(234, 88, 12, 0.34)) brightness(0.24) contrast(1.32);
           pointer-events: none;
-          opacity: 0.92;
+          opacity: 0.94;
         }
         .dark .oao-emblem-depth {
-          filter: drop-shadow(0 25px 40px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 30px rgba(249, 115, 22, 0.35)) brightness(0.25) contrast(1.3);
+          filter: drop-shadow(0 26px 42px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 34px rgba(249, 115, 22, 0.42)) brightness(0.2) contrast(1.38);
         }
         .oao-emblem-depth img {
           width: 100%;
@@ -140,23 +144,30 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({
           position: absolute;
           inset: 0;
           transform: translateZ(32px);
-          filter: drop-shadow(0 14px 28px rgba(11, 19, 43, 0.42)) drop-shadow(0 0 28px rgba(234, 88, 12, 0.38));
+          filter: drop-shadow(0 14px 28px rgba(11, 19, 43, 0.44)) drop-shadow(0 0 28px rgba(249, 115, 22, 0.42)) contrast(1.12) saturate(1.18);
+          transition: filter 0.35s ease;
           display: flex;
           align-items: center;
           justify-content: center;
         }
         .dark .oao-emblem-main {
-          filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.85)) drop-shadow(0 0 34px rgba(249, 115, 22, 0.48));
+          filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.9)) drop-shadow(0 0 34px rgba(249, 115, 22, 0.56)) drop-shadow(0 0 12px rgba(255, 196, 92, 0.3)) contrast(1.16) saturate(1.22);
+        }
+        .oao-logo-wrap:hover .oao-emblem-main {
+          filter: drop-shadow(0 16px 32px rgba(11, 19, 43, 0.48)) drop-shadow(0 0 34px rgba(249, 115, 22, 0.54)) contrast(1.15) saturate(1.2);
+        }
+        .dark .oao-logo-wrap:hover .oao-emblem-main {
+          filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 42px rgba(249, 115, 22, 0.68)) drop-shadow(0 0 16px rgba(255, 206, 108, 0.42)) contrast(1.18) saturate(1.25);
         }
         .oao-emblem-main img {
           display: block;
           width: 100%;
           height: 100%;
           object-fit: contain;
-          transition: transform 0.45s ease;
+          transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
         }
         .oao-logo-wrap:hover .oao-emblem-main img {
-          transform: scale(1.04);
+          transform: scale(1.045);
         }
         /* Calm Specular Gleam Sweep */
         .oao-specular-gleam {
@@ -164,19 +175,21 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({
           inset: 0;
           pointer-events: none;
           border-radius: 50%;
-          background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.38) 50%, rgba(249, 115, 22, 0.2) 58%, transparent 68%);
+          background: linear-gradient(115deg, transparent 36%, rgba(255, 255, 255, 0.42) 49%, rgba(255, 204, 112, 0.34) 54%, rgba(249, 115, 22, 0.22) 60%, transparent 69%);
           mix-blend-mode: overlay;
-          animation: oao-gleam-sweep 7.5s ease-in-out infinite;
-          opacity: 0.65;
+          animation: oao-gleam-sweep 6.8s ease-in-out infinite;
+          will-change: transform, opacity;
+          opacity: 0.72;
         }
         .oao-ring {
           position: absolute;
           z-index: 1;
           left: 50%;
           top: 50%;
-          border: 1.5px solid rgba(234, 88, 12, 0.42);
+          border: 1.5px solid rgba(234, 88, 12, 0.48);
           border-radius: 50%;
           transform-style: preserve-3d;
+          will-change: transform;
           pointer-events: none;
         }
         .oao-ring::before {
@@ -187,12 +200,13 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: #f97316;
-          box-shadow: 0 0 14px 3px rgba(249, 115, 22, 0.72);
+          background: radial-gradient(circle, #fff3c4 0%, #f97316 65%);
+          box-shadow: 0 0 16px 4px rgba(249, 115, 22, 0.85);
         }
         .oao-ring-a {
           width: 124%;
           height: 48%;
+          box-shadow: 0 0 16px rgba(249, 115, 22, 0.16);
           transform: translate(-50%, -50%) rotateX(67deg) rotateZ(12deg) translateZ(16px);
           animation: oao-ring-a 16s linear infinite;
         }
@@ -253,8 +267,8 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({
           50% { opacity: 0.82; transform: scale(1.08); }
         }
         @keyframes oao-ambient-orange-breathe {
-          0%, 100% { opacity: 0.42; transform: scale(1.02); }
-          50% { opacity: 0.78; transform: scale(0.94); }
+          0%, 100% { opacity: 0.46; transform: scale(1.02); }
+          50% { opacity: 0.86; transform: scale(0.95); }
         }
         @keyframes oao-shadow-pulse {
           0%, 100% { transform: rotateX(72deg) scale(1); opacity: 0.7; }
@@ -262,20 +276,24 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({
         }
         @keyframes oao-light-sweep {
           0%, 100% { transform: translateX(-140px) rotate(35deg); opacity: 0; }
-          45% { opacity: 0.24; }
+          45% { opacity: 0.28; }
           75% { transform: translateX(140px) rotate(35deg); opacity: 0; }
         }
         @keyframes oao-gleam-sweep {
           0%, 100% { opacity: 0; transform: translateX(-55%) rotate(25deg); }
-          35% { opacity: 0.65; }
+          35% { opacity: 0.75; }
           65% { opacity: 0; transform: translateX(55%) rotate(25deg); }
         }
         @keyframes oao-ring-a { to { rotate: 360deg; } }
         @keyframes oao-ring-b { to { rotate: -360deg; } }
         @keyframes oao-ring-c { to { rotate: 360deg; } }
         @media (prefers-reduced-motion: reduce) {
-          .oao-logo-wrap, .oao-ambient-navy, .oao-ambient-orange, .oao-light-beam, .oao-specular-gleam, .oao-ring {
+          .oao-stage::before, .oao-logo-wrap, .oao-ambient-navy, .oao-ambient-orange, .oao-light-beam, .oao-specular-gleam, .oao-ring {
             animation: none !important;
+            transition: none !important;
+          }
+          .oao-specular-gleam {
+            opacity: 0 !important;
           }
         }
         @media (max-width: 560px) {
@@ -309,11 +327,11 @@ export const OAO3DLogoStage: React.FC<OAO3DLogoStageProps> = ({
           <div className="oao-caption">
             <i />
             <span className="flex items-center gap-1.5 font-black text-xs tracking-wider select-none">
-              <span className="text-[#0B132B] dark:text-white">OWN</span>
-              <span className="px-1.5 py-0.5 rounded bg-[#0B132B] text-white dark:bg-gradient-to-r dark:from-slate-100 dark:via-white dark:to-slate-200 dark:text-[#07182E] text-[10px] font-black tracking-widest uppercase border border-orange-500/40 dark:border-slate-300 shadow-xs">
+              <span className="text-[#0B132B] dark:text-white dark:drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">OWN</span>
+              <span className="px-1.5 py-0.5 rounded bg-[#0B132B] text-white dark:bg-gradient-to-r dark:from-amber-50 dark:via-white dark:to-orange-100 dark:text-[#07182E] text-[10px] font-black tracking-widest uppercase border border-orange-500/50 dark:border-amber-300/80 shadow-[0_0_12px_rgba(249,115,22,0.35)] dark:shadow-[0_0_16px_rgba(255,145,40,0.55)]">
                 AURA
               </span>
-              <span className="text-[#EA580C] dark:text-[#f97316]">OUTCOME</span>
+              <span className="text-[#EA580C] dark:text-[#ff7a1a] dark:drop-shadow-[0_0_10px_rgba(249,115,22,0.45)]">OUTCOME</span>
             </span>
             <i />
           </div>
