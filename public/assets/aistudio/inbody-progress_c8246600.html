@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تطور تركيبة الجسم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1226;--card:#121935;--line:#2a2f52;--text:#f3f4fa;--mute:#8d93b5;--fat:#ff6a1a;--muscle:#4d9bff;--weight:#e8e3d6}
+*{box-sizing:border-box;margin:0}
+body{background:#080b1a;font-family:Tajawal,system-ui,sans-serif;color:var(--text);display:grid;place-items:center;min-height:100vh;padding:16px}
+.card{width:100%;max-width:760px;background:linear-gradient(160deg,#141b3b,var(--bg));border:1px solid rgba(255,106,26,.35);border-radius:22px;padding:22px 22px 18px;box-shadow:0 0 60px rgba(255,106,26,.12)}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+h2{font-size:18px;font-weight:800}
+.sub{font-size:12.5px;color:var(--mute);margin-top:3px}
+.tabs{display:flex;gap:6px;background:#0a0f20;padding:4px;border-radius:12px;border:1px solid var(--line)}
+.tabs button{font:inherit;font-size:13px;font-weight:500;color:var(--mute);background:none;border:0;padding:7px 13px;border-radius:9px;cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--c);color:#0a0f20;font-weight:800}
+.tabs button:focus-visible,svg:focus-visible,.replay:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.read{display:flex;align-items:baseline;gap:12px;margin:18px 0 4px;flex-wrap:wrap}
+.val{font-size:46px;font-weight:800;color:var(--c);line-height:1;font-variant-numeric:tabular-nums}
+.unit{font-size:16px;color:var(--mute)}
+.delta{font-size:14px;font-weight:800;padding:3px 10px;border-radius:99px;background:rgba(255,255,255,.07)}
+.wk{font-size:13px;color:var(--mute);margin-inline-start:auto}
+svg{width:100%;height:auto;display:block;touch-action:pan-y;cursor:crosshair;direction:ltr}
+.grid line{stroke:var(--line);stroke-width:1}
+.ax{fill:var(--mute);font-size:11px;font-family:Tajawal,sans-serif}
+#ln{fill:none;stroke:var(--c);stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1}
+#ln.go{stroke-dashoffset:0;transition:stroke-dashoffset 1.6s cubic-bezier(.3,.7,.2,1)}
+#ar{opacity:0}#ar.go{opacity:1;transition:opacity 1s .9s}
+#cur line{stroke:var(--mute);stroke-dasharray:3 4}
+#cur circle{fill:var(--bg);stroke:var(--c);stroke-width:3}
+.foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;color:var(--mute);gap:8px}
+.replay{font:inherit;font-size:12px;color:var(--text);background:none;border:1px solid var(--line);border-radius:99px;padding:5px 12px;cursor:pointer}
+@media(max-width:520px){.val{font-size:36px}.tabs button{padding:6px 9px;font-size:12px}}
+@media(prefers-reduced-motion:reduce){#ln.go,#ar.go{transition:none}}
+</style>
+</head>
+<body>
+<section class="card" id="card" aria-label="تطور تركيبة الجسم">
+  <div class="top">
+    <div><h2>تطور تركيبة الجسم</h2><p class="sub">نتائج فحوصات InBody على 12 أسبوع</p></div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+  </div>
+  <div class="read">
+    <span class="val" id="val">0</span><span class="unit" id="unit"></span>
+    <span class="delta" id="delta"></span>
+    <span class="wk" id="wk"></span>
+  </div>
+  <svg id="svg" viewBox="0 0 640 270" tabindex="0" role="img" aria-label="رسم بياني، استخدم الأسهم للتنقل بين الأسابيع">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--c)" stop-opacity=".35"/><stop offset="1" stop-color="var(--c)" stop-opacity="0"/></linearGradient></defs>
+    <g class="grid" id="grid"></g>
+    <path id="ar" fill="url(#g)"/>
+    <path id="ln" pathLength="1"/>
+    <g id="cur"><line/><circle r="6"/></g>
+  </svg>
+  <div class="foot"><span>حرّك إصبعك أو الماوس على الرسم لعرض كل أسبوع</span><button class="replay" id="replay" type="button">إعادة التشغيل</button></div>
+</section>
+
+<script>
+// ===== عدّل أرقامك هنا (أرقام تجريبية) =====
+const DATA = [
+  {fat:24.8, muscle:31.2, weight:84.5}, {fat:24.1, muscle:31.5, weight:83.6},
+  {fat:23.5, muscle:31.9, weight:82.9}, {fat:22.6, muscle:32.2, weight:82.0},
+  {fat:21.9, muscle:32.8, weight:81.2}, {fat:21.2, muscle:33.1, weight:80.5},
+  {fat:20.4, muscle:33.5, weight:79.8}, {fat:19.7, muscle:33.9, weight:79.1},
+  {fat:19.0, muscle:34.3, weight:78.5}, {fat:18.2, muscle:34.6, weight:77.9},
+  {fat:17.5, muscle:35.0, weight:77.3}, {fat:16.9, muscle:35.4, weight:76.8}
+];
+const METRICS = {
+  fat:   {label:'نسبة الدهون',   unit:'%',  color:'#ff6a1a', good:'down'},
+  muscle:{label:'الكتلة العضلية', unit:'كجم', color:'#4d9bff', good:'up'},
+  weight:{label:'الوزن',         unit:'كجم', color:'#e8e3d6', good:'down'}
+};
+// =========================================
+const W=640,H=270,P={l:14,r:14,t:16,b:30};
+const $=id=>document.getElementById(id);
+const card=$('card'),svg=$('svg'),ln=$('ln'),ar=$('ar');
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let key='fat',idx=DATA.length-1,pts=[],lo,hi;
+
+$('tabs').innerHTML=Object.entries(METRICS).map(([k,m])=>`<button role="tab" data-k="${k}" aria-selected="${k===key}" style="--c:${m.color}">${m.label}</button>`).join('');
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(b){key=b.dataset.k;idx=DATA.length-1;draw(true)}};
+$('replay').onclick=()=>draw(true);
+
+function draw(animate){
+  const m=METRICS[key],v=DATA.map(d=>d[key]);
+  card.style.setProperty('--c',m.color);
+  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.k===key));
+  lo=Math.floor(Math.min(...v)-1);hi=Math.ceil(Math.max(...v)+1);
+  const x=i=>P.l+i*(W-P.l-P.r)/(v.length-1), y=n=>P.t+(hi-n)*(H-P.t-P.b)/(hi-lo);
+  pts=v.map((n,i)=>[x(i),y(n)]);
+  const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  ln.setAttribute('d',d);
+  ar.setAttribute('d',d+` L${pts.at(-1)[0]} ${H-P.b} L${pts[0][0]} ${H-P.b} Z`);
+  let g='';
+  for(let k=0;k<=3;k++){const n=lo+(hi-lo)*k/3,yy=y(n);g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${yy}" y2="${yy}"/><text class="ax" x="${W-P.r}" y="${yy-4}" text-anchor="end">${n.toFixed(0)}</text>`}
+  [0,3,6,9,11].forEach(i=>{if(i<v.length)g+=`<text class="ax" x="${x(i)}" y="${H-8}" text-anchor="middle">أسبوع ${i+1}</text>`});
+  $('grid').innerHTML=g;
+  $('unit').textContent=m.unit;
+  ln.classList.remove('go');ar.classList.remove('go');
+  if(animate&&!reduce){$('cur').style.opacity=0;void ln.getBoundingClientRect();
+    requestAnimationFrame(()=>{ln.classList.add('go');ar.classList.add('go')});
+    countUp(v.at(-1),1600);setTimeout(()=>{$('cur').style.opacity=1;show(idx)},1650);
+  }else{ln.classList.add('go');ar.classList.add('go');$('cur').style.opacity=1;show(idx)}
+}
+function countUp(to,ms){const from=DATA[0][key],t0=performance.now();
+  (function f(t){const p=Math.min((t-t0)/ms,1),e=1-Math.pow(1-p,3);$('val').textContent=(from+(to-from)*e).toFixed(1);if(p<1)requestAnimationFrame(f)})(t0)}
+function show(i){
+  idx=Math.max(0,Math.min(DATA.length-1,i));
+  const m=METRICS[key],n=DATA[idx][key],dl=n-DATA[0][key],good=(m.good==='down')?dl<=0:dl>=0;
+  $('val').textContent=n.toFixed(1);
+  $('delta').textContent=idx===0?'نقطة البداية':(dl>0?'+':'')+dl.toFixed(1)+' '+m.unit;
+  $('delta').style.color=idx===0?'var(--mute)':(good?'#46d39a':'#ff6b6b');
+  $('wk').textContent='الأسبوع '+(idx+1);
+  const c=$('cur'),p=pts[idx];
+  c.querySelector('line').setAttribute('x1',p[0]);c.querySelector('line').setAttribute('x2',p[0]);
+  c.querySelector('line').setAttribute('y1',P.t);c.querySelector('line').setAttribute('y2',H-P.b);
+  c.querySelector('circle').setAttribute('cx',p[0]);c.querySelector('circle').setAttribute('cy',p[1]);
+}
+function near(e){const r=svg.getBoundingClientRect(),px=(e.clientX-r.left)/r.width*W;
+  let b=0;pts.forEach((p,i)=>{if(Math.abs(p[0]-px)<Math.abs(pts[b][0]-px))b=i});return b}
+svg.addEventListener('pointermove',e=>show(near(e)));
+svg.addEventListener('pointerdown',e=>show(near(e)));
+svg.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')show(idx+1);if(e.key==='ArrowRight')show(idx-1)});
+// يشتغل أول ما تظهر البطاقة في الشاشة
+new IntersectionObserver((es,o)=>{if(es[0].isIntersecting){draw(true);o.disconnect()}},{threshold:.3}).observe(card);
+draw(false);
+</script>
+</body>
+</html>

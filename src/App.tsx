@@ -47,6 +47,7 @@ import { CoachPasskeyModal } from './components/CoachPasskeyModal';
 import { BackgroundEffects } from './components/BackgroundEffects';
 import { CinematicHero } from './components/CinematicHero';
 import { BrandHeroSection } from './components/BrandHeroSection';
+import { BodyCompositionCard } from './components/BodyCompositionCard';
 import { PricingPlansSection, PlanSelectionPayload } from './components/PricingPlansSection';
 import { GamificationStreakSection } from './components/GamificationStreakSection';
 import { ShareableProgressCardModal } from './components/ShareableProgressCardModal';
@@ -132,6 +133,8 @@ import {
   QrCode,
   Crown,
   Clock,
+  Menu,
+  X,
 } from 'lucide-react';
 
 function MainPortal() {
@@ -324,6 +327,45 @@ function MainPortal() {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [selectedCheckoutPlan, setSelectedCheckoutPlan] = useState<PlanDetails>(ALL_PLANS.platinum);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const mobileHeaderRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    const handlePointerDownOutside = (event: MouseEvent | TouchEvent) => {
+      if (
+        mobileHeaderRef.current &&
+        !mobileHeaderRef.current.contains(event.target as Node)
+      ) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handlePointerDownOutside);
+    document.addEventListener('touchstart', handlePointerDownOutside, { passive: true });
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handlePointerDownOutside);
+      document.removeEventListener('touchstart', handlePointerDownOutside);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isMobileMenuOpen]);
 
   // Direct Subscription Landing Mode (activated automatically when client scans QR code with ?view=plans)
   const [isDirectPlansLanding, setIsDirectPlansLanding] = useState<boolean>(() => {
@@ -710,7 +752,7 @@ function MainPortal() {
       onOpenUpgradeModal={handleOpenUpgradeToVIP}
     >
     <div
-      className={`min-h-screen relative selection:bg-orange-500 selection:text-white transition-colors duration-300 ${
+      className={`min-h-screen w-full max-w-full overflow-x-clip relative selection:bg-orange-500 selection:text-white transition-colors duration-300 ${
         theme === 'dark'
           ? 'bg-[#030712] text-white'
           : 'bg-gradient-to-b from-[#EEF2F6] via-[#E8EDF5] to-[#EEF2F6] text-[#0B132B]'
@@ -719,12 +761,12 @@ function MainPortal() {
       {/* Dynamic Background Laser & Embers Effects */}
       <BackgroundEffects theme={theme} />
 
-      {/* 1. TOP TICKER QUOTES BANNER */}
-      <TickerBanner language={language} />
+      {/* 1. TOP TICKER QUOTES BANNER + 2. STICKY SUB-NAV / QUICK ACTION BAR */}
+      <div ref={mobileHeaderRef} className="sticky top-0 z-40 w-full max-w-full">
+        <TickerBanner language={language} />
 
-      {/* 2. STICKY SUB-NAV / QUICK ACTION BAR */}
-      <header
-        className={`sticky top-0 z-40 backdrop-blur-xl border-b transition-colors ${
+        <header
+          className={`backdrop-blur-xl border-b transition-colors ${
           userSession === 'client' && isClientVIP
             ? theme === 'dark'
               ? 'bg-[#090d1c]/95 border-amber-400/40 shadow-[0_4px_30px_rgba(245,158,11,0.12)]'
@@ -734,10 +776,10 @@ function MainPortal() {
             : 'bg-[#EEF2F6]/95 border-slate-300/80 shadow-[0_4px_20px_rgba(11,19,43,0.06)]'
         }`}
       >
-        <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2">
           {/* Brand Logo & Name */}
           <div
-            className="flex items-center gap-3 cursor-pointer group"
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer group shrink-0"
             onClick={() => {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
@@ -745,16 +787,21 @@ function MainPortal() {
             <BrandLogo size="sm" showText={false} />
             <div className="flex flex-col">
               <span
-                className={`font-black text-xs md:text-sm tracking-wide flex items-center gap-1.5 ${
+                className={`font-black text-xs md:text-sm tracking-wide flex items-center gap-1 ${
                   theme === 'dark' ? 'text-white' : 'text-[#0B132B]'
                 }`}
               >
-                <span className="text-[#EA580C]">Own</span>
-                <span>Aura</span>
-                <span className="text-[#EA580C]">Outcome</span>
+                <span className="md:hidden">
+                  <span className="text-[#EA580C]">O</span>A<span className="text-[#EA580C]">O</span>
+                </span>
+                <span className="hidden md:inline-flex items-center gap-1">
+                  <span className="text-[#EA580C]">Own</span>
+                  <span>Aura</span>
+                  <span className="text-[#EA580C]">Outcome</span>
+                </span>
               </span>
               <span
-                className={`text-[9px] font-semibold tracking-widest uppercase ${
+                className={`hidden md:block text-[9px] font-semibold tracking-widest uppercase ${
                   theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
                 }`}
               >
@@ -764,11 +811,12 @@ function MainPortal() {
           </div>
 
           {/* Dynamic Navigation according to User Session */}
-          {userSession === 'guest' && (
+          {userSession === 'guest' && !isDirectPlansLanding && (
             <div className="hidden md:flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                className={`text-xs px-3.5 py-1.5 rounded-full font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                className={`text-xs px-3.5 py-1.5 rounded-full font-bold flex items-center gap-1.5 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2 ${
                   theme === 'dark'
                     ? 'bg-white/5 hover:bg-white/10 text-slate-300'
                     : 'bg-[#FAFBFD] hover:bg-slate-200 text-[#0B132B] border border-slate-300 shadow-xs'
@@ -776,17 +824,6 @@ function MainPortal() {
               >
                 <Compass className="w-3.5 h-3.5 text-orange-500" />
                 <span>{language === 'ar' ? 'الرئيسية' : 'Home'}</span>
-              </button>
-              <button
-                onClick={() => navigate('/subscribe')}
-                className={`text-xs px-3.5 py-1.5 rounded-full font-bold border flex items-center gap-1.5 transition-colors cursor-pointer ${
-                  theme === 'dark'
-                    ? 'bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-400/50 shadow-xs'
-                }`}
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>{language === 'ar' ? 'اشترك الآن' : 'Subscribe Now'}</span>
               </button>
             </div>
           )}
@@ -916,14 +953,16 @@ function MainPortal() {
             </div>
           )}
 
-          {/* Action Buttons: QR Share, Logins, Logout, Theme, Language */}
-          <div className="flex items-center gap-2">
+          {/* Action Buttons: QR Share, Logins, Logout, Theme, Language, Mobile Menu */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {/* QR Code Generator Button for sharing Subscriptions directly */}
             {!isDirectPlansLanding && !isClientExpired && (
               <button
                 type="button"
                 onClick={() => setIsQRModalOpen(true)}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5 ${
+                className={`${
+                  userSession === 'guest' ? 'hidden md:flex' : 'hidden sm:flex'
+                } px-3 py-1.5 rounded-xl border text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2 ${
                   theme === 'dark'
                     ? 'bg-orange-500/15 hover:bg-orange-500/25 border-orange-500/40 text-orange-300'
                     : 'bg-white hover:bg-orange-50 border-orange-500/40 text-[#0B132B] shadow-xs'
@@ -957,28 +996,32 @@ function MainPortal() {
               </button>
             )}
 
-            {/* GUEST ACTIONS: Athlete Login (Passcode / Email) + Coach Passkey */}
+            {/* GUEST ACTIONS: Primary Subscribe Now + Desktop Outlined Subscriber Login + Mobile Hamburger */}
             {userSession === 'guest' && !isDirectPlansLanding && (
               <>
                 <button
-                  onClick={handleOpenAthleteLogin}
-                  className="px-3 sm:px-4 py-1.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-black text-xs tracking-wider uppercase shadow-[0_0_15px_rgba(249,115,22,0.4)] transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5"
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    navigate('/subscribe');
+                  }}
+                  className="min-h-[40px] md:min-h-0 px-3 sm:px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#FF5722] via-[#FF7043] to-amber-500 hover:from-[#FF7043] hover:to-amber-400 text-white font-black text-xs tracking-wide shadow-[0_0_16px_rgba(255,87,34,0.42)] border border-orange-300/40 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2"
                 >
-                  <KeyRound className="w-3.5 h-3.5 text-white" />
-                  <span>{language === 'ar' ? 'دخول المشترك' : 'Subscriber Login'}</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-white shrink-0" />
+                  <span>{language === 'ar' ? 'اشترك الآن' : 'Subscribe Now'}</span>
                 </button>
 
                 <button
-                  onClick={handleOpenCoachPasskey}
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5 ${
+                  type="button"
+                  onClick={handleOpenAthleteLogin}
+                  className={`hidden md:flex px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer items-center gap-1.5 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2 ${
                     theme === 'dark'
-                      ? 'bg-blue-950/60 hover:bg-blue-900/60 border-blue-500/40 text-blue-300'
-                      : 'bg-white hover:bg-slate-100 border-slate-300 text-[#0B132B] shadow-xs'
+                      ? 'bg-white/5 hover:bg-white/10 border-white/25 text-white'
+                      : 'bg-white hover:bg-slate-100 border-slate-400 text-[#0B132B] shadow-xs'
                   }`}
-                  title={language === 'ar' ? 'دخول الكوتش برمز المرور' : 'Coach Passkey Access'}
                 >
-                  <ShieldCheck className="w-3.5 h-3.5 text-orange-500" />
-                  <span className="hidden sm:inline">{language === 'ar' ? 'دخول الكوتش' : 'Coach'}</span>
+                  <KeyRound className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                  <span>{language === 'ar' ? 'دخول المشترك' : 'Subscriber Login'}</span>
                 </button>
               </>
             )}
@@ -999,10 +1042,13 @@ function MainPortal() {
               </button>
             )}
 
-            {/* Language Toggle */}
+            {/* Language Toggle (Moved inside mobile menu on <768px guest Home view) */}
             <button
+              type="button"
               onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
-              className={`p-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+              className={`${
+                userSession === 'guest' && !isDirectPlansLanding ? 'hidden md:flex' : 'flex'
+              } p-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer items-center focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2 ${
                 theme === 'dark'
                   ? 'bg-white/5 border-white/10 hover:border-orange-500/50 text-slate-300'
                   : 'bg-[#FAFBFD] border-slate-300 hover:border-orange-500 text-[#0B132B] shadow-xs'
@@ -1015,10 +1061,13 @@ function MainPortal() {
               </div>
             </button>
 
-            {/* Theme Toggle */}
+            {/* Theme Toggle (Moved inside mobile menu on <768px guest Home view) */}
             <button
+              type="button"
               onClick={toggleTheme}
-              className={`p-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+              className={`${
+                userSession === 'guest' && !isDirectPlansLanding ? 'hidden md:flex' : 'flex'
+              } p-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2 ${
                 theme === 'dark'
                   ? 'bg-white/5 border-white/10 hover:border-orange-500/50 text-slate-300'
                   : 'bg-[#FAFBFD] border-slate-300 hover:border-orange-500 text-[#0B132B] shadow-xs'
@@ -1031,9 +1080,130 @@ function MainPortal() {
                 <Moon className="w-4 h-4 text-[#0B132B]" />
               )}
             </button>
+
+            {/* Mobile Hamburger Menu Button (<768px on guest Home view) */}
+            {userSession === 'guest' && !isDirectPlansLanding && (
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+                aria-label={language === 'ar' ? 'القائمة' : 'Menu'}
+                aria-expanded={isMobileMenuOpen}
+                aria-controls="oao-mobile-nav-menu"
+                className={`md:hidden min-w-[44px] min-h-[44px] p-2 rounded-xl border flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2 ${
+                  theme === 'dark'
+                    ? 'bg-white/5 border-white/15 hover:border-orange-500/60 text-white'
+                    : 'bg-[#FAFBFD] border-slate-300 hover:border-orange-500 text-[#0B132B] shadow-xs'
+                }`}
+              >
+                {isMobileMenuOpen ? (
+                  <X className="w-5 h-5 text-orange-500" />
+                ) : (
+                  <Menu className="w-5 h-5 text-orange-500" />
+                )}
+              </button>
+            )}
           </div>
         </div>
-      </header>
+        </header>
+
+        {/* Mobile Dropdown Navigation Menu (<768px) */}
+        {userSession === 'guest' && !isDirectPlansLanding && isMobileMenuOpen && (
+          <nav
+            id="oao-mobile-nav-menu"
+            aria-label={language === 'ar' ? 'القائمة' : 'Menu'}
+            className="md:hidden absolute top-full inset-x-0 z-50 px-3 pt-2"
+          >
+            <div className="rounded-2xl bg-[#070b19]/95 backdrop-blur-xl border border-orange-500/40 shadow-[0_18px_45px_rgba(3,7,18,0.88)] p-2 space-y-1 text-white">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl flex items-center justify-between gap-3 text-sm font-bold text-start text-slate-100 hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2"
+              >
+                <span className="flex items-center gap-3">
+                  <Compass className="w-4 h-4 text-orange-500 shrink-0" />
+                  <span>{language === 'ar' ? 'الرئيسية' : 'Home'}</span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsQRModalOpen(true);
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl flex items-center justify-between gap-3 text-sm font-bold text-start text-slate-100 hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2"
+              >
+                <span className="flex items-center gap-3">
+                  <QrCode className="w-4 h-4 text-orange-500 shrink-0" />
+                  <span>{language === 'ar' ? 'باركود الاشتراكات' : 'Share QR'}</span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  handleOpenAthleteLogin();
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl flex items-center justify-between gap-3 text-sm font-bold text-start text-slate-100 hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2"
+              >
+                <span className="flex items-center gap-3">
+                  <KeyRound className="w-4 h-4 text-orange-500 shrink-0" />
+                  <span>{language === 'ar' ? 'دخول المشترك' : 'Subscriber Login'}</span>
+                </span>
+              </button>
+
+              <div className="my-1 border-t border-white/10" />
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLanguage(language === 'ar' ? 'en' : 'ar');
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl flex items-center justify-between gap-3 text-sm font-bold text-start text-slate-100 hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2"
+              >
+                <span className="flex items-center gap-3">
+                  <Globe className="w-4 h-4 text-orange-500 shrink-0" />
+                  <span>{language === 'ar' ? 'اللغة' : 'Language'}</span>
+                </span>
+                <span className="text-xs font-extrabold text-orange-400">
+                  {language === 'ar' ? 'EN' : 'عربي'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  toggleTheme();
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl flex items-center justify-between gap-3 text-sm font-bold text-start text-slate-100 hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2"
+              >
+                <span className="flex items-center gap-3">
+                  {theme === 'dark' ? (
+                    <Sun className="w-4 h-4 text-orange-400 shrink-0" />
+                  ) : (
+                    <Moon className="w-4 h-4 text-orange-400 shrink-0" />
+                  )}
+                  <span>
+                    {theme === 'dark'
+                      ? language === 'ar'
+                        ? 'الوضع الفاتح'
+                        : 'Light Mode'
+                      : language === 'ar'
+                      ? 'الوضع الداكن'
+                      : 'Dark Mode'}
+                  </span>
+                </span>
+              </button>
+            </div>
+          </nav>
+        )}
+      </div>
 
       {/* =========================================================================
           VIEW 0: DIRECT QR SUBSCRIPTION LANDING PAGE (?view=plans)
@@ -1050,11 +1220,11 @@ function MainPortal() {
       )}
 
       {/* =========================================================================
-          VIEW 1: GUEST VISITOR (Sees ONLY Landing Hero, 3D Brand & Pricing Plans)
+          VIEW 1: GUEST VISITOR (Hero -> 3 Pillars -> Progress Card -> Pricing Plans)
           ========================================================================= */}
       {!isDirectPlansLanding && userSession === 'guest' && (
         <div className="space-y-0">
-          {/* 3D Cinematic Gym Hero */}
+          {/* 1. Compact Single-Screen Hero */}
           <CinematicHero
             onEnterPortal={handleOpenAthleteLogin}
             onOpenPrograms={scrollToPlans}
@@ -1065,7 +1235,7 @@ function MainPortal() {
             theme={theme}
           />
 
-          {/* 3D Metallic Brand Identity & Technical Blueprint Section */}
+          {/* 2. Compact 3 Pillars Row Directly Under Hero */}
           <div ref={brandSectionRef}>
             <BrandHeroSection
               onEnterPortal={handleOpenAthleteLogin}
@@ -1075,7 +1245,10 @@ function MainPortal() {
             />
           </div>
 
-          {/* Membership Pricing Plans (Standard Silver, Gold Neon, Platinum VIP) */}
+          {/* 3. Interactive Body Composition Progress Card */}
+          <BodyCompositionCard language={language} theme={theme} />
+
+          {/* 4. Membership Pricing Plans (Shared Duration Switcher + Collapsed Matrix) */}
           <div ref={plansRef}>
             <PricingPlansSection
               language={language}
@@ -1083,8 +1256,6 @@ function MainPortal() {
               onSelectPlan={handleSelectPlanForCheckout}
             />
           </div>
-
-
         </div>
       )}
 
@@ -1427,10 +1598,23 @@ function MainPortal() {
             <span>COACH OMAR ADNAN</span>
           </div>
           <div className="flex items-center gap-4 text-xs">
-            <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              {language === 'ar' ? 'نظام الحفظ التلقائي ومزامنة Supabase نشط' : 'Auto-Save & Supabase Engine Active'}
-            </span>
+            {userSession !== 'guest' && (
+              <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                {language === 'ar' ? 'نظام الحفظ التلقائي ومزامنة Supabase نشط' : 'Auto-Save & Supabase Engine Active'}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleOpenCoachPasskey}
+              className={`text-xs font-semibold underline-offset-4 hover:underline transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2 rounded-sm ${
+                theme === 'dark'
+                  ? 'text-slate-400 hover:text-orange-400'
+                  : 'text-slate-600 hover:text-[#EA580C]'
+              }`}
+            >
+              {language === 'ar' ? 'دخول الكوتش' : 'Coach Login'}
+            </button>
           </div>
         </div>
       </footer>

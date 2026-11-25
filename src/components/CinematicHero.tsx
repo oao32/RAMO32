@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Language, Theme } from '../types';
 import { useOaoTheme } from '../lib/themeUtils';
 import wideHeroBg from '../assets/images/oao_wide_hero_gym_navy_1795421650206.jpg';
-import { Sparkles, ArrowDown, Dumbbell, Shield } from 'lucide-react';
+import { Sparkles, ArrowRight, Shield } from 'lucide-react';
 
 interface CinematicHeroProps {
   onEnterPortal: () => void;
@@ -15,7 +15,6 @@ interface CinematicHeroProps {
 }
 
 export const CinematicHero: React.FC<CinematicHeroProps> = ({
-  onEnterPortal,
   onOpenPrograms,
   onOpenFacilities,
   language,
@@ -32,24 +31,13 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduceMotion) return;
 
-    const sectionEl = stage.closest('section');
-    if (!sectionEl) return;
-
     const handlePointerMove = (event: PointerEvent) => {
       const rect = stage.getBoundingClientRect();
       const nx = (event.clientX - rect.left) / rect.width - 0.5;
       const ny = (event.clientY - rect.top) / rect.height - 0.5;
-      const insideLogoZone = Math.abs(nx) <= 0.24 && Math.abs(ny) <= 0.39;
-
-      if (insideLogoZone) {
-        stage.style.setProperty('--hl-ry', `${(nx * 10).toFixed(2)}deg`);
-        stage.style.setProperty('--hl-rx', `${(ny * -8).toFixed(2)}deg`);
-        stage.style.setProperty('--hl-hover', '1');
-      } else {
-        stage.style.setProperty('--hl-ry', '0deg');
-        stage.style.setProperty('--hl-rx', '0deg');
-        stage.style.setProperty('--hl-hover', '0');
-      }
+      stage.style.setProperty('--hl-ry', `${(nx * 14).toFixed(2)}deg`);
+      stage.style.setProperty('--hl-rx', `${(ny * -12).toFixed(2)}deg`);
+      stage.style.setProperty('--hl-hover', '1');
     };
 
     const handlePointerLeave = () => {
@@ -58,55 +46,77 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
       stage.style.setProperty('--hl-hover', '0');
     };
 
-    sectionEl.addEventListener('pointermove', handlePointerMove, { passive: true });
-    sectionEl.addEventListener('pointerleave', handlePointerLeave);
+    stage.addEventListener('pointermove', handlePointerMove, { passive: true });
+    stage.addEventListener('pointerleave', handlePointerLeave);
 
     return () => {
-      sectionEl.removeEventListener('pointermove', handlePointerMove);
-      sectionEl.removeEventListener('pointerleave', handlePointerLeave);
+      stage.removeEventListener('pointermove', handlePointerMove);
+      stage.removeEventListener('pointerleave', handlePointerLeave);
     };
   }, []);
 
   return (
     <section
-      className={`relative w-full h-screen min-h-[680px] flex flex-col justify-between overflow-hidden select-none transition-colors duration-300 ${
-        isLight ? 'bg-[#EEF2F6]' : 'bg-[#030712]'
-      }`}
+      style={{ backgroundColor: '#030712' }}
+      className="relative w-full max-w-full min-h-[calc(100svh-94px)] md:h-[calc(100svh-94px)] md:max-h-[100svh] flex flex-col items-center justify-center overflow-hidden select-none px-4 sm:px-8 py-4 sm:py-6 bg-[#030712] text-white"
     >
-      {/* 1. 16:9 FULL SCREEN WIDE HERO BACKGROUND */}
-      <div className="absolute inset-0 z-0 overflow-hidden" style={{ containerType: 'size' }}>
-        <div
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{
-            width: 'max(100cqw, calc(100cqh * 16 / 9))',
-            height: 'max(100cqh, calc(100cqw * 9 / 16))',
-          }}
-        >
-          <img
-            src={wideHeroBg}
-            alt="OWN AURA OUTCOME 3D Wide Gym Hero"
-            className="w-full h-full object-cover object-center transform scale-100 transition-transform duration-1000"
-          />
-        </div>
-
-        {/* 2. ADAPTIVE SCRIM OVERLAY FOR CONTRAST & SEAMLESS THEME TRANSITION */}
-        <div
-          className={`absolute inset-0 backdrop-blur-[0.5px] transition-colors duration-300 ${
-            isLight ? 'bg-slate-900/15' : 'bg-[#070b19]/45'
-          }`}
+      {/* 1. FUTURISTIC GYM CORRIDOR BACKDROP (High priority, subtle slow zoom, navy vignette & bottom fade) */}
+      <div
+        className="absolute inset-0 w-full max-w-full z-0 overflow-hidden pointer-events-none"
+        style={{
+          WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 80%, transparent 100%)',
+          maskImage: 'linear-gradient(to bottom, #000 0%, #000 80%, transparent 100%)',
+        }}
+      >
+        <img
+          src="/assets/hero-gym.jpg"
+          alt=""
+          aria-hidden="true"
+          loading="eager"
+          decoding="async"
+          fetchPriority="high"
+          className="oao-hero-bg-img w-full h-full object-cover object-center"
         />
 
-        {/* SCOPED LOGO-ONLY STAGE: Sharp Metallic Depth, Neon-Orange/Gold Aura & 60fps Motion */}
+        {/* Navy-tinted vertical gradient (darker top & bottom) */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#030712]/85 via-[#0b132b]/45 to-[#030712]/90" />
+
+        {/* Radial vignette (lighter behind logo center, darker toward edges) */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(11,19,43,0.16)_0%,rgba(7,10,20,0.62)_56%,rgba(3,7,18,0.94)_100%)]" />
+      </div>
+
+      {/* Smooth bottom fade into the next section background */}
+      <div
+        aria-hidden="true"
+        className={`absolute inset-x-0 bottom-0 h-20 sm:h-24 z-[1] pointer-events-none bg-gradient-to-t ${
+          isLight
+            ? 'from-[#EEF2F6] via-[#EEF2F6]/35 to-transparent'
+            : 'from-[#030712] via-[#030712]/70 to-transparent'
+        }`}
+      />
+
+      {/* 2. CENTERPIECE: SINGLE MODERATE LOGO + ONE-LINE DESCRIPTION + 2 CTA BUTTONS */}
+      <div className="relative z-10 w-full max-w-3xl mx-auto flex flex-col items-center justify-center text-center gap-3 sm:gap-4">
+        {/* Soft orange separation glow behind the logo */}
+        <div
+          aria-hidden="true"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[58%] w-[320px] h-[320px] sm:w-[420px] sm:h-[420px] rounded-full bg-[radial-gradient(circle_at_center,rgba(249,115,22,0.34)_0%,rgba(255,87,34,0.16)_38%,transparent_70%)] blur-2xl pointer-events-none"
+        />
+
+        {/* Scoped Moderate-Size Logo Stage */}
         <div
           ref={logoStageRef}
-          aria-hidden="true"
-          className="oao-hero-logo-stage pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{
-            width: 'max(100cqw, calc(100cqh * 16 / 9))',
-            height: 'max(100cqh, calc(100cqw * 9 / 16))',
-          }}
+          className="oao-hero-logo-stage relative w-[220px] h-[220px] sm:w-[295px] sm:h-[295px] md:w-[330px] md:h-[330px] shrink-0"
         >
           <style>{`
+            @keyframes oaoHeroBgZoom {
+              0%, 100% { transform: scale(1); }
+              50% { transform: scale(1.06); }
+            }
+            .oao-hero-bg-img {
+              animation: oaoHeroBgZoom 25s ease-in-out infinite;
+              will-change: transform;
+            }
             .oao-hero-logo-stage {
               --hl-rx: 0deg;
               --hl-ry: 0deg;
@@ -114,21 +124,14 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               perspective: 1200px;
               transform-style: preserve-3d;
             }
-            .oao-hero-logo-mask {
-              -webkit-mask-image: radial-gradient(ellipse 22% 37.5% at 50.6% 47.2%, #000 62%, rgba(0, 0, 0, 0.85) 76%, transparent 94%);
-              mask-image: radial-gradient(ellipse 22% 37.5% at 50.6% 47.2%, #000 62%, rgba(0, 0, 0, 0.85) 76%, transparent 94%);
-            }
             .oao-hero-logo-aura-outer {
               position: absolute;
-              left: 28%;
-              top: 10%;
-              width: 45%;
-              height: 75%;
+              inset: -8%;
               border-radius: 50%;
               background: radial-gradient(
-                ellipse at 50% 50%,
-                rgba(255, 118, 28, 0.36) 0%,
-                rgba(255, 168, 60, 0.18) 38%,
+                circle at 50% 50%,
+                rgba(255, 118, 28, 0.38) 0%,
+                rgba(255, 168, 60, 0.2) 38%,
                 rgba(234, 88, 12, 0.08) 58%,
                 transparent 74%
               );
@@ -136,31 +139,36 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               mix-blend-mode: screen;
               animation: oaoHeroAuraBreathe 5.8s ease-in-out infinite;
               will-change: transform, opacity;
+              pointer-events: none;
             }
             .oao-hero-logo-tilt {
-              position: absolute;
-              inset: 0;
-              transform-origin: 50.6% 48%;
-              transform: perspective(1200px) rotateX(var(--hl-rx)) rotateY(var(--hl-ry)) scale(calc(1.004 + var(--hl-hover) * 0.014));
+              position: relative;
+              width: 100%;
+              height: 100%;
+              transform-origin: center center;
+              transform: perspective(1200px) rotateX(var(--hl-rx)) rotateY(var(--hl-ry)) scale(calc(1 + var(--hl-hover) * 0.025));
               transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
               will-change: transform;
             }
             .oao-hero-logo-rig {
-              position: absolute;
-              inset: 0;
-              transform-origin: 50.6% 48%;
-              animation: oaoHeroLogoFloat 7.2s ease-in-out infinite;
-              will-change: transform;
-            }
-            .oao-hero-logo-core-img {
+              position: relative;
               width: 100%;
               height: 100%;
-              object-fit: cover;
-              object-position: center;
-              filter: contrast(1.22) saturate(1.26) brightness(1.08) drop-shadow(0 0 18px rgba(249, 115, 22, 0.35));
+              animation: oaoHeroLogoFloat 7.2s ease-in-out infinite;
+              will-change: transform;
+              overflow: hidden;
+              -webkit-mask-image: radial-gradient(ellipse 48% 49% at 50% 50%, #000 66%, rgba(0, 0, 0, 0.85) 80%, transparent 98%);
+              mask-image: radial-gradient(ellipse 48% 49% at 50% 50%, #000 66%, rgba(0, 0, 0, 0.85) 80%, transparent 98%);
             }
-            .oao-hero-logo-light .oao-hero-logo-core-img {
-              filter: contrast(1.18) saturate(1.22) brightness(1.05) drop-shadow(0 6px 20px rgba(11, 19, 43, 0.4));
+            .oao-hero-logo-core-img {
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              height: 135%;
+              width: auto;
+              max-width: none;
+              transform: translate(-50.6%, -47.2%);
+              filter: contrast(1.22) saturate(1.26) brightness(1.08) drop-shadow(0 0 18px rgba(249, 115, 22, 0.35));
             }
             .oao-hero-logo-shimmer {
               position: absolute;
@@ -168,21 +176,22 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               background: linear-gradient(
                 114deg,
                 transparent 36%,
-                rgba(255, 255, 255, 0.14) 46%,
-                rgba(255, 206, 115, 0.32) 50%,
-                rgba(255, 110, 26, 0.2) 54%,
+                rgba(255, 255, 255, 0.16) 46%,
+                rgba(255, 206, 115, 0.34) 50%,
+                rgba(255, 110, 26, 0.22) 54%,
                 transparent 64%
               );
               mix-blend-mode: screen;
               animation: oaoHeroShimmerSweep 6.4s ease-in-out infinite;
               will-change: transform, opacity;
+              pointer-events: none;
             }
             .oao-hero-aura-word-glow {
               position: absolute;
-              left: 48.2%;
-              top: 45.2%;
-              width: 21%;
-              height: 12.2%;
+              left: 44.3%;
+              top: 47.3%;
+              width: 50%;
+              height: 16.5%;
               border-radius: 9999px;
               background: radial-gradient(
                 ellipse at center,
@@ -194,13 +203,14 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               filter: blur(8px);
               animation: oaoHeroAuraWordPulse 3.6s ease-in-out infinite;
               will-change: transform, opacity;
+              pointer-events: none;
             }
             .oao-hero-aura-word-rim {
               position: absolute;
-              left: 49.4%;
-              top: 46.8%;
-              width: 18.6%;
-              height: 9%;
+              left: 46.5%;
+              top: 49%;
+              width: 45%;
+              height: 13%;
               border-radius: 9999px;
               background: radial-gradient(
                 ellipse at center,
@@ -211,16 +221,18 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               mix-blend-mode: color-dodge;
               animation: oaoHeroAuraWordPulse 3.6s ease-in-out infinite;
               will-change: transform, opacity;
+              pointer-events: none;
             }
             .oao-hero-energy-arc {
               position: absolute;
-              left: 46%;
-              top: 21%;
-              width: 22%;
-              height: 22%;
+              left: 39%;
+              top: 14.5%;
+              width: 52%;
+              height: 30%;
               mix-blend-mode: screen;
               animation: oaoHeroArcPulse 4.8s ease-in-out infinite;
               will-change: transform, opacity;
+              pointer-events: none;
             }
             .oao-hero-ember {
               position: absolute;
@@ -233,19 +245,20 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               animation: oaoHeroEmberFloat var(--ed, 4.2s) ease-in-out infinite;
               animation-delay: var(--edelay, 0s);
               will-change: transform, opacity;
+              pointer-events: none;
             }
             @keyframes oaoHeroAuraBreathe {
               0%, 100% { opacity: 0.48; transform: scale(0.97); }
               50% { opacity: 0.9; transform: scale(1.05); }
             }
             @keyframes oaoHeroLogoFloat {
-              0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
-              50% { transform: translate3d(0, -2.5px, 6px) scale(1.012); }
+              0%, 100% { transform: translate3d(0, 0, 0); }
+              50% { transform: translate3d(0, -5px, 8px); }
             }
             @keyframes oaoHeroShimmerSweep {
-              0%, 100% { transform: translate3d(-24%, 0, 0); opacity: 0; }
+              0%, 100% { transform: translate3d(-45%, 0, 0); opacity: 0; }
               32% { opacity: 0.85; }
-              65% { transform: translate3d(24%, 0, 0); opacity: 0; }
+              65% { transform: translate3d(45%, 0, 0); opacity: 0; }
             }
             @keyframes oaoHeroAuraWordPulse {
               0%, 100% { opacity: 0.55; transform: scale(0.98); }
@@ -261,7 +274,80 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               75% { opacity: 0.75; }
               100% { transform: translate3d(var(--ex, 8px), -22px, 0) scale(1.1); opacity: 0; }
             }
+            .oao-hero-tagline {
+              animation:
+                oaoHeroTaglineEnter 0.85s cubic-bezier(0.22, 1, 0.36, 1) both,
+                oaoHeroTaglineFloat 5.2s ease-in-out 0.85s infinite;
+              will-change: transform, opacity;
+            }
+            .oao-hero-tagline-highlight {
+              display: inline;
+              background: linear-gradient(
+                105deg,
+                #ffffff 0%,
+                #fed7aa 22%,
+                #ff6b14 48%,
+                #fde68a 72%,
+                #ffffff 100%
+              );
+              background-size: 240% 100%;
+              -webkit-background-clip: text;
+              background-clip: text;
+              color: transparent;
+              -webkit-text-fill-color: transparent;
+              animation: oaoHeroTaglineShimmer 4.2s ease-in-out infinite;
+              will-change: background-position, filter;
+            }
+            .oao-hero-tagline-coach {
+              position: relative;
+              display: inline-block;
+              color: #ede0bf;
+              font-size: 14px;
+              border-color: #4b66e3;
+              border-style: groove;
+              animation: oaoHeroCoachGlow 3.6s ease-in-out infinite;
+            }
+            .oao-hero-tagline-coach::after {
+              content: '';
+              position: absolute;
+              left: 0;
+              right: 0;
+              bottom: -2px;
+              height: 2px;
+              border-radius: 9999px;
+              background: linear-gradient(90deg, transparent 0%, #ff7043 30%, #fde68a 50%, #ff7043 70%, transparent 100%);
+              background-size: 200% 100%;
+              animation: oaoHeroTaglineUnderline 3.6s ease-in-out infinite;
+              opacity: 0.9;
+            }
+            @keyframes oaoHeroTaglineEnter {
+              0% { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.985); }
+              100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+            }
+            @keyframes oaoHeroTaglineFloat {
+              0%, 100% { transform: translate3d(0, 0, 0); }
+              50% { transform: translate3d(0, -3px, 0); }
+            }
+            @keyframes oaoHeroTaglineShimmer {
+              0%, 100% {
+                background-position: 0% 50%;
+                filter: drop-shadow(0 0 8px rgba(255, 112, 67, 0.35));
+              }
+              50% {
+                background-position: 100% 50%;
+                filter: drop-shadow(0 0 16px rgba(255, 168, 60, 0.72));
+              }
+            }
+            @keyframes oaoHeroCoachGlow {
+              0%, 100% { text-shadow: 0 0 8px rgba(251, 191, 36, 0.28); }
+              50% { text-shadow: 0 0 18px rgba(255, 138, 36, 0.75); }
+            }
+            @keyframes oaoHeroTaglineUnderline {
+              0%, 100% { background-position: 0% 50%; opacity: 0.65; }
+              50% { background-position: 100% 50%; opacity: 1; }
+            }
             @media (prefers-reduced-motion: reduce) {
+              .oao-hero-bg-img,
               .oao-hero-logo-aura-outer,
               .oao-hero-logo-tilt,
               .oao-hero-logo-rig,
@@ -269,15 +355,24 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               .oao-hero-aura-word-glow,
               .oao-hero-aura-word-rim,
               .oao-hero-energy-arc,
-              .oao-hero-ember {
+              .oao-hero-ember,
+              .oao-hero-tagline,
+              .oao-hero-tagline-highlight,
+              .oao-hero-tagline-coach,
+              .oao-hero-tagline-coach::after {
                 animation: none !important;
                 transition: none !important;
               }
-              .oao-hero-logo-tilt {
-                transform: scale(1.004) !important;
-              }
-              .oao-hero-logo-rig {
+              .oao-hero-bg-img,
+              .oao-hero-logo-tilt,
+              .oao-hero-logo-rig,
+              .oao-hero-tagline {
                 transform: none !important;
+                opacity: 1 !important;
+              }
+              .oao-hero-tagline-highlight {
+                background-position: 50% 50%;
+                filter: drop-shadow(0 0 10px rgba(255, 112, 67, 0.45));
               }
               .oao-hero-logo-shimmer {
                 opacity: 0 !important;
@@ -290,148 +385,109 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
           `}</style>
 
           {/* Controlled Outer Neon-Orange & Gold Breathing Aura */}
-          <div className="oao-hero-logo-aura-outer" />
+          <div className="oao-hero-logo-aura-outer" aria-hidden="true" />
 
           {/* Crisp Masked Logo Core (Muscular Arm + Swirling Rings + OWN AURA OUTCOME) */}
           <div className="oao-hero-logo-tilt">
-            <div className={`oao-hero-logo-rig oao-hero-logo-mask ${isLight ? 'oao-hero-logo-light' : ''}`}>
+            <div className="oao-hero-logo-rig">
               <img
                 src={wideHeroBg}
-                alt=""
+                alt="OWN AURA OUTCOME"
                 className="oao-hero-logo-core-img"
               />
-              <div className="oao-hero-logo-shimmer" />
+              <div className="oao-hero-logo-shimmer" aria-hidden="true" />
             </div>
+
+            {/* Sharp Neon-Orange & Warm Gold Rim Glow strictly over AURA */}
+            <div className="oao-hero-aura-word-glow" aria-hidden="true" />
+            <div className="oao-hero-aura-word-rim" aria-hidden="true" />
+
+            {/* Luminous Gold Energy Arc around Upper Arm/Rings */}
+            <svg viewBox="0 0 240 160" fill="none" className="oao-hero-energy-arc" aria-hidden="true">
+              <defs>
+                <linearGradient id="oaoHeroGoldArcGrad" x1="15%" y1="65%" x2="90%" y2="25%">
+                  <stop offset="0%" stopColor="#ff7b1c" stopOpacity="0" />
+                  <stop offset="38%" stopColor="#ffb347" stopOpacity="0.88" />
+                  <stop offset="68%" stopColor="#fff1b8" stopOpacity="0.95" />
+                  <stop offset="100%" stopColor="#ff6b14" stopOpacity="0" />
+                </linearGradient>
+                <filter id="oaoHeroArcGlow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="2.4" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <path
+                d="M 24 88 C 68 38, 174 36, 214 96"
+                stroke="url(#oaoHeroGoldArcGrad)"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                filter="url(#oaoHeroArcGlow)"
+              />
+            </svg>
+
+            {/* Subtle Golden Energy Sparks around Swirling Rings */}
+            <span className="oao-hero-ember" aria-hidden="true" style={{ left: '6%', top: '36%', '--ed': '3.8s', '--edelay': '0s', '--ex': '-8px' } as React.CSSProperties} />
+            <span className="oao-hero-ember" aria-hidden="true" style={{ left: '12%', top: '20%', width: '5px', height: '5px', '--ed': '4.6s', '--edelay': '1.1s', '--ex': '-6px' } as React.CSSProperties} />
+            <span className="oao-hero-ember" aria-hidden="true" style={{ left: '86%', top: '18%', width: '5px', height: '5px', '--ed': '4.1s', '--edelay': '0.5s', '--ex': '10px' } as React.CSSProperties} />
+            <span className="oao-hero-ember" aria-hidden="true" style={{ left: '92%', top: '34%', '--ed': '4.8s', '--edelay': '1.8s', '--ex': '12px' } as React.CSSProperties} />
+            <span className="oao-hero-ember" aria-hidden="true" style={{ left: '93%', top: '52%', width: '3.5px', height: '3.5px', '--ed': '3.9s', '--edelay': '2.4s', '--ex': '8px' } as React.CSSProperties} />
+            <span className="oao-hero-ember" aria-hidden="true" style={{ left: '10%', top: '76%', width: '3.5px', height: '3.5px', '--ed': '4.5s', '--edelay': '0.9s', '--ex': '-10px' } as React.CSSProperties} />
           </div>
-
-          {/* Sharp Neon-Orange & Warm Gold Rim Glow strictly over AURA */}
-          <div className="oao-hero-aura-word-glow" />
-          <div className="oao-hero-aura-word-rim" />
-
-          {/* Luminous Gold Energy Arc around Upper Arm/Rings */}
-          <svg
-            viewBox="0 0 240 160"
-            fill="none"
-            className="oao-hero-energy-arc"
-          >
-            <defs>
-              <linearGradient id="oaoHeroGoldArcGrad" x1="15%" y1="65%" x2="90%" y2="25%">
-                <stop offset="0%" stopColor="#ff7b1c" stopOpacity="0" />
-                <stop offset="38%" stopColor="#ffb347" stopOpacity="0.88" />
-                <stop offset="68%" stopColor="#fff1b8" stopOpacity="0.95" />
-                <stop offset="100%" stopColor="#ff6b14" stopOpacity="0" />
-              </linearGradient>
-              <filter id="oaoHeroArcGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="2.4" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-            <path
-              d="M 24 88 C 68 38, 174 36, 214 96"
-              stroke="url(#oaoHeroGoldArcGrad)"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              filter="url(#oaoHeroArcGlow)"
-            />
-          </svg>
-
-          {/* Subtle Golden Energy Sparks around Swirling Rings */}
-          <span className="oao-hero-ember" style={{ left: '31.5%', top: '36%', '--ed': '3.8s', '--edelay': '0s', '--ex': '-8px' } as React.CSSProperties} />
-          <span className="oao-hero-ember" style={{ left: '34.2%', top: '24%', width: '5px', height: '5px', '--ed': '4.6s', '--edelay': '1.1s', '--ex': '-6px' } as React.CSSProperties} />
-          <span className="oao-hero-ember" style={{ left: '65.8%', top: '23%', width: '5px', height: '5px', '--ed': '4.1s', '--edelay': '0.5s', '--ex': '10px' } as React.CSSProperties} />
-          <span className="oao-hero-ember" style={{ left: '68.6%', top: '34%', '--ed': '4.8s', '--edelay': '1.8s', '--ex': '12px' } as React.CSSProperties} />
-          <span className="oao-hero-ember" style={{ left: '69.2%', top: '49%', width: '3.5px', height: '3.5px', '--ed': '3.9s', '--edelay': '2.4s', '--ex': '8px' } as React.CSSProperties} />
-          <span className="oao-hero-ember" style={{ left: '33.5%', top: '67%', width: '3.5px', height: '3.5px', '--ed': '4.5s', '--edelay': '0.9s', '--ex': '-10px' } as React.CSSProperties} />
         </div>
 
-        {/* Cinematic gradient lighting vignettes */}
-        <div
-          className={`absolute inset-0 pointer-events-none transition-colors duration-300 ${
-            isLight
-              ? 'bg-gradient-to-b from-[#EEF2F6]/55 via-transparent to-[#FAFBFD]/95'
-              : 'bg-gradient-to-b from-[#030712]/80 via-transparent to-[#030712]/90'
-          }`}
-        />
-        <div
-          className={`absolute inset-0 pointer-events-none transition-colors duration-300 ${
-            isLight
-              ? 'bg-gradient-to-r from-slate-900/20 via-transparent to-slate-900/20'
-              : 'bg-gradient-to-r from-[#030712]/50 via-transparent to-[#030712]/50'
-          }`}
-        />
-        <div
-          className={`absolute inset-0 pointer-events-none ${
-            isLight
-              ? 'bg-[radial-gradient(circle_at_center,transparent_40%,rgba(11,19,43,0.28)_100%)]'
-              : 'bg-[radial-gradient(circle_at_center,transparent_30%,rgba(3,7,18,0.7)_100%)]'
-          }`}
-        />
-      </div>
+        {/* One-line Brand Description */}
+        <p className="oao-hero-tagline text-sm sm:text-base md:text-lg font-semibold max-w-2xl mx-auto leading-relaxed text-slate-100 drop-shadow-[0_2px_12px_rgba(3,7,18,0.95)] transition-transform duration-300 hover:scale-[1.015]">
+          {language === 'ar' ? (
+            <>
+              نظام رياضي نخبوي مصمم{' '}
+              <span className="oao-hero-tagline-highlight font-black">
+                لتحويل الجينات إلى قوة عضلية حقيقية
+              </span>{' '}
+              تحت إشراف{' '}
+              <span className="oao-hero-tagline-coach font-extrabold">
+                الكوتش عمر عدنان
+              </span>
+            </>
+          ) : (
+            <>
+              Elite training system engineered to{' '}
+              <span className="oao-hero-tagline-highlight font-black">
+                forge real muscle hypertrophy
+              </span>{' '}
+              under{' '}
+              <span className="oao-hero-tagline-coach font-extrabold">
+                Coach Omar Adnan
+              </span>
+            </>
+          )}
+        </p>
 
-      {/* Cinematic Hero Top Spacing */}
-      <div className="pt-16 sm:pt-20" />
-
-      {/* 4. CENTER OPEN FOCUS: Leaves the 3D Arm Sculpt and Glowing Flames Unblocked */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center pointer-events-none" />
-
-      {/* 5. BOTTOM HERO SECTION CONTENT: INTERACTIVE BUTTONS */}
-      <div className="relative z-20 pb-8 sm:pb-12 px-4 sm:px-8 max-w-6xl mx-auto w-full text-center">
-        {/* Interactive Glassmorphism Buttons */}
-        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 max-w-4xl mx-auto">
-          {/* 1. PROGRAMS */}
+        {/* Two Visible Above-the-Fold Buttons: Stacked on Mobile (>=44px tall), Row on Tablet/Desktop */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-4 mt-1 w-full max-w-[270px] sm:max-w-none sm:w-auto mx-auto">
           <button
+            type="button"
             onClick={onOpenPrograms}
-            className={`px-6 sm:px-8 py-3 rounded-2xl backdrop-blur-md border font-bold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer group ${
-              isLight
-                ? 'bg-white/95 hover:bg-white border-slate-300 hover:border-[#EA580C] text-[#0B132B] shadow-lg'
-                : 'bg-[#0B132B]/60 hover:bg-[#1C2541]/80 border-white/20 hover:border-[#FF5722] hover:shadow-[0_0_20px_rgba(255,87,34,0.5)] text-white'
-            }`}
+            className="w-full sm:w-auto min-h-[44px] px-7 sm:px-9 py-3 sm:py-3.5 rounded-2xl bg-gradient-to-r from-[#FF5722] via-[#FF7043] to-amber-500 hover:from-[#FF7043] hover:to-amber-400 text-white font-black text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_0_28px_rgba(255,87,34,0.55)] border border-orange-300/60 flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2 glow-orange"
           >
-            <Dumbbell className="w-4 h-4 text-[#EA580C] dark:text-[#FF7043] group-hover:scale-110 transition-transform" />
-            <span>{language === 'ar' ? 'التمارين (PROGRAMS)' : 'PROGRAMS'}</span>
+            <Sparkles className="w-4 h-4 text-white" />
+            <span>{language === 'ar' ? 'اشترك الآن' : 'Subscribe Now'}</span>
+            <ArrowRight className="w-4 h-4 rtl:rotate-180" />
           </button>
 
-          {/* 2. PLANS / FACILITIES */}
           <button
+            type="button"
             onClick={onOpenFacilities}
-            className={`px-6 sm:px-8 py-3 rounded-2xl backdrop-blur-md border font-bold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer group ${
-              isLight
-                ? 'bg-white/95 hover:bg-white border-slate-300 hover:border-[#EA580C] text-[#0B132B] shadow-lg'
-                : 'bg-[#0B132B]/60 hover:bg-[#1C2541]/80 border-white/20 hover:border-[#FF5722] hover:shadow-[0_0_20px_rgba(255,87,34,0.5)] text-white'
-            }`}
+            className="w-full sm:w-auto min-h-[44px] px-6 sm:px-8 py-3 sm:py-3.5 rounded-2xl backdrop-blur-md border font-bold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 hover:scale-105 active:scale-95 flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-orange-500 focus-visible:outline-offset-2 bg-[#0B132B]/75 hover:bg-[#1C2541]/90 border-orange-500/40 hover:border-[#FF5722] text-white shadow-lg"
           >
-            <Shield className="w-4 h-4 text-[#EA580C] dark:text-[#FF7043] group-hover:scale-110 transition-transform" />
-            <span>{language === 'ar' ? 'الاشتراكات (PLANS)' : 'PLANS'}</span>
-          </button>
-
-          {/* 3. JOIN NOW / JOIN THE REVOLUTION */}
-          <button
-            onClick={onEnterPortal}
-            className="px-7 sm:px-10 py-3.5 rounded-2xl bg-gradient-to-r from-[#FF5722] via-[#FF7043] to-amber-500 hover:from-[#FF7043] hover:to-amber-400 text-white font-black text-xs sm:text-sm tracking-widest uppercase transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_0_35px_rgba(255,87,34,0.65)] dark:shadow-[0_0_35px_rgba(255,87,34,0.95)] border-2 border-orange-300/80 flex items-center gap-2.5 cursor-pointer glow-orange"
-          >
-            <Sparkles className="w-4 h-4 text-white animate-spin" />
-            <span>{language === 'ar' ? 'انضم الآن 🔥' : 'JOIN NOW'}</span>
-          </button>
-        </div>
-
-        {/* Scroll Indicator */}
-        <div className="mt-5">
-          <button
-            onClick={onEnterPortal}
-            className={`inline-flex items-center gap-1.5 text-[11px] font-bold transition-colors animate-bounce cursor-pointer ${
-              isLight
-                ? 'px-4 py-1.5 rounded-xl bg-white/90 hover:bg-white text-[#0B132B] hover:text-orange-600 border border-slate-300 shadow-sm'
-                : 'text-slate-300 hover:text-orange-400 drop-shadow-md'
-            }`}
-          >
-            <span>{language === 'ar' ? 'انزل لأسفل لتصفح بوابة المشترك' : 'Scroll down for Athlete Portal'}</span>
-            <ArrowDown className="w-3.5 h-3.5 text-orange-600 dark:text-orange-500" />
+            <Shield className="w-4 h-4 text-[#FF7043]" />
+            <span>{language === 'ar' ? 'شاهد الباقات' : 'View Plans'}</span>
           </button>
         </div>
       </div>
     </section>
   );
 };
+

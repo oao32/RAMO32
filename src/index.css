@@ -20,6 +20,12 @@
     --light-border: #CBD5E1;
   }
 
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
   body {
     font-family: 'Alexandria', 'Outfit', sans-serif, system-ui;
   }
@@ -93,6 +99,10 @@
   .animate-aura-glow {
     animation: none;
     opacity: 0.55;
+  }
+  .animate-ticker-ltr,
+  .animate-ticker-rtl {
+    animation-play-state: paused;
   }
 }
 
