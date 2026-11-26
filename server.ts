@@ -68,11 +68,130 @@ function resolvePort(): number {
   return 3000;
 }
 
+const COACH_COOKIE_NAME = 'oao_coach_session';
+const COACH_SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+const COACH_RATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const COACH_MAX_FAILED_ATTEMPTS = 5;
+const COACH_FAIL_DELAY_MS = 400;
+
+const coachLoginAttempts = new Map<string, { count: number; windowStart: number }>();
+
+function getCoachEnvSecrets(): { passkey: string; sessionSecret: string; configured: boolean } {
+  const passkey = (process.env.COACH_PASSKEY || '').trim();
+  const sessionSecret = (process.env.COACH_SESSION_SECRET || '').trim();
+  return {
+    passkey,
+    sessionSecret,
+    configured: Boolean(passkey && sessionSecret),
+  };
+}
+
+function getClientIp(req: express.Request): string {
+  const xff = req.headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.trim()) {
+    return xff.split(',')[0].trim();
+  }
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+function parseCookies(cookieHeader?: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!cookieHeader) return result;
+  for (const part of cookieHeader.split(';')) {
+    const eqIdx = part.indexOf('=');
+    if (eqIdx <= 0) continue;
+    const key = part.slice(0, eqIdx).trim();
+    const val = part.slice(eqIdx + 1).trim();
+    try {
+      result[key] = decodeURIComponent(val);
+    } catch {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
+function signCoachSessionToken(sessionSecret: string): { token: string; exp: number } {
+  const exp = Date.now() + COACH_SESSION_TTL_MS;
+  const payloadB64 = Buffer.from(JSON.stringify({ exp, role: 'coach' }), 'utf8').toString('base64url');
+  const sigB64 = crypto.createHmac('sha256', sessionSecret).update(payloadB64).digest('base64url');
+  return { token: `${payloadB64}.${sigB64}`, exp };
+}
+
+function verifyCoachSessionToken(
+  token: string | undefined,
+  sessionSecret: string
+): { valid: boolean; exp?: number } {
+  if (!token || !sessionSecret) return { valid: false };
+  const parts = token.split('.');
+  if (parts.length !== 2) return { valid: false };
+  const [payloadB64, sigB64] = parts;
+  if (!payloadB64 || !sigB64) return { valid: false };
+
+  const expectedSigB64 = crypto
+    .createHmac('sha256', sessionSecret)
+    .update(payloadB64)
+    .digest('base64url');
+
+  const sigDigest = crypto.createHash('sha256').update(sigB64, 'utf8').digest();
+  const expectedDigest = crypto.createHash('sha256').update(expectedSigB64, 'utf8').digest();
+  if (!crypto.timingSafeEqual(sigDigest, expectedDigest)) {
+    return { valid: false };
+  }
+
+  try {
+    const decoded = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')) as {
+      exp?: unknown;
+      role?: unknown;
+    };
+    if (decoded.role !== 'coach' || typeof decoded.exp !== 'number' || decoded.exp <= Date.now()) {
+      return { valid: false };
+    }
+    return { valid: true, exp: decoded.exp };
+  } catch {
+    return { valid: false };
+  }
+}
+
+function extractCoachTokenFromRequest(req: express.Request): string | undefined {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
+    const bearerToken = authHeader.slice(7).trim();
+    if (bearerToken) return bearerToken;
+  }
+  const cookies = parseCookies(req.headers.cookie);
+  return cookies[COACH_COOKIE_NAME];
+}
+
+function requireCoach(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const { configured, sessionSecret } = getCoachEnvSecrets();
+  if (!configured) {
+    res.status(503).json({
+      secretsMissing: true,
+      error: 'أسرار الخادم (COACH_PASSKEY / COACH_SESSION_SECRET) غير مضبوطة في إعدادات البيئة.',
+    });
+    return;
+  }
+
+  const token = extractCoachTokenFromRequest(req);
+  const verified = verifyCoachSessionToken(token, sessionSecret);
+  if (!verified.valid) {
+    res.status(401).json({
+      unauthorized: true,
+      error: 'انتهت جلسة الكوتش أو غير مصرح بالوصول. يرجى تسجيل الدخول مجدداً.',
+    });
+    return;
+  }
+
+  next();
+}
+
 async function startServer() {
   const app = express();
   const httpServer = http.createServer(app);
   const PORT = resolvePort();
 
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '2mb' }));
 
   // Health check endpoint
@@ -84,8 +203,114 @@ async function startServer() {
     });
   });
 
+  // Server-side Coach Authentication Routes
+  app.post('/api/coach/login', async (req, res) => {
+    const { configured, passkey, sessionSecret } = getCoachEnvSecrets();
+    if (!configured) {
+      res.status(503).json({
+        success: false,
+        secretsMissing: true,
+        error:
+          'أسرار الخادم (COACH_PASSKEY و COACH_SESSION_SECRET) غير مضبوطة بعد. يرجى إضافتها في إعدادات البيئة لتفعيل دخول الكوتش.',
+      });
+      return;
+    }
+
+    const clientIp = getClientIp(req);
+    const now = Date.now();
+    const record = coachLoginAttempts.get(clientIp);
+    if (record) {
+      if (now - record.windowStart > COACH_RATE_WINDOW_MS) {
+        coachLoginAttempts.delete(clientIp);
+      } else if (record.count >= COACH_MAX_FAILED_ATTEMPTS) {
+        const retryAfterSeconds = Math.max(
+          1,
+          Math.ceil((COACH_RATE_WINDOW_MS - (now - record.windowStart)) / 1000)
+        );
+        res.status(429).json({
+          success: false,
+          rateLimited: true,
+          retryAfterSeconds,
+          error: 'تم تجاوز الحد الأقصى لمحاولات الدخول الفاشلة (5 محاولات). يرجى المحاولة بعد 15 دقيقة.',
+        });
+        return;
+      }
+    }
+
+    const submittedPasskey = typeof req.body?.passkey === 'string' ? req.body.passkey.trim() : '';
+    const submittedDigest = crypto.createHash('sha256').update(submittedPasskey, 'utf8').digest();
+    const expectedDigest = crypto.createHash('sha256').update(passkey, 'utf8').digest();
+    const isMatch = Boolean(submittedPasskey) && crypto.timingSafeEqual(submittedDigest, expectedDigest);
+
+    if (!isMatch) {
+      const current = coachLoginAttempts.get(clientIp);
+      if (!current || now - current.windowStart > COACH_RATE_WINDOW_MS) {
+        coachLoginAttempts.set(clientIp, { count: 1, windowStart: now });
+      } else {
+        current.count += 1;
+        coachLoginAttempts.set(clientIp, current);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, COACH_FAIL_DELAY_MS));
+      res.status(401).json({
+        success: false,
+        error: 'رمز المرور غير صحيح، يرجى التأكد من الرمز والمحاولة مرة أخرى.',
+      });
+      return;
+    }
+
+    coachLoginAttempts.delete(clientIp);
+    const { token, exp } = signCoachSessionToken(sessionSecret);
+    const isProd = process.env.NODE_ENV === 'production';
+
+    res.cookie(COACH_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: COACH_SESSION_TTL_MS,
+    });
+
+    res.json({
+      success: true,
+      authenticated: true,
+      expiresAt: exp,
+      token,
+    });
+  });
+
+  app.post('/api/coach/logout', (_req, res) => {
+    const isProd = process.env.NODE_ENV === 'production';
+    res.clearCookie(COACH_COOKIE_NAME, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/',
+    });
+    res.json({ success: true });
+  });
+
+  app.get('/api/coach/session', (req, res) => {
+    const { configured, sessionSecret } = getCoachEnvSecrets();
+    if (!configured) {
+      res.json({
+        authenticated: false,
+        secretsConfigured: false,
+      });
+      return;
+    }
+
+    const token = extractCoachTokenFromRequest(req);
+    const verified = verifyCoachSessionToken(token, sessionSecret);
+    res.json({
+      authenticated: verified.valid,
+      secretsConfigured: true,
+      expiresAt: verified.exp ?? null,
+    });
+  });
+
   // Server-side Admin Subscriber CRUD (uses Service Role key when configured to bypass RLS)
-  app.post('/api/admin/subscribers', async (req, res) => {
+  app.post('/api/admin/subscribers', requireCoach, async (req, res) => {
     const adminSupabase = getServiceSupabaseClient();
     if (!adminSupabase) {
       res.status(501).json({ fallbackToClient: true, error: 'SUPABASE_SERVICE_ROLE_KEY not configured' });
@@ -342,7 +567,7 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/admin/subscribers/flags', async (req, res) => {
+  app.patch('/api/admin/subscribers/flags', requireCoach, async (req, res) => {
     const adminSupabase = getServiceSupabaseClient();
     if (!adminSupabase) {
       res.status(501).json({ fallbackToClient: true });
@@ -391,7 +616,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/admin/subscribers', async (req, res) => {
+  app.delete('/api/admin/subscribers', requireCoach, async (req, res) => {
     const adminSupabase = getServiceSupabaseClient();
     if (!adminSupabase) {
       res.status(501).json({ fallbackToClient: true });

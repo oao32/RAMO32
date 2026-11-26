@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Language, Theme } from '../types';
 import { ShieldCheck, KeyRound, AlertCircle, X, ArrowRight } from 'lucide-react';
-import { setCoachAuthenticated } from '../lib/authStore';
+import { loginCoachOnServer } from '../lib/authStore';
 
 interface CoachPasskeyModalProps {
   isOpen: boolean;
@@ -10,6 +10,7 @@ interface CoachPasskeyModalProps {
   onSuccess: () => void;
   language: Language;
   theme?: Theme;
+  initialNotice?: string | null;
 }
 
 export const CoachPasskeyModal: React.FC<CoachPasskeyModalProps> = ({
@@ -17,6 +18,7 @@ export const CoachPasskeyModal: React.FC<CoachPasskeyModalProps> = ({
   onClose,
   onSuccess,
   language,
+  initialNotice = null,
 }) => {
   const navigate = useNavigate();
   const [passkey, setPasskey] = useState('');
@@ -26,36 +28,33 @@ export const CoachPasskeyModal: React.FC<CoachPasskeyModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setPasskey('');
-      setErrorMsg('');
+      setErrorMsg(initialNotice || '');
       setIsLoading(false);
     }
-  }, [isOpen]);
+  }, [isOpen, initialNotice]);
 
   if (!isOpen) return null;
 
-  const validPasskeys = ['RAMO3223', 'ramo3223'];
-
-  const handleVerify = (e: React.FormEvent) => {
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg('');
 
-    setTimeout(() => {
-      if (validPasskeys.includes(passkey.trim())) {
-        setIsLoading(false);
-        setCoachAuthenticated(true);
-        onSuccess();
-        navigate('/admin');
-        onClose();
-      } else {
-        setIsLoading(false);
-        setErrorMsg(
-          language === 'ar'
+    const result = await loginCoachOnServer(passkey.trim());
+    setIsLoading(false);
+
+    if (result.success) {
+      onSuccess();
+      navigate('/admin');
+      onClose();
+    } else {
+      setErrorMsg(
+        result.error ||
+          (language === 'ar'
             ? 'رمز المرور غير صحيح، يرجى التأكد من الرمز والمحاولة مرة أخرى.'
-            : 'Incorrect passkey. Please check and try again.'
-        );
-      }
-    }, 350);
+            : 'Incorrect passkey. Please check and try again.')
+      );
+    }
   };
 
   return (

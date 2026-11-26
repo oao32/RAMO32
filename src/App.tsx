@@ -113,8 +113,7 @@ import {
   isStreakAwardedToday,
 } from './lib/streakUtils';
 import {
-  isCoachAuthenticated,
-  setCoachAuthenticated,
+  checkCoachSession,
   getCurrentUserSession,
   setCurrentUserSession,
   clearCurrentUserSession,
@@ -675,7 +674,6 @@ function MainPortal() {
     clientId?: string
   ) => {
     if (role === 'admin') {
-      setCoachAuthenticated(true);
       navigate('/admin');
     } else {
       setIsHydratingClient(true);
@@ -726,7 +724,6 @@ function MainPortal() {
   };
 
   const handleCoachPasskeySuccess = () => {
-    setCoachAuthenticated(true);
     navigate('/admin');
   };
 
@@ -1692,9 +1689,124 @@ function MainPortal() {
 }
 
 function RequireCoachAuth({ children }: { children: React.ReactElement }) {
-  if (!isCoachAuthenticated()) {
-    return <Navigate to="/" replace />;
+  const navigate = useNavigate();
+  const { theme } = useOaoTheme();
+  const [language] = useState<Language>(() => {
+    return (localStorage.getItem('oao_lang') as Language) || 'ar';
+  });
+  const [sessionState, setSessionState] = useState<
+    'checking' | 'authenticated' | 'unauthenticated' | 'secrets_missing'
+  >('checking');
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+
+  const verifySession = useCallback(async () => {
+    setSessionState('checking');
+    const res = await checkCoachSession();
+    if (!res.secretsConfigured) {
+      setSessionState('secrets_missing');
+    } else if (res.authenticated) {
+      setAuthNotice(null);
+      setSessionState('authenticated');
+    } else {
+      setSessionState('unauthenticated');
+    }
+  }, []);
+
+  useEffect(() => {
+    void verifySession();
+
+    const handleAuthChanged = (e: Event) => {
+      const authed = Boolean((e as CustomEvent<{ authenticated?: boolean }>).detail?.authenticated);
+      if (authed) {
+        setAuthNotice(null);
+        setSessionState('authenticated');
+      } else {
+        setSessionState('unauthenticated');
+      }
+    };
+
+    const handleUnauthorized = (e: Event) => {
+      const msg = (e as CustomEvent<{ message?: string }>).detail?.message;
+      setAuthNotice(
+        msg || 'انتهت جلسة الكوتش أو غير مصرح بالوصول. يرجى تسجيل الدخول مجدداً.'
+      );
+      setSessionState('unauthenticated');
+    };
+
+    window.addEventListener('oao_coach_auth_changed', handleAuthChanged);
+    window.addEventListener('oao_coach_unauthorized', handleUnauthorized);
+    return () => {
+      window.removeEventListener('oao_coach_auth_changed', handleAuthChanged);
+      window.removeEventListener('oao_coach_unauthorized', handleUnauthorized);
+    };
+  }, [verifySession]);
+
+  if (sessionState === 'checking') {
+    return (
+      <div
+        dir="rtl"
+        className={`min-h-screen flex flex-col items-center justify-center p-6 font-['Alexandria',sans-serif] ${
+          theme === 'dark' ? 'bg-[#030712] text-white' : 'bg-[#EEF2F6] text-[#0B132B]'
+        }`}
+      >
+        <div className="w-10 h-10 rounded-full border-4 border-orange-500/30 border-t-orange-500 animate-spin mb-4" />
+        <p className="text-sm font-black">جاري التحقق من جلسة الكوتش...</p>
+      </div>
+    );
   }
+
+  if (sessionState === 'secrets_missing') {
+    return (
+      <div
+        dir="rtl"
+        className={`min-h-screen flex items-center justify-center p-6 font-['Alexandria',sans-serif] ${
+          theme === 'dark' ? 'bg-[#030712] text-white' : 'bg-[#EEF2F6] text-[#0B132B]'
+        }`}
+      >
+        <div className="max-w-md w-full rounded-3xl p-7 border-2 border-rose-500/40 bg-white dark:bg-[#0B132B] shadow-2xl text-center space-y-4">
+          <ShieldCheck className="w-12 h-12 text-rose-500 mx-auto" />
+          <h2 className="text-lg font-black">أسرار الخادم غير مضبوطة</h2>
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+            تعذر تفعيل لوحة تحكم الكوتش لأن متغيرات البيئة{' '}
+            <code className="font-mono font-bold text-orange-500">COACH_PASSKEY</code> و{' '}
+            <code className="font-mono font-bold text-orange-500">COACH_SESSION_SECRET</code> غير
+            مضبوطة على الخادم. يرجى إضافتهما في إعدادات البيئة ثم إعادة المحاولة.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/', { replace: true })}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 text-white font-black text-xs cursor-pointer"
+          >
+            العودة إلى الصفحة الرئيسية
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (sessionState !== 'authenticated') {
+    return (
+      <div
+        dir={language === 'ar' ? 'rtl' : 'ltr'}
+        className={`min-h-screen font-['Alexandria',sans-serif] ${
+          theme === 'dark' ? 'bg-[#030712] text-white' : 'bg-[#EEF2F6] text-[#0B132B]'
+        }`}
+      >
+        <CoachPasskeyModal
+          isOpen={true}
+          onClose={() => navigate('/', { replace: true })}
+          onSuccess={() => {
+            setAuthNotice(null);
+            setSessionState('authenticated');
+          }}
+          language={language}
+          theme={theme}
+          initialNotice={authNotice}
+        />
+      </div>
+    );
+  }
+
   return children;
 }
 

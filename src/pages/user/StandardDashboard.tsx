@@ -39,7 +39,6 @@ import {
   clearCurrentUserSession,
   fetchSubscribersFromSupabase,
   isCoachAuthenticated,
-  setCoachAuthenticated,
 } from '../../lib/authStore';
 import { useOaoTheme } from '../../lib/themeUtils';
 import {
@@ -132,9 +131,7 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
 
       const targetEmail = (targetSub.email || '').trim().toLowerCase();
       const targetId = (targetSub.id || '').trim();
-      const isCoachSession =
-        !isolatedByToken &&
-        (isCoachAuthenticated() || sessionUser?.role === 'admin' || targetEmail === 'coach.omar@oao.com');
+      const isCoachSession = !isolatedByToken && isCoachAuthenticated();
 
       if (!isolatedByToken && !isCoachSession) {
         const cloudSubs = await fetchSubscribersFromSupabase();
@@ -251,9 +248,7 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
   const notesSectionRef = React.useRef<HTMLElement | null>(null);
 
   const subDetails = calculateSubscriptionDetails(profile);
-  const isCoachViewingAsAdmin =
-    !isolatedByToken &&
-    (isCoachAuthenticated() || getCurrentUserSession()?.role === 'admin');
+  const isCoachViewingAsAdmin = !isolatedByToken && isCoachAuthenticated();
   const isSubscriptionLocked = subDetails.isExpired && !isCoachViewingAsAdmin;
 
   const handleUpdateProfile = (updated: ClientProfile) => {
@@ -382,7 +377,6 @@ export const StandardDashboard: React.FC<StandardDashboardProps> = ({
           isOpen={isCoachPasskeyModalOpen}
           onClose={() => setIsCoachPasskeyModalOpen(false)}
           onSuccess={() => {
-            setCoachAuthenticated(true);
             navigate('/admin');
           }}
           language={language}

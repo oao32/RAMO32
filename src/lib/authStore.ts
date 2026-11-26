@@ -50,32 +50,151 @@ export interface CurrentUserSession {
   subscriptionStatus?: UserCredentialRecord['status'];
 }
 
-const COACH_AUTH_SESSION_KEY = 'oao_coach_authenticated';
 const USER_SESSION_STORAGE_KEY = 'oao_current_user_session';
 
-// In-memory directory caches hydrated strictly from Supabase (Zero localStorage)
+// In-memory directory & coach session caches (never stored in localStorage/sessionStorage)
 let subscribersMemoryCache: UserCredentialRecord[] = [];
 let globalNutritionLockMemoryCache = false;
+let coachAuthenticatedMemory = false;
+let coachTokenMemoryCache: string | null = null;
+let coachSecretsConfiguredMemory = true;
 
 export function isCoachAuthenticated(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return sessionStorage.getItem(COACH_AUTH_SESSION_KEY) === 'true';
-  } catch {
-    return false;
-  }
+  return coachAuthenticatedMemory;
 }
 
 export function setCoachAuthenticated(authenticated: boolean): void {
-  if (typeof window === 'undefined') return;
+  coachAuthenticatedMemory = authenticated;
+  if (!authenticated) {
+    coachTokenMemoryCache = null;
+  }
+}
+
+export function getCoachAuthHeaders(): Record<string, string> {
+  return coachTokenMemoryCache ? { Authorization: `Bearer ${coachTokenMemoryCache}` } : {};
+}
+
+export function handleCoachUnauthorizedResponse(message?: string): void {
+  coachAuthenticatedMemory = false;
+  coachTokenMemoryCache = null;
+  if (typeof window !== 'undefined') {
+    const notice =
+      message || 'انتهت جلسة الكوتش أو غير مصرح بالوصول. يرجى تسجيل الدخول مجدداً.';
+    window.dispatchEvent(
+      new CustomEvent('oao_coach_unauthorized', { detail: { message: notice } })
+    );
+    window.dispatchEvent(new CustomEvent('oao_coach_auth_changed', { detail: { authenticated: false } }));
+  }
+}
+
+export async function loginCoachOnServer(passkey: string): Promise<{
+  success: boolean;
+  secretsMissing?: boolean;
+  rateLimited?: boolean;
+  error?: string;
+}> {
   try {
-    if (authenticated) {
-      sessionStorage.setItem(COACH_AUTH_SESSION_KEY, 'true');
-    } else {
-      sessionStorage.removeItem(COACH_AUTH_SESSION_KEY);
+    const res = await fetch('/api/coach/login', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passkey }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      success?: boolean;
+      authenticated?: boolean;
+      token?: string;
+      secretsMissing?: boolean;
+      rateLimited?: boolean;
+      error?: string;
+    };
+
+    if (res.ok && data.success) {
+      coachAuthenticatedMemory = true;
+      coachSecretsConfiguredMemory = true;
+      coachTokenMemoryCache = typeof data.token === 'string' && data.token ? data.token : null;
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('oao_coach_auth_changed', { detail: { authenticated: true } })
+        );
+      }
+      return { success: true };
     }
+
+    coachAuthenticatedMemory = false;
+    coachTokenMemoryCache = null;
+    if (data.secretsMissing) {
+      coachSecretsConfiguredMemory = false;
+    }
+    return {
+      success: false,
+      secretsMissing: Boolean(data.secretsMissing),
+      rateLimited: res.status === 429 || Boolean(data.rateLimited),
+      error:
+        data.error ||
+        (res.status === 429
+          ? 'تم تجاوز الحد الأقصى لمحاولات الدخول. يرجى الانتظار 15 دقيقة.'
+          : 'رمز المرور غير صحيح، يرجى التأكد من الرمز والمحاولة مرة أخرى.'),
+    };
   } catch {
-    // ignore storage errors
+    return {
+      success: false,
+      error: 'تعذر الاتصال بخادم التحقق. يرجى التأكد من عمل الخادم والمحاولة مرة أخرى.',
+    };
+  }
+}
+
+export async function checkCoachSession(): Promise<{
+  authenticated: boolean;
+  secretsConfigured: boolean;
+}> {
+  try {
+    const res = await fetch('/api/coach/session', {
+      method: 'GET',
+      credentials: 'include',
+      headers: getCoachAuthHeaders(),
+    });
+    if (!res.ok) {
+      coachAuthenticatedMemory = false;
+      return { authenticated: false, secretsConfigured: coachSecretsConfiguredMemory };
+    }
+    const data = (await res.json().catch(() => ({}))) as {
+      authenticated?: boolean;
+      secretsConfigured?: boolean;
+    };
+    const secretsConfigured = data.secretsConfigured !== false;
+    const authenticated = Boolean(secretsConfigured && data.authenticated);
+    coachSecretsConfiguredMemory = secretsConfigured;
+    coachAuthenticatedMemory = authenticated;
+    if (!authenticated) {
+      coachTokenMemoryCache = null;
+    }
+    return { authenticated, secretsConfigured };
+  } catch {
+    return {
+      authenticated: coachAuthenticatedMemory,
+      secretsConfigured: coachSecretsConfiguredMemory,
+    };
+  }
+}
+
+export async function logoutCoachOnServer(): Promise<void> {
+  const headers = getCoachAuthHeaders();
+  coachAuthenticatedMemory = false;
+  coachTokenMemoryCache = null;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('oao_coach_auth_changed', { detail: { authenticated: false } })
+    );
+  }
+  try {
+    await fetch('/api/coach/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+    });
+  } catch {
+    // ignore network errors on logout
   }
 }
 
@@ -106,7 +225,11 @@ export function setCurrentUserSession(user: CurrentUserSession | null): void {
 
 export function clearCurrentUserSession(): void {
   setCurrentUserSession(null);
-  setCoachAuthenticated(false);
+  if (coachAuthenticatedMemory) {
+    void logoutCoachOnServer();
+  } else {
+    setCoachAuthenticated(false);
+  }
 }
 
 export function getAllSubscribersWithCredentials(): UserCredentialRecord[] {
@@ -576,14 +699,21 @@ export async function assignSubscriberPassword(params: {
   };
 
   try {
-    // 0. If running behind server.ts with SUPABASE_SERVICE_ROLE_KEY, sync via Service Role endpoint (bypasses RLS)
-    if (typeof window !== 'undefined') {
+    // 0. If running in an authenticated coach session behind server.ts with SUPABASE_SERVICE_ROLE_KEY, sync via Service Role endpoint
+    if (typeof window !== 'undefined' && coachAuthenticatedMemory) {
       try {
         const proxyRes = await fetch('/api/admin/subscribers', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...getCoachAuthHeaders() },
           body: JSON.stringify({ record: updatedRecord }),
         });
+        if (proxyRes.status === 401) {
+          const errJson = (await proxyRes.json().catch(() => ({}))) as { error?: string };
+          const msg = errJson.error || 'انتهت جلسة الكوتش أو غير مصرح بالوصول. يرجى تسجيل الدخول مجدداً.';
+          handleCoachUnauthorizedResponse(msg);
+          return { success: false, syncedToSupabase: false, error: msg };
+        }
         if (proxyRes.ok) {
           const proxyJson = (await proxyRes.json()) as { success?: boolean; id?: string; accessToken?: string };
           if (proxyJson.success) {
@@ -1115,7 +1245,7 @@ export async function authenticateByAccessToken(token: string): Promise<{
 
     return {
       success: true,
-      role: matchedRecord.email === 'coach.omar@oao.com' ? 'admin' : 'client',
+      role: 'client',
       id: matchedRecord.id,
       email: matchedRecord.email,
       name: matchedRecord.clientName,
@@ -1161,9 +1291,16 @@ export async function deleteSubscriberRecord(
     try {
       const proxyRes = await fetch('/api/admin/subscribers', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...getCoachAuthHeaders() },
         body: JSON.stringify({ email: cleanEmail, id: explicitId, accessToken: explicitToken }),
       });
+      if (proxyRes.status === 401) {
+        const errJson = (await proxyRes.json().catch(() => ({}))) as { error?: string };
+        const msg = errJson.error || 'انتهت جلسة الكوتش أو غير مصرح بالوصول. يرجى تسجيل الدخول مجدداً.';
+        handleCoachUnauthorizedResponse(msg);
+        return { success: false, error: msg };
+      }
       if (proxyRes.ok) {
         const filtered = subscribersMemoryCache.filter((u) => u.email.toLowerCase() !== cleanEmail);
         saveSubscribersList(filtered);
@@ -1345,9 +1482,14 @@ export function toggleSubscriberStatus(email: string): 'active' | 'suspended' {
       if (typeof window !== 'undefined') {
         const proxyRes = await fetch('/api/admin/subscribers/flags', {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...getCoachAuthHeaders() },
           body: JSON.stringify({ email: cleanEmail, status: newStatus, updatedRecord: updatedRec }),
         });
+        if (proxyRes.status === 401) {
+          handleCoachUnauthorizedResponse('انتهت جلسة الكوتش أو غير مصرح بالوصول. يرجى تسجيل الدخول مجدداً.');
+          return;
+        }
         if (proxyRes.ok) return;
       }
     } catch {
@@ -1406,9 +1548,14 @@ export function toggleSubscriberNutritionLock(email: string, locked?: boolean): 
       if (typeof window !== 'undefined') {
         const proxyRes = await fetch('/api/admin/subscribers/flags', {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...getCoachAuthHeaders() },
           body: JSON.stringify({ email: cleanEmail, nutritionPlanLocked: newVal, updatedRecord: updatedRec }),
         });
+        if (proxyRes.status === 401) {
+          handleCoachUnauthorizedResponse('انتهت جلسة الكوتش أو غير مصرح بالوصول. يرجى تسجيل الدخول مجدداً.');
+          return;
+        }
         if (proxyRes.ok) return;
       }
     } catch {
@@ -1558,41 +1705,6 @@ export async function authenticateUser(
   const cleanId = (identifier || '').trim().toLowerCase();
   const cleanPass = (password || '').trim();
 
-  // Special Master Coach checks (strictly require secret passkey RAMO3223)
-  if (cleanId === 'coach.omar@oao.com') {
-    if (cleanPass.toUpperCase() === 'RAMO3223') {
-      setCoachAuthenticated(true);
-      return {
-        success: true,
-        role: 'admin',
-        id: 'coach_omar',
-        email: 'coach.omar@oao.com',
-        name: 'الكوتش عمر عدنان',
-        plan: 'VIP',
-      };
-    }
-    return {
-      success: false,
-      role: 'client',
-      email: 'coach.omar@oao.com',
-      name: 'الكوتش عمر عدنان',
-      plan: 'VIP',
-      error: 'يرجى إدخال رمز المرور السري الصحيح للكوتش.',
-    };
-  }
-
-  if (!cleanPass && cleanId === 'ramo3223') {
-    setCoachAuthenticated(true);
-    return {
-      success: true,
-      role: 'admin',
-      id: 'coach_omar',
-      email: 'coach.omar@oao.com',
-      name: 'الكوتش عمر عدنان',
-      plan: 'VIP',
-    };
-  }
-
   const supabase = getSupabaseClient();
   if (!supabase) {
     return {
@@ -1709,7 +1821,7 @@ export async function authenticateUser(
     ) {
       return {
         success: true,
-        role: matchedByEmail.email === 'coach.omar@oao.com' ? 'admin' : 'client',
+        role: 'client',
         id: matchedByEmail.id,
         email: matchedByEmail.email,
         name: matchedByEmail.clientName,
