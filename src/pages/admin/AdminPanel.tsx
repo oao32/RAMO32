@@ -15,7 +15,6 @@ import {
   createNeutralClientProfile,
 } from '../../data/initialData';
 import { BrandLogo } from '../../components/BrandLogo';
-import { CoachPasskeyModal } from '../../components/CoachPasskeyModal';
 import { SignedDeclarationModal } from '../../components/SignedDeclarationModal';
 import { SubscriptionQRModal } from '../../components/SubscriptionQRModal';
 import {
@@ -39,10 +38,9 @@ import {
   fetchAdminTargetClientFromSupabase,
 } from '../../lib/supabase';
 import {
-  checkCoachSession,
   fetchSubscribersFromSupabase,
   getAllSubscribersWithCredentials,
-  logoutCoachOnServer,
+  isCoachAuthenticated,
   clearCurrentUserSession,
   UserCredentialRecord,
 } from '../../lib/authStore';
@@ -330,53 +328,7 @@ export const AdminPanel: React.FC = () => {
     [selectAndLoadTargetClient]
   );
 
-  const [coachSessionState, setCoachSessionState] = useState<
-    'checking' | 'authenticated' | 'unauthenticated' | 'secrets_missing'
-  >('checking');
-  const [coachAuthNotice, setCoachAuthNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void checkCoachSession().then((res) => {
-      if (!active) return;
-      if (!res.secretsConfigured) {
-        setCoachSessionState('secrets_missing');
-      } else if (res.authenticated) {
-        setCoachAuthNotice(null);
-        setCoachSessionState('authenticated');
-      } else {
-        setCoachSessionState('unauthenticated');
-      }
-    });
-
-    const handleAuthChanged = (e: Event) => {
-      const authed = Boolean((e as CustomEvent<{ authenticated?: boolean }>).detail?.authenticated);
-      if (authed) {
-        setCoachAuthNotice(null);
-        setCoachSessionState('authenticated');
-      } else {
-        setCoachSessionState('unauthenticated');
-      }
-    };
-
-    const handleUnauthorized = (e: Event) => {
-      const msg = (e as CustomEvent<{ message?: string }>).detail?.message;
-      setCoachAuthNotice(
-        msg || 'انتهت جلسة الكوتش أو غير مصرح بالوصول. يرجى تسجيل الدخول مجدداً.'
-      );
-      setCoachSessionState('unauthenticated');
-    };
-
-    window.addEventListener('oao_coach_auth_changed', handleAuthChanged);
-    window.addEventListener('oao_coach_unauthorized', handleUnauthorized);
-    return () => {
-      active = false;
-      window.removeEventListener('oao_coach_auth_changed', handleAuthChanged);
-      window.removeEventListener('oao_coach_unauthorized', handleUnauthorized);
-    };
-  }, []);
-
-  const coachAuthed = coachSessionState === 'authenticated';
+  const coachAuthed = isCoachAuthenticated();
 
   // Refresh declarations, subscribers, templates, and live notes on load exclusively from Supabase
   useEffect(() => {
@@ -447,7 +399,7 @@ export const AdminPanel: React.FC = () => {
       window.removeEventListener('oao_notes_updated', syncLiveNotes);
       window.removeEventListener('oao_credentials_updated', syncLiveCredentials);
     };
-  }, [coachAuthed]);
+  }, []);
 
   const refreshAILogs = async () => {
     setLoadingLogs(true);
@@ -814,70 +766,13 @@ export const AdminPanel: React.FC = () => {
     void syncWorkoutDaysToSupabase(targetCanonicalKey, updated, targetClientEmail);
   };
 
-  const handleLogout = async () => {
-    await logoutCoachOnServer();
+  const handleLogout = () => {
     clearCurrentUserSession();
     navigate('/', { replace: true });
   };
 
-  if (coachSessionState === 'checking') {
-    return (
-      <div
-        dir="rtl"
-        className="min-h-screen bg-[#EEF2F6] text-[#0B132B] dark:bg-[#030712] dark:text-white flex flex-col items-center justify-center p-6 font-['Alexandria',sans-serif]"
-      >
-        <div className="w-10 h-10 rounded-full border-4 border-orange-500/30 border-t-orange-500 animate-spin mb-4" />
-        <p className="text-sm font-black">جاري التحقق من جلسة الكوتش...</p>
-      </div>
-    );
-  }
-
-  if (coachSessionState === 'secrets_missing') {
-    return (
-      <div
-        dir="rtl"
-        className="min-h-screen bg-[#EEF2F6] text-[#0B132B] dark:bg-[#030712] dark:text-white flex items-center justify-center p-6 font-['Alexandria',sans-serif]"
-      >
-        <div className="max-w-md w-full rounded-3xl p-7 border-2 border-rose-500/40 bg-white dark:bg-[#0B132B] shadow-2xl text-center space-y-4">
-          <ShieldCheck className="w-12 h-12 text-rose-500 mx-auto" />
-          <h2 className="text-lg font-black">أسرار الخادم غير مضبوطة</h2>
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-            تعذر فتح لوحة تحكم الكوتش لأن متغيرات البيئة{' '}
-            <code className="font-mono font-bold text-orange-500">COACH_PASSKEY</code> و{' '}
-            <code className="font-mono font-bold text-orange-500">COACH_SESSION_SECRET</code> غير
-            مضبوطة على الخادم. يرجى إضافتهما في إعدادات البيئة ثم إعادة المحاولة.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate('/', { replace: true })}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 text-white font-black text-xs cursor-pointer"
-          >
-            العودة إلى الصفحة الرئيسية
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   if (!coachAuthed) {
-    return (
-      <div
-        dir={language === 'ar' ? 'rtl' : 'ltr'}
-        className="min-h-screen bg-[#EEF2F6] text-[#0B132B] dark:bg-[#030712] dark:text-white font-['Alexandria',sans-serif]"
-      >
-        <CoachPasskeyModal
-          isOpen={true}
-          onClose={() => navigate('/', { replace: true })}
-          onSuccess={() => {
-            setCoachAuthNotice(null);
-            setCoachSessionState('authenticated');
-          }}
-          language={language}
-          theme={theme}
-          initialNotice={coachAuthNotice}
-        />
-      </div>
-    );
+    return <Navigate to="/" replace />;
   }
 
   return (

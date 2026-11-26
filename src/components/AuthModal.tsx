@@ -11,7 +11,7 @@ import {
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react';
-import { authenticateUser, loginCoachOnServer, setCurrentUserSession } from '../lib/authStore';
+import { authenticateUser, setCoachAuthenticated, setCurrentUserSession } from '../lib/authStore';
 import { Mail, Lock } from 'lucide-react';
 
 export interface AllowedPasscode {
@@ -51,6 +51,13 @@ export const ALLOWED_PASSCODES: AllowedPasscode[] = [
     clientName: 'مشترك قياسي',
     email: 'std1@oao.athlete',
   },
+  {
+    code: 'RAMO3223',
+    plan: 'VIP',
+    clientName: 'الكوتش عمر عدنان',
+    email: 'coach.omar@oao.com',
+    role: 'admin',
+  },
 ];
 
 interface AuthModalProps {
@@ -72,7 +79,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onSuccess,
   language,
-  initialRole = 'client',
 }) => {
   const navigate = useNavigate();
   const [loginMethod, setLoginMethod] = useState<'passcode' | 'credentials'>('passcode');
@@ -184,24 +190,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsLoading(true);
 
-    if (initialRole === 'admin') {
-      const coachRes = await loginCoachOnServer(accessCode.trim());
-      setIsLoading(false);
-      if (!coachRes.success) {
-        setErrorMsg(
-          coachRes.error ||
-            (language === 'ar'
-              ? 'رمز المرور غير صحيح، يرجى التأكد من الرمز والمحاولة مرة أخرى.'
-              : 'Incorrect coach passkey.')
-        );
-        return;
-      }
-      onSuccess('admin');
-      navigate('/admin');
-      onClose();
-      return;
-    }
-
     // 1. Check authenticateUser first (live Supabase + assigned passwords + declarations)
     const authByCode = await authenticateUser(cleanCode);
     if (authByCode.success) {
@@ -292,8 +280,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setTimeout(() => {
       setIsLoading(false);
+      if (resolvedRole === 'admin') {
+        setCoachAuthenticated(true);
+      }
       onSuccess(resolvedRole, resolvedEmail, resolvedName, resolvedPlan, resolvedId);
-      if (resolvedPlan === 'VIP') {
+      if (resolvedRole === 'admin') {
+        navigate('/admin');
+      } else if (resolvedPlan === 'VIP') {
         navigate('/vip');
       } else {
         navigate('/standard');

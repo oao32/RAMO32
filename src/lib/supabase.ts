@@ -201,6 +201,10 @@ export function getSupabaseClient(): SupabaseClient | null {
       ? globalSupabase.createClient(url, key)
       : createClient(url, key);
 
+    if (typeof window !== 'undefined') {
+      (window as unknown as Record<string, unknown>).supabaseClient = cachedClient;
+    }
+
     return cachedClient;
   } catch (err) {
     console.warn('Failed to initialize Supabase client:', err);
@@ -377,8 +381,10 @@ export async function saveAILog(input: SaveAILogInput): Promise<SaveAILogResult>
   }
 }
 
-// Initialize global Supabase client eagerly on load
+// Expose `saveAILog` globally on `window` as well for direct script interoperability
 if (typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).saveAILog = saveAILog;
+  // Initialize global Supabase client eagerly on load
   getSupabaseClient();
 }
 
