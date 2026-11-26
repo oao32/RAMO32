@@ -121,3 +121,30 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(249, 115, 22, 0.8);
 }
+
+/* Scoped styling for Coach Admin target subscriber dropdown */
+.oao-target-select {
+  color-scheme: light;
+}
+.oao-target-select option {
+  background-color: #ffffff;
+  color: #0b132b;
+}
+.oao-target-select option:checked {
+  background-color: #f97316;
+  color: #ffffff;
+}
+.dark .oao-target-select {
+  color-scheme: dark;
+}
+.dark .oao-target-select option {
+  background-color: #070e24;
+  color: #f8fafc;
+}
+.dark .oao-target-select option:checked,
+.dark .oao-target-select option:hover,
+.dark .oao-target-select option:focus {
+  background-color: #ea580c;
+  color: #ffffff;
+}
+

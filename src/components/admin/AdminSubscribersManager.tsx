@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { SubscriptionAgreement, SubscriptionPlanTier } from '../../types';
 import {
   getAllSubscribersWithCredentials,
@@ -14,6 +14,8 @@ import {
 import {
   fetchDeclarationsFromSupabase,
   deleteDeclarationFromSupabase,
+  getSupabaseClient,
+  buildCandidateClientKeys,
 } from '../../lib/supabase';
 import {
   addMonthsToDate,
@@ -27,6 +29,8 @@ import {
   Share2,
   KeyRound,
   Eye,
+  EyeOff,
+  Check,
   Crown,
   Shield,
   Plus,
@@ -51,6 +55,7 @@ import {
   Link2,
   Calendar,
   Clock,
+  MessageCircle,
 } from 'lucide-react';
 
 interface AdminSubscribersManagerProps {
@@ -59,6 +64,30 @@ interface AdminSubscribersManagerProps {
   onCopySubscribeLink: () => void;
   copiedLink: boolean;
   language: 'ar' | 'en';
+  onSubscriberAdded?: (subscriber?: UserCredentialRecord) => void;
+}
+
+function formatWhatsAppPhone(rawPhone?: string | null): string {
+  try {
+    if (!rawPhone || typeof rawPhone !== 'string') return '';
+    const normalizedDigits = rawPhone
+      .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+      .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+    let digits = normalizedDigits.replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('00')) {
+      digits = digits.slice(2);
+    }
+    if (digits.startsWith('05') && digits.length === 10) {
+      digits = `966${digits.slice(1)}`;
+    } else if (digits.startsWith('0')) {
+      return '';
+    }
+    if (digits.length < 8 || digits.length > 15) return '';
+    return digits;
+  } catch {
+    return '';
+  }
 }
 
 export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = ({
@@ -67,6 +96,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
   onCopySubscribeLink,
   copiedLink,
   language,
+  onSubscriberAdded,
 }) => {
   // Credentials list
   const [credentialsList, setCredentialsList] = useState<UserCredentialRecord[]>(() =>
@@ -145,6 +175,210 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
   const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null);
   const [confirmDeleteDeclId, setConfirmDeleteDeclId] = useState<string | null>(null);
 
+  // Display-only password reveal state (auto-hides after 10 seconds)
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const revealTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Non-blocking warning shown after copying private link when setup steps are missing
+  const [missingStepsWarning, setMissingStepsWarning] = useState<{
+    clientName: string;
+    missingLabels: string[];
+  } | null>(null);
+  const missingWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Read-only setup progress snapshot loaded defensively from existing Supabase tables
+  const [setupSnapshot, setSetupSnapshot] = useState<{
+    workoutsReadable: boolean;
+    profilesReadable: boolean;
+    measurementKeys: Set<string>;
+    workoutKeys: Set<string>;
+    nutritionKeys: Set<string>;
+    analysisKeys: Set<string>;
+  }>({
+    workoutsReadable: false,
+    profilesReadable: false,
+    measurementKeys: new Set<string>(),
+    workoutKeys: new Set<string>(),
+    nutritionKeys: new Set<string>(),
+    analysisKeys: new Set<string>(),
+  });
+
+  useEffect(() => {
+    return () => {
+      Object.values(revealTimersRef.current).forEach((timer) => clearTimeout(timer));
+      if (missingWarningTimerRef.current) clearTimeout(missingWarningTimerRef.current);
+    };
+  }, []);
+
+  const handleToggleRevealPassword = (emailKey: string) => {
+    try {
+      if (!emailKey) return;
+      if (revealTimersRef.current[emailKey]) {
+        clearTimeout(revealTimersRef.current[emailKey]);
+        delete revealTimersRef.current[emailKey];
+      }
+      setRevealedPasswords((prev) => {
+        const nextVisible = !prev[emailKey];
+        if (nextVisible) {
+          revealTimersRef.current[emailKey] = setTimeout(() => {
+            setRevealedPasswords((curr) => {
+              if (!curr[emailKey]) return curr;
+              return { ...curr, [emailKey]: false };
+            });
+            delete revealTimersRef.current[emailKey];
+          }, 10000);
+        }
+        return { ...prev, [emailKey]: nextVisible };
+      });
+    } catch {
+      // Defensive fallback: ignore toggle errors
+    }
+  };
+
+  const loadSetupSnapshot = useCallback(async () => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return;
+
+      const [workoutsRes, profilesRes] = await Promise.all([
+        client
+          .from('workouts')
+          .select('client_id, day_key, workout_data')
+          .in('day_key', ['profile_ext', 'all_days', 'nutrition_plan', 'assessment_bundle']),
+        client.from('profiles').select('id, weight, height, muscle_mass, body_fat'),
+      ]);
+
+      const workoutsReadable = !workoutsRes.error && Array.isArray(workoutsRes.data);
+      const profilesReadable = !profilesRes.error && Array.isArray(profilesRes.data);
+
+      const measurementKeys = new Set<string>();
+      const workoutKeys = new Set<string>();
+      const nutritionKeys = new Set<string>();
+      const analysisKeys = new Set<string>();
+
+      const addKey = (set: Set<string>, rawKey: unknown) => {
+        if (typeof rawKey === 'string') {
+          const clean = rawKey.trim().toLowerCase();
+          if (clean) set.add(clean);
+        }
+      };
+
+      if (profilesReadable && Array.isArray(profilesRes.data)) {
+        for (const p of profilesRes.data as Array<Record<string, unknown>>) {
+          const hasMeasure =
+            (typeof p.weight === 'number' && p.weight > 0) ||
+            (typeof p.height === 'number' && p.height > 0) ||
+            (typeof p.muscle_mass === 'number' && p.muscle_mass > 0) ||
+            (typeof p.body_fat === 'number' && p.body_fat > 0);
+          if (hasMeasure) {
+            addKey(measurementKeys, p.id);
+          }
+        }
+      }
+
+      if (workoutsReadable && Array.isArray(workoutsRes.data)) {
+        for (const row of workoutsRes.data as Array<Record<string, unknown>>) {
+          const dayKey = typeof row.day_key === 'string' ? row.day_key : '';
+          const clientId = row.client_id;
+          const wData = row.workout_data as Record<string, unknown> | unknown[] | null | undefined;
+
+          if (dayKey === 'profile_ext' && wData && typeof wData === 'object' && !Array.isArray(wData)) {
+            const hasMeasure =
+              (typeof wData.weight === 'number' && wData.weight > 0) ||
+              (typeof wData.height === 'number' && wData.height > 0) ||
+              (typeof wData.muscleMass === 'number' && wData.muscleMass > 0) ||
+              (typeof wData.bodyFat === 'number' && wData.bodyFat > 0);
+            if (hasMeasure) {
+              addKey(measurementKeys, clientId);
+              if (typeof wData.email === 'string') addKey(measurementKeys, wData.email);
+            }
+            if (wData.analysisData && typeof wData.analysisData === 'object') {
+              addKey(analysisKeys, clientId);
+              if (typeof wData.email === 'string') addKey(analysisKeys, wData.email);
+            }
+          } else if (dayKey === 'all_days') {
+            if (Array.isArray(wData) && wData.length > 0) {
+              addKey(workoutKeys, clientId);
+            }
+          } else if (dayKey === 'nutrition_plan') {
+            const cats = Array.isArray(wData)
+              ? wData
+              : wData && typeof wData === 'object'
+              ? (wData as { categories?: unknown[] }).categories
+              : undefined;
+            if (Array.isArray(cats) && cats.length > 0) {
+              addKey(nutritionKeys, clientId);
+            }
+          } else if (dayKey === 'assessment_bundle') {
+            if (
+              wData &&
+              typeof wData === 'object' &&
+              !Array.isArray(wData) &&
+              wData.analysisData &&
+              typeof wData.analysisData === 'object'
+            ) {
+              addKey(analysisKeys, clientId);
+            }
+          }
+        }
+      }
+
+      setSetupSnapshot({
+        workoutsReadable,
+        profilesReadable,
+        measurementKeys,
+        workoutKeys,
+        nutritionKeys,
+        analysisKeys,
+      });
+    } catch {
+      // Defensive fallback: keep unreadable flags false so chips are safely omitted
+    }
+  }, []);
+
+  const getSubscriberSetupSteps = useCallback(
+    (user: UserCredentialRecord) => {
+      try {
+        const candidates = buildCandidateClientKeys(user?.id, user?.email).map((k) =>
+          k.trim().toLowerCase()
+        );
+        if (candidates.length === 0) return [];
+
+        const hasMatch = (set: Set<string>) => candidates.some((k) => set.has(k));
+        const steps: Array<{ key: string; label: string; done: boolean }> = [];
+
+        if (setupSnapshot.workoutsReadable || setupSnapshot.profilesReadable) {
+          steps.push({
+            key: 'measurements',
+            label: 'القياسات',
+            done: hasMatch(setupSnapshot.measurementKeys),
+          });
+        }
+        if (setupSnapshot.workoutsReadable) {
+          steps.push({
+            key: 'workouts',
+            label: 'التمارين',
+            done: hasMatch(setupSnapshot.workoutKeys),
+          });
+          steps.push({
+            key: 'nutrition',
+            label: 'التغذية',
+            done: hasMatch(setupSnapshot.nutritionKeys),
+          });
+          steps.push({
+            key: 'analysis',
+            label: 'التحليل',
+            done: hasMatch(setupSnapshot.analysisKeys),
+          });
+        }
+        return steps;
+      } catch {
+        return [];
+      }
+    },
+    [setupSnapshot]
+  );
+
   const showNotice = (msg: string) => {
     setActionNotice(msg);
     setTimeout(() => setActionNotice(null), 3000);
@@ -160,6 +394,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
         ]);
         if (subs) setCredentialsList(subs);
         if (decls) setDeclarations(decls);
+        void loadSetupSnapshot();
       } finally {
         setIsRefreshingCloud(false);
       }
@@ -170,6 +405,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     void fetchDeclarationsFromSupabase().then((decls) => {
       if (decls) setDeclarations(decls);
     });
+    void loadSetupSnapshot();
   };
 
   useEffect(() => {
@@ -183,13 +419,53 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       void refreshList(false);
     };
 
+    const handleSetupDataUpdated = () => {
+      void loadSetupSnapshot();
+    };
+
     window.addEventListener('oao_credentials_updated', handleSyncEvent);
     window.addEventListener('oao_declarations_updated', handleSyncEvent);
+    window.addEventListener('oao_profile_updated', handleSetupDataUpdated);
+    window.addEventListener('oao_workouts_updated', handleSetupDataUpdated);
+    window.addEventListener('oao_diet_updated', handleSetupDataUpdated);
     return () => {
       window.removeEventListener('oao_credentials_updated', handleSyncEvent);
       window.removeEventListener('oao_declarations_updated', handleSyncEvent);
+      window.removeEventListener('oao_profile_updated', handleSetupDataUpdated);
+      window.removeEventListener('oao_workouts_updated', handleSetupDataUpdated);
+      window.removeEventListener('oao_diet_updated', handleSetupDataUpdated);
     };
-  }, []);
+  }, [loadSetupSnapshot]);
+
+  const expiringSoon14DaysCount = useMemo(() => {
+    try {
+      let count = 0;
+      for (const user of credentialsList) {
+        if (!user || user.status === 'suspended' || user.status === 'expired') continue;
+        const rowSub = calculateSubscriptionDetails({
+          subscriptionStartDate: user.subscriptionStartDate,
+          subscriptionEndDate: user.subscriptionEndDate,
+          subscriptionDaysLeft: user.subscriptionDaysLeft,
+          subscriptionStatus: user.status,
+        });
+        const hasReliableEnd =
+          Boolean(user.subscriptionEndDate && rowSub.hasExplicitEndDate) ||
+          (typeof user.subscriptionDaysLeft === 'number' &&
+            Number.isFinite(user.subscriptionDaysLeft));
+        if (
+          hasReliableEnd &&
+          !rowSub.isExpired &&
+          Number.isFinite(rowSub.daysRemaining) &&
+          rowSub.daysRemaining <= 14
+        ) {
+          count += 1;
+        }
+      }
+      return count;
+    } catch {
+      return 0;
+    }
+  }, [credentialsList]);
 
   const handleGenerateRandomPassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -460,6 +736,11 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       setAddStartDate(today);
       setAddEndDate(addMonthsToDate(today, 1));
       showNotice('تمت إضافة المشترك الجديد ومزامنة تواريخ اشتراكه مع Supabase بنجاح.');
+      try {
+        onSubscriberAdded?.(res.record);
+      } catch {
+        // Never disrupt existing add flow
+      }
     }, 1000);
   };
 
@@ -475,6 +756,29 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
     setCopiedPortalFor(user.email);
     setTimeout(() => setCopiedPortalFor((prev) => (prev === user.email ? null : prev)), 2500);
     showNotice(`🔗 تم نسخ رابط المشترك الخاص لـ (${user.clientName}) بنجاح!`);
+
+    try {
+      const steps = getSubscriberSetupSteps(user);
+      const missingLabels = steps.filter((s) => !s.done).map((s) => s.label);
+      if (missingWarningTimerRef.current) {
+        clearTimeout(missingWarningTimerRef.current);
+        missingWarningTimerRef.current = null;
+      }
+      if (missingLabels.length > 0) {
+        setMissingStepsWarning({
+          clientName: user.clientName || '',
+          missingLabels,
+        });
+        missingWarningTimerRef.current = setTimeout(() => {
+          setMissingStepsWarning(null);
+          missingWarningTimerRef.current = null;
+        }, 6500);
+      } else {
+        setMissingStepsWarning(null);
+      }
+    } catch {
+      // Non-blocking warning must never interfere with link copy
+    }
   };
 
   const handleCopyWhatsAppMessage = async (user: {
@@ -569,6 +873,27 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
         </div>
       )}
 
+      {/* Non-blocking Missing Setup Steps Warning after Copying Link */}
+      {missingStepsWarning && missingStepsWarning.missingLabels.length > 0 && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-xs font-bold flex items-center justify-between gap-2 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>
+              {missingStepsWarning.clientName ? `(${missingStepsWarning.clientName}) — ` : ''}
+              تنبيه: ما زال ينقص: {missingStepsWarning.missingLabels.join('، ')}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMissingStepsWarning(null)}
+            className="text-amber-700 hover:text-amber-950 dark:text-amber-300 dark:hover:text-white cursor-pointer shrink-0"
+            aria-label="إغلاق التنبيه"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* WhatsApp Toast Notice */}
       {whatsappCopiedFor && (
         <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/20 border border-emerald-300 dark:border-emerald-500/50 text-emerald-950 dark:text-white text-xs font-bold flex items-center justify-between shadow-lg dark:shadow-xl animate-in fade-in duration-200">
@@ -588,13 +913,30 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
       )}
 
       {/* ACTIVE SUBSCRIBERS TABLE */}
-      <div className="rounded-3xl bg-white dark:bg-[#0B132B]/90 border border-slate-200 dark:border-white/10 overflow-hidden shadow-sm dark:shadow-xl space-y-4 p-6">
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
-          <div className="flex items-center gap-2">
-            <KeyRound className="w-5 h-5 text-orange-500 dark:text-orange-400" />
-            <h3 className="text-base font-black text-[#0B132B] dark:text-white">
-              قائمة المشتركين وبيانات الدخول المعتمدة ({credentialsList.length})
-            </h3>
+      <div
+        id="oao-subscribers-table"
+        className="rounded-3xl bg-white dark:bg-[#0B132B]/90 border border-slate-200 dark:border-white/10 overflow-hidden shadow-sm dark:shadow-xl space-y-4 p-6"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-white/10 pb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-orange-500 dark:text-orange-400" />
+              <h3 className="text-base font-black text-[#0B132B] dark:text-white">
+                قائمة المشتركين وبيانات الدخول المعتمدة ({credentialsList.length})
+              </h3>
+            </div>
+            {expiringSoon14DaysCount >= 1 && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-[11px] font-bold">
+                <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>
+                  {expiringSoon14DaysCount === 1
+                    ? 'اشتراك واحد ينتهي خلال 14 يوم'
+                    : expiringSoon14DaysCount <= 10
+                    ? `${expiringSoon14DaysCount} اشتراكات تنتهي خلال 14 يوم`
+                    : `${expiringSoon14DaysCount} اشتراكاً ينتهي خلال 14 يوم`}
+                </span>
+              </div>
+            )}
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
             مزامنة سحابية مباشرة عبر جدول subscribers في Supabase
@@ -609,6 +951,7 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                 <th className="p-3.5 font-bold">البريد الإلكتروني</th>
                 <th className="p-3.5 font-bold">نوع الباقة</th>
                 <th className="p-3.5 font-bold">الحالة</th>
+                <th className="p-3.5 font-bold">جاهزية الإعداد</th>
                 <th className="p-3.5 font-bold">الهدف التصوري</th>
                 <th className="p-3.5 font-bold">كلمة المرور</th>
                 <th className="p-3.5 font-bold text-center">الإجراءات والتحكم (CRUD)</th>
@@ -653,47 +996,111 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                   </td>
                   <td className="p-3.5">
                     {(() => {
-                      const rowSub = calculateSubscriptionDetails({
-                        subscriptionStartDate: user.subscriptionStartDate,
-                        subscriptionEndDate: user.subscriptionEndDate,
-                        subscriptionDaysLeft: user.subscriptionDaysLeft,
-                        subscriptionStatus: user.status,
-                      });
-                      return (
-                        <div className="flex flex-col items-start gap-1">
-                          {user.status === 'suspended' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/15 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-400/50 dark:border-rose-500/40 font-bold text-[11px]">
-                              <UserX className="w-3 h-3 text-rose-600 dark:text-rose-400" />
-                              <span>موقوف / معلق</span>
-                            </span>
-                          ) : rowSub.isExpired || user.status === 'expired' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/15 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-400/50 dark:border-rose-500/40 font-bold text-[11px]">
-                              <Lock className="w-3 h-3 text-rose-600 dark:text-rose-400" />
-                              <span>منتهي ومقفل 🔒</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-400/50 dark:border-emerald-500/40 font-bold text-[11px]">
-                              <UserCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                              <span>نشط</span>
-                            </span>
-                          )}
+                      try {
+                        const rowSub = calculateSubscriptionDetails({
+                          subscriptionStartDate: user.subscriptionStartDate,
+                          subscriptionEndDate: user.subscriptionEndDate,
+                          subscriptionDaysLeft: user.subscriptionDaysLeft,
+                          subscriptionStatus: user.status,
+                        });
+                        const hasReliableEnd =
+                          Boolean(user.subscriptionEndDate && rowSub.hasExplicitEndDate) ||
+                          (typeof user.subscriptionDaysLeft === 'number' &&
+                            Number.isFinite(user.subscriptionDaysLeft));
+                        const isExpiredDisplay =
+                          user.status !== 'suspended' &&
+                          (rowSub.isExpired || user.status === 'expired');
+                        const isExpiringWithin14 =
+                          user.status !== 'suspended' &&
+                          !isExpiredDisplay &&
+                          hasReliableEnd &&
+                          Number.isFinite(rowSub.daysRemaining) &&
+                          rowSub.daysRemaining <= 14;
 
-                          {user.subscriptionEndDate && (
+                        return (
+                          <div className="flex flex-col items-start gap-1">
+                            {user.status === 'suspended' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/15 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-400/50 dark:border-rose-500/40 font-bold text-[11px]">
+                                <UserX className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+                                <span>موقوف / معلق</span>
+                              </span>
+                            ) : isExpiredDisplay ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/15 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-400/50 dark:border-rose-500/40 font-bold text-[11px]">
+                                <Lock className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+                                <span>منتهي</span>
+                              </span>
+                            ) : isExpiringWithin14 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-400/50 dark:border-amber-500/40 font-bold text-[11px]">
+                                <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                                <span>ينتهي قريباً</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-400/50 dark:border-emerald-500/40 font-bold text-[11px]">
+                                <UserCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>نشط</span>
+                              </span>
+                            )}
+
+                            {user.subscriptionEndDate && Number.isFinite(rowSub.daysRemaining) && (
+                              <span
+                                className={`text-[10px] font-mono ${
+                                  isExpiredDisplay
+                                    ? 'text-rose-600 dark:text-rose-400/90'
+                                    : isExpiringWithin14
+                                    ? 'text-amber-700 dark:text-amber-300'
+                                    : 'text-slate-500 dark:text-slate-400'
+                                }`}
+                                title={`من ${rowSub.startDate} إلى ${rowSub.endDate}`}
+                              >
+                                {isExpiredDisplay
+                                  ? `انتهى ${rowSub.endDate}`
+                                  : `متبقي ${rowSub.daysRemaining} يوم (${rowSub.formattedRemainingDurationAr})`}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      } catch {
+                        return <span className="text-slate-400 text-[11px]">—</span>;
+                      }
+                    })()}
+                  </td>
+                  <td className="p-3.5 min-w-[165px]">
+                    {(() => {
+                      const steps = getSubscriberSetupSteps(user);
+                      if (steps.length === 0) {
+                        return <span className="text-slate-400 text-[11px]">—</span>;
+                      }
+                      const doneCount = steps.filter((s) => s.done).length;
+                      return (
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-1.5">
                             <span
-                              className={`text-[10px] font-mono ${
-                                rowSub.isExpired
-                                  ? 'text-rose-600 dark:text-rose-400/90'
-                                  : rowSub.isExpiringSoon
-                                  ? 'text-amber-700 dark:text-amber-300'
-                                  : 'text-slate-500 dark:text-slate-400'
+                              className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-black border ${
+                                doneCount === steps.length
+                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-400/40'
+                                  : doneCount > 0
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/40'
+                                  : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10'
                               }`}
-                              title={`من ${rowSub.startDate} إلى ${rowSub.endDate}`}
                             >
-                              {rowSub.isExpired
-                                ? `انتهى ${rowSub.endDate}`
-                                : `متبقي ${rowSub.daysRemaining} يوم (${rowSub.formattedRemainingDurationAr})`}
+                              {doneCount}/{steps.length}
                             </span>
-                          )}
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {steps.map((step) => (
+                              <span
+                                key={step.key}
+                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                  step.done
+                                    ? 'bg-emerald-500/15 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-400/40 dark:border-emerald-500/30'
+                                    : 'bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10'
+                                }`}
+                              >
+                                {step.done && <Check className="w-2.5 h-2.5 shrink-0" />}
+                                <span>{step.label}</span>
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       );
                     })()}
@@ -704,9 +1111,39 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                     </span>
                   </td>
                   <td className="p-3.5 font-mono text-[#0B132B] dark:text-slate-200">
-                    <span className="px-2 py-1 rounded-md bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 font-bold">
-                      {user.password}
-                    </span>
+                    {user.password ? (
+                      <div className="inline-flex items-center gap-1.5">
+                        <span
+                          className="px-2 py-1 rounded-md bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 font-bold tracking-wider"
+                          dir="ltr"
+                        >
+                          {revealedPasswords[user.email] ? user.password : '••••••'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleRevealPassword(user.email)}
+                          className="p-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                          title={
+                            revealedPasswords[user.email]
+                              ? 'إخفاء كلمة المرور'
+                              : 'إظهار كلمة المرور لمدة 10 ثوانٍ'
+                          }
+                          aria-label={
+                            revealedPasswords[user.email]
+                              ? 'إخفاء كلمة المرور'
+                              : 'إظهار كلمة المرور'
+                          }
+                        >
+                          {revealedPasswords[user.email] ? (
+                            <EyeOff className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                          ) : (
+                            <Eye className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
                   </td>
                   <td className="p-3.5">
                     <div className="flex items-center justify-center gap-1.5 flex-wrap">
@@ -785,6 +1222,44 @@ export const AdminSubscribersManager: React.FC<AdminSubscribersManagerProps> = (
                           </>
                         )}
                       </button>
+
+                      {/* Direct WhatsApp Send Button (hidden if no phone or no private token) */}
+                      {(() => {
+                        try {
+                          const hasPhone = Boolean(user?.phone && user.phone.trim());
+                          const hasToken = Boolean(user?.accessToken && user.accessToken.trim());
+                          if (!hasPhone || !hasToken) return null;
+
+                          const formattedPhone = formatWhatsAppPhone(user.phone);
+                          const msg = generateWhatsAppWelcomeMessage({
+                            clientName: user.clientName,
+                            email: user.email,
+                            password: user.password,
+                            plan: user.plan,
+                            clientCode: user.clientCode,
+                            phone: user.phone,
+                            accessToken: user.accessToken,
+                          });
+                          const waHref = formattedPhone
+                            ? `https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`
+                            : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+
+                          return (
+                            <a
+                              href={waHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 border border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300 dark:hover:text-white text-[11px] font-bold inline-flex items-center gap-1 transition-all"
+                              title="إرسال عبر واتساب"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span className="hidden xl:inline">إرسال عبر واتساب</span>
+                            </a>
+                          );
+                        } catch {
+                          return null;
+                        }
+                      })()}
 
                       {/* WhatsApp Quick Share Button */}
                       <button

@@ -1,6 +1,17 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { UserCredentialRecord } from '../../lib/authStore';
-import { Users, RefreshCw, Crown, Shield, Loader2, CheckCircle2, Mail, KeyRound } from 'lucide-react';
+import {
+  Users,
+  RefreshCw,
+  Crown,
+  Shield,
+  Loader2,
+  CheckCircle2,
+  Mail,
+  KeyRound,
+  Search,
+  X,
+} from 'lucide-react';
 
 interface AdminTargetClientSelectorProps {
   subscribers: UserCredentialRecord[];
@@ -23,14 +34,38 @@ export const AdminTargetClientSelector: React.FC<AdminTargetClientSelectorProps>
   isLoadingClient = false,
   isRefreshingList = false,
 }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+
   const activeSubscribers = subscribers.filter((s) => s.status !== 'suspended');
   const suspendedSubscribers = subscribers.filter((s) => s.status === 'suspended');
   const orderedSubscribers = [...activeSubscribers, ...suspendedSubscribers];
+
+  const showSearchInput = orderedSubscribers.length > 8;
+
+  const filteredSubscribers = useMemo(() => {
+    try {
+      if (!showSearchInput) return orderedSubscribers;
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return orderedSubscribers;
+      return orderedSubscribers.filter((sub) => {
+        const name = (sub?.clientName || '').toLowerCase();
+        const email = (sub?.email || '').toLowerCase();
+        const code = (sub?.clientCode || '').toLowerCase();
+        return name.includes(q) || email.includes(q) || code.includes(q);
+      });
+    } catch {
+      return orderedSubscribers;
+    }
+  }, [orderedSubscribers, searchQuery, showSearchInput]);
 
   const selectedSub = orderedSubscribers.find(
     (s) =>
       getSubscriberSelectorKey(s) === selectedClientKey ||
       s.email.toLowerCase() === selectedClientKey.toLowerCase()
+  );
+
+  const selectedInFiltered = filteredSubscribers.some(
+    (s) => getSubscriberSelectorKey(s) === selectedClientKey
   );
 
   return (
@@ -51,27 +86,69 @@ export const AdminTargetClientSelector: React.FC<AdminTargetClientSelectorProps>
             </span>
           </label>
 
+          {showSearchInput && (
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute top-1/2 -translate-y-1/2 right-3 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ابحث بالاسم أو البريد أو الكود..."
+                aria-label="بحث في قائمة المشتركين"
+                className="w-full pr-9 pl-8 py-2 rounded-xl bg-slate-50 dark:bg-[#030712] border border-slate-300 dark:border-white/15 focus:border-[#FF5722] focus:ring-1 focus:ring-orange-500/30 text-[#0B132B] dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs font-medium outline-none transition-all"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute top-1/2 -translate-y-1/2 left-2.5 text-slate-400 hover:text-[#0B132B] dark:hover:text-white cursor-pointer"
+                  aria-label="مسح البحث"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
             <select
               id="oao-target-subscriber-select"
               value={selectedClientKey}
               onChange={(e) => onSelectClient(e.target.value)}
-              className="flex-1 px-4 py-3 rounded-2xl bg-slate-50 dark:bg-[#030712] border-2 border-orange-500/35 dark:border-orange-500/40 focus:border-[#FF5722] focus:ring-2 focus:ring-orange-500/20 text-[#0B132B] dark:text-white text-xs sm:text-sm font-black outline-none cursor-pointer transition-all"
+              className="oao-target-select flex-1 px-4 py-3 rounded-2xl bg-slate-50 dark:bg-[#030712] border-2 border-orange-500/35 dark:border-orange-500/40 focus:border-[#FF5722] focus:ring-2 focus:ring-orange-500/20 text-[#0B132B] dark:text-white text-xs sm:text-sm font-black outline-none cursor-pointer transition-all"
             >
               {orderedSubscribers.length === 0 ? (
                 <option value="">لا يوجد مشتركون مسجلون في Supabase بعد</option>
-              ) : (
-                orderedSubscribers.map((sub) => {
-                  const key = getSubscriberSelectorKey(sub);
-                  const planLabel = sub.plan === 'VIP' ? 'VIP بلاتينيوم' : 'Standard قياسي';
-                  const statusSuffix = sub.status === 'suspended' ? ' [موقوف]' : '';
-                  return (
-                    <option key={key} value={key}>
-                      {sub.clientName} — {planLabel} — {sub.email}
-                      {statusSuffix}
+              ) : filteredSubscribers.length === 0 ? (
+                <>
+                  {selectedClientKey && (
+                    <option value={selectedClientKey} hidden disabled>
+                      {selectedSub?.clientName || selectedClientKey}
                     </option>
-                  );
-                })
+                  )}
+                  <option value="" disabled>
+                    لا توجد نتائج مطابقة للبحث
+                  </option>
+                </>
+              ) : (
+                <>
+                  {selectedClientKey && !selectedInFiltered && (
+                    <option value={selectedClientKey} hidden disabled>
+                      {selectedSub?.clientName || selectedClientKey}
+                    </option>
+                  )}
+                  {filteredSubscribers.map((sub) => {
+                    const key = getSubscriberSelectorKey(sub);
+                    const planLabel = sub.plan === 'VIP' ? 'VIP بلاتينيوم' : 'Standard قياسي';
+                    const statusSuffix = sub.status === 'suspended' ? ' [موقوف]' : '';
+                    return (
+                      <option key={key} value={key}>
+                        {sub.clientName} — {planLabel} — {sub.email}
+                        {statusSuffix}
+                      </option>
+                    );
+                  })}
+                </>
               )}
             </select>
 

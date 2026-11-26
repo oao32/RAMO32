@@ -199,6 +199,10 @@ export const AdminPanel: React.FC = () => {
   const [isLoadingTargetClient, setIsLoadingTargetClient] = useState(false);
   const [isRefreshingSubscribers, setIsRefreshingSubscribers] = useState(false);
   const loadRequestIdRef = useRef(0);
+  const [addedNextStepBanner, setAddedNextStepBanner] = useState<{
+    open: boolean;
+    clientName: string;
+  }>({ open: false, clientName: '' });
 
   const selectedTargetClient =
     subscribers.find(
@@ -263,6 +267,29 @@ export const AdminPanel: React.FC = () => {
       }
     },
     [subscribers]
+  );
+
+  const handleSubscriberAddedHint = useCallback(
+    (addedSubscriber?: UserCredentialRecord) => {
+      try {
+        setAddedNextStepBanner({
+          open: true,
+          clientName: addedSubscriber?.clientName || '',
+        });
+        if (addedSubscriber) {
+          const latestSubs = getAllSubscribersWithCredentials();
+          const nextPool = latestSubs.length > 0 ? latestSubs : undefined;
+          if (nextPool) setSubscribers(nextPool);
+          const targetKey = getSubscriberSelectorKey(addedSubscriber);
+          if (targetKey) {
+            void selectAndLoadTargetClient(targetKey, nextPool);
+          }
+        }
+      } catch {
+        setAddedNextStepBanner({ open: true, clientName: '' });
+      }
+    },
+    [selectAndLoadTargetClient]
   );
 
   const refreshSubscribersDirectory = useCallback(
@@ -964,6 +991,74 @@ export const AdminPanel: React.FC = () => {
           </button>
         </div>
 
+        {/* Dismissible Post-Add Next-Step Hint Banner (only shown right after adding a subscriber) */}
+        {addedNextStepBanner.open && (
+          <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-[#0B132B] border border-emerald-400/60 dark:border-orange-500/40 shadow-md flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-200">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#0B132B] dark:text-white">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>
+                تم الإضافة{addedNextStepBanner.clientName ? ` (${addedNextStepBanner.clientName})` : ''}. الخطوة التالية:
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { key: 'biometrics' as const, label: 'القياسات' },
+                  { key: 'workouts' as const, label: 'التمارين' },
+                  { key: 'diet' as const, label: 'التغذية' },
+                  { key: 'assessment' as const, label: 'التحليل' },
+                  { key: 'subscribers' as const, label: 'إرسال الرابط' },
+                ].map((step, idx, arr) => {
+                  const isCurrentStep =
+                    activeTab === step.key ||
+                    (step.key === 'assessment' && activeTab === 'analytics');
+                  return (
+                    <React.Fragment key={step.key}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab(step.key);
+                          if (step.key === 'subscribers') {
+                            try {
+                              requestAnimationFrame(() => {
+                                document
+                                  .getElementById('oao-subscribers-table')
+                                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              });
+                            } catch {
+                              // ignore scroll error
+                            }
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg border text-xs font-black transition-all cursor-pointer ${
+                          isCurrentStep
+                            ? 'bg-gradient-to-r from-orange-600 to-amber-500 border-orange-500 text-white shadow-sm'
+                            : 'bg-white hover:bg-orange-50 dark:bg-white/5 dark:hover:bg-orange-500/20 border-slate-300 dark:border-white/15 text-[#0B132B] dark:text-orange-200'
+                        }`}
+                      >
+                        {step.label}
+                      </button>
+                      {idx < arr.length - 1 && (
+                        <span className="text-slate-400 dark:text-slate-500 font-black" aria-hidden="true">
+                          ←
+                        </span>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setAddedNextStepBanner({ open: false, clientName: '' })}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-[#0B132B] dark:text-slate-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+              aria-label="إغلاق التوجيه"
+              title="إغلاق"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* =========================================================================
             TAB 1: SUBSCRIBERS & CERTIFIED CONTRACTS & CREDENTIALS
             ========================================================================= */}
@@ -974,6 +1069,7 @@ export const AdminPanel: React.FC = () => {
             onCopySubscribeLink={handleCopySubscribeLink}
             copiedLink={copiedLink}
             language={language}
+            onSubscriberAdded={handleSubscriberAddedHint}
           />
         )}
 
